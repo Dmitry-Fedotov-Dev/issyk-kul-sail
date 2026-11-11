@@ -1,0 +1,20 @@
+import { createRequire } from 'node:module'; const { chromium } = createRequire('/')('playwright');
+import path from 'node:path';
+const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 1000, height: 560 }, deviceScaleFactor: 1 }); p.setDefaultTimeout(300000);
+const errs = []; p.on('pageerror', (e) => errs.push('PAGEERROR ' + e.message));
+await p.goto('file://' + path.resolve('dist/index.html'));
+await p.waitForFunction(() => window.__game && window.__game() && document.getElementById('load').hidden, null, { timeout: 200000 });
+await p.click('#w_breeze'); await p.click('#bfree'); await p.waitForTimeout(1500);
+const st = () => p.evaluate(() => { const G = window.__game(); return { orbit: +G.orbit.toFixed(2), pitch: +G.orbitP.toFixed(2), zoom: +G.zoom.toFixed(2), rudder: +G.player.b.rudder.toFixed(2) }; });
+await p.screenshot({ path: 'shots/orb_0.png' });
+await p.mouse.move(500, 300); await p.mouse.down(); await p.mouse.move(760, 230, { steps: 8 }); await p.mouse.up(); await p.waitForTimeout(1200);
+console.log('mouse drag:', JSON.stringify(await st())); await p.screenshot({ path: 'shots/orb_1.png' });
+await p.mouse.wheel(0, -500); await p.waitForTimeout(800); console.log('wheel in:', JSON.stringify(await st()));
+await p.mouse.dblclick(500, 300); await p.waitForTimeout(600); console.log('double click:', JSON.stringify(await st()));
+// палец: удержание на месте -- руль; проведение -- обзор без руля
+const ev = (type, id, x, y) => p.evaluate(([type, id, x, y]) => { const c = document.getElementById('gl'); (type === 'pointerup' ? window : c).dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: x, clientY: y, bubbles: true })); }, [type, id, x, y]);
+await ev('pointerdown', 5, 100, 300); await p.evaluate(() => window.__tick(1)); console.log('finger held left:', JSON.stringify(await st())); await ev('pointerup', 5, 100, 300); await p.evaluate(() => window.__tick(1));
+await ev('pointerdown', 6, 100, 300); for (let i = 1; i <= 10; i++) await ev('pointermove', 6, 100 + i * 20, 300 + i * 6); await p.evaluate(() => window.__tick(0.5)); console.log('finger swipe:', JSON.stringify(await st())); await ev('pointerup', 6, 300, 360);
+await ev('pointerdown', 7, 300, 300); await ev('pointerdown', 8, 500, 300); await ev('pointermove', 8, 700, 300); console.log('pinch out:', JSON.stringify(await st())); await ev('pointerup', 7, 300, 300); await ev('pointerup', 8, 700, 300);
+console.log(errs.join('\n') || 'no page errors'); await b.close();

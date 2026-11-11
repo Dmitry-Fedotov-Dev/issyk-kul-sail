@@ -1,0 +1,14 @@
+import { createRequire } from 'node:module'; const { chromium } = createRequire('/')('playwright');
+import path from 'node:path';
+const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 1000, height: 560 }, deviceScaleFactor: 1 }); p.setDefaultTimeout(300000);
+const errs = []; p.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.text().slice(0, 300)); }); p.on('pageerror', (e) => errs.push('PAGEERROR ' + e.message));
+await p.addInitScript(() => { window.__gaps = []; let last = performance.now(); const f = (t) => { window.__gaps.push(t - last); last = t; requestAnimationFrame(f); }; requestAnimationFrame(f); });
+await p.goto('file://' + path.resolve('dist/index.html'));
+await p.waitForFunction(() => document.getElementById('load').hidden, null, { timeout: 200000 });
+const n0 = await p.evaluate(() => window.__gaps.length); await p.waitForTimeout(6000);
+const menu = await p.evaluate((n0) => { const g = window.__gaps.slice(n0 + 1).sort((a, b) => a - b); return { frames: g.length, median: Math.round(g[g.length >> 1]), worst: Math.round(g[g.length - 1]) }; }, n0);
+console.log('menu, first 6 s after loader hides (ms per frame):', JSON.stringify(menu), 'first gaps:', JSON.stringify(await p.evaluate((n0) => window.__gaps.slice(n0, n0 + 14).map(Math.round), n0)));
+const n1 = await p.evaluate(() => window.__gaps.length); await p.click('#brace'); await p.waitForTimeout(5000);
+console.log('race start, first 5 s:', JSON.stringify(await p.evaluate((n1) => { const g = window.__gaps.slice(n1 + 1).sort((a, b) => a - b); return { frames: g.length, median: Math.round(g[g.length >> 1]), worst: Math.round(g[g.length - 1]) }; }, n1)));
+console.log(errs.slice(0, 5).join('\n') || 'no console errors'); await b.close();

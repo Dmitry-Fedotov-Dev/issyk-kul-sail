@@ -1,0 +1,186 @@
+<title>Парус Иссык-Куля</title>
+<style>
+/* Один экран: сцена на весь экран, поверх -- приборы яхты. Игра держит один облик (день на озере), темы не переключаются. */
+:root{
+  --lake:#0a2a5c; --panel:rgba(7,26,58,.62); --line:rgba(255,255,255,.16); --ink:#f4f8ff; --dim:#a9c0df;
+  --buoy:#ff8a2a; --ok:#58d68d; --warn:#ffd04a; --bad:#ff4b3e;
+  --ui:"Avenir Next","Segoe UI","Helvetica Neue",Arial,sans-serif;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--lake);color:var(--ink);font-family:var(--ui);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+.hud{position:fixed;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 1px 10px rgba(0,18,50,.75),0 0 2px rgba(0,18,50,.6)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#speed{left:max(16px,env(safe-area-inset-left,0px));top:14px}
+#speed b{font-size:44px;font-weight:300;line-height:1;letter-spacing:-1px}
+#speed small{font-size:13px;color:var(--dim);margin-left:5px}
+#pos{font-size:13px;margin-top:2px;letter-spacing:.03em;opacity:.9}
+#tools{display:flex;gap:8px;margin-top:10px;pointer-events:auto}
+#tools button{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(7,26,58,.28);color:var(--ink);font-size:15px;line-height:1;cursor:pointer;padding:0;opacity:.75}
+#tools button:focus-visible,#ts:focus-visible{outline:2px solid #fff;outline-offset:2px}
+#dialwrap{right:max(16px,env(safe-area-inset-right,0px));top:14px;text-align:center}
+#dial{width:118px;height:118px;display:block}
+#windtxt{font-size:12px;margin-top:-2px;opacity:.9}
+#hint{left:50%;bottom:26px;transform:translateX(-50%);font-size:15px;max-width:min(560px,calc(100vw - 32px));text-align:center;box-sizing:border-box;padding:7px 14px;border-radius:999px}
+#hint.alert{background:rgba(150,20,14,.72);font-weight:600;text-shadow:none}
+#toast{left:50%;top:20%;transform:translateX(-50%);font-size:24px;font-weight:600;letter-spacing:.01em;opacity:0;transition:opacity .35s;text-align:center;white-space:nowrap}
+#race{left:50%;top:14px;transform:translateX(-50%);text-align:center}
+#race b{font-size:26px;font-weight:300}#race div{font-size:12px;opacity:.9}
+#mark{left:0;top:0;text-align:center;font-size:12px;font-weight:600;will-change:transform}
+#mark span{display:block;padding:1px 7px;border-radius:999px;background:rgba(255,138,42,.92);color:#2a1300;text-shadow:none;white-space:nowrap}
+#mark i{display:block;width:0;height:0;margin:2px auto 0;border:6px solid transparent;border-top:9px solid #ff8a2a;border-bottom:0}
+#mark.off i{display:none}
+#brief{left:max(16px,env(safe-area-inset-left,0px));top:118px;width:200px;padding:8px 10px 10px;text-shadow:none;box-sizing:border-box}
+#brief canvas{width:100%;display:block}
+#brief p{margin:6px 0 0;font-size:12px;line-height:1.4;color:var(--dim)}#brief b{color:var(--ink)}
+#ring{left:50%;top:50%;transform:translate(-50%,-50%);width:96px;height:96px}
+#vign{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 180px 40px rgba(190,20,10,0);transition:box-shadow .2s}
+#lens{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+#lens i{position:absolute;border-radius:50%;opacity:0;animation:drop 2s ease-in forwards;
+  background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.75) 0,rgba(255,255,255,.18) 22%,rgba(190,225,255,.05) 55%,rgba(8,40,90,.22) 82%,rgba(255,255,255,.35) 100%);
+  box-shadow:0 1px 2px rgba(0,20,60,.25)}
+@keyframes drop{0%{opacity:0;transform:scale(.4)}8%{opacity:.95;transform:scale(1)}60%{opacity:.8}100%{opacity:0;transform:translateY(var(--fall)) scale(.85,1.25)}}
+@media (prefers-reduced-motion:reduce){#lens{display:none}}
+#ts{display:none;position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:84px;height:84px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(7,26,58,.22);color:var(--ink);font:600 13px var(--ui);letter-spacing:.08em;text-transform:uppercase;pointer-events:auto;touch-action:none}
+#ts.on{background:rgba(255,138,42,.6)}
+body.touchdev #ts{display:block}body.touchdev #hint{bottom:calc(122px + env(safe-area-inset-bottom,0px))}
+#menu{position:fixed;inset:0;display:flex;align-items:center;justify-content:flex-start;padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));box-sizing:border-box;background:none;overflow-y:auto}
+/* Панель меню -- это «озеро»: её кромка повторяет настоящую береговую линию у Чолпон-Аты (мыс и бухта), снятую с карты высот.
+   На широком экране берег идёт по правому краю (север справа), на телефоне -- по верхнему краю нижнего листа (север сверху). */
+/* Панель меню -- это СУША: её кромка повторяет настоящий берег у Чолпон-Аты, а внутри тонкими линиями идёт топография
+   того же места с карты высот: горизонтали и оранжевые тальвеги ущелий. Озеро остаётся открытым -- там живая сцена. */
+#coast{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+#coast path{fill:none;vector-effect:non-scaling-stroke}
+#coast .f{fill:rgba(6,26,66,.80)}
+#coast .c1{stroke:rgba(190,215,255,.16);stroke-width:1}#coast .c2{stroke:rgba(215,232,255,.34);stroke-width:1.3}
+#coast .rv{stroke:rgba(255,138,42,.5);stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round}
+#coast .l{stroke:rgba(255,255,255,.75);stroke-width:1.8}
+#card{position:relative;margin-block:auto}
+#menu{align-items:flex-start}
+@media (min-width:641px) and (max-height:760px){#card p.lead{display:none}#card h1{font-size:40px}#how{display:none}}
+#card{max-width:440px;margin-right:min(4vw,48px)}
+#menu{justify-content:flex-end}
+#card h1{font-size:clamp(34px,6vw,58px);line-height:.98;margin:0;font-weight:800;letter-spacing:-1.5px;text-wrap:balance}
+#card h1 em{font-style:normal;color:var(--buoy)}
+#card p.lead{font-size:16px;color:var(--dim);margin:12px 0 22px;line-height:1.45}
+.lbl{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.chip{flex:1 1 130px;text-align:left;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);font:inherit;cursor:pointer}
+.chip b{display:block;font-size:15px}.chip small{color:var(--dim);font-size:12px}
+.chip[aria-pressed=true]{border-color:var(--buoy);background:rgba(255,138,42,.18)}
+.modes{display:flex;gap:10px;flex-wrap:wrap}
+.btn{flex:1 1 180px;padding:15px 18px;border-radius:14px;border:0;font:700 17px var(--ui);cursor:pointer;color:#10233f;background:#fff;text-align:left}
+.btn small{display:block;font-weight:500;font-size:12px;color:#50627c;margin-top:2px}
+.btn.go{background:var(--buoy);color:#2a1300}.btn.go small{color:#6a3a10}
+.btn:focus-visible,.chip:focus-visible{outline:3px solid #fff;outline-offset:2px}
+#how{margin-top:20px;font-size:13px;color:var(--dim);line-height:1.75}
+#how b{color:var(--ink)}
+#result{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,18,46,.6);padding:16px}
+#result .panel{padding:22px 26px;min-width:min(360px,100%);box-sizing:border-box}
+#result h2{margin:0 0 4px;font-size:30px}
+#result table{width:100%;border-collapse:collapse;margin:12px 0 16px;font-variant-numeric:tabular-nums}
+#result td{padding:6px 4px;border-bottom:1px solid var(--line)}#result td:last-child{text-align:right}
+#result tr.me td{color:var(--buoy);font-weight:700}
+/* Экран загрузки: архивный снимок берега. Он медленно «плывёт», как вид с лодки, а когда игра готова -- растворяется
+   в живой сцене. Движение идёт через transform, поэтому не замирает, пока страница занята сборкой сцены. */
+#load{position:fixed;inset:0;overflow:hidden;background:#1a130c;transition:opacity 1.4s ease;z-index:5}
+#load.done{opacity:0;pointer-events:none}
+#loadimg{position:absolute;inset:-6%;background:#1a130c __LOADIMG__ center 38%/cover no-repeat;filter:sepia(.55) contrast(1.08) brightness(.92);animation:drift 26s ease-in-out infinite alternate;will-change:transform}
+@keyframes drift{0%{transform:scale(1.04) translate(1.6%,.6%) rotate(-.35deg)}50%{transform:scale(1.09) translate(-.6%,-.5%) rotate(.3deg)}100%{transform:scale(1.14) translate(-2%,.5%) rotate(-.25deg)}}
+#load::before{content:"";position:absolute;inset:0;z-index:1;background:radial-gradient(ellipse at 50% 42%,rgba(20,12,4,0) 35%,rgba(20,12,4,.72) 100%),linear-gradient(180deg,rgba(20,12,4,.55) 0,rgba(20,12,4,0) 30%,rgba(20,12,4,0) 55%,rgba(20,12,4,.86) 100%)}
+/* плёночное зерно */
+#load::after{content:"";position:absolute;inset:-50%;z-index:1;opacity:.13;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");animation:grain .9s steps(6) infinite}
+@keyframes grain{0%{transform:translate(0,0)}20%{transform:translate(-4%,3%)}40%{transform:translate(3%,-5%)}60%{transform:translate(-2%,-3%)}80%{transform:translate(5%,2%)}100%{transform:translate(1%,4%)}}
+#loadbox{position:absolute;z-index:2;left:max(20px,env(safe-area-inset-left,0px));right:max(20px,env(safe-area-inset-right,0px));bottom:calc(26px + env(safe-area-inset-bottom,0px));max-width:560px;color:#f3e9d6;text-shadow:0 1px 12px rgba(0,0,0,.7)}
+#loadbox h2{margin:0;font:800 clamp(30px,5.4vw,52px)/1 var(--ui);letter-spacing:-1px}
+#loadbox h2 em{font-style:normal;color:#ffb35c}
+#loadcap{font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.75;margin:0 0 10px}
+#loadtip{font-size:15px;line-height:1.45;margin:14px 0 16px;min-height:2.9em;opacity:.92;transition:opacity .5s}
+#loadbar{height:3px;border-radius:2px;background:rgba(243,233,214,.22);overflow:hidden}
+#loadfill{height:100%;width:8%;background:#ffb35c;border-radius:2px;transition:width .6s ease}
+#loadmsg{font-size:12px;letter-spacing:.06em;margin-top:8px;opacity:.75}
+#loadsrc{position:absolute;z-index:2;right:max(12px,env(safe-area-inset-right,0px));top:10px;font-size:10px;color:#f3e9d6;opacity:.5}
+@media (prefers-reduced-motion:reduce){#loadimg,#load::after{animation:none}}
+.chip small.short{display:none}
+#crafts{flex-wrap:nowrap;overflow-x:auto;margin-bottom:14px;padding-bottom:4px;scrollbar-width:thin}#crafts .chip{flex:0 0 150px;padding:8px 10px}#crafts .chip b{font-size:14px}#crafts .chip small{font-size:11px;display:block}
+.links{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}.links button{background:none;border:0;border-bottom:1px solid var(--line);color:var(--ink);font:500 13px var(--ui);padding:2px 0;cursor:pointer}
+.dlg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,18,46,.72);padding:16px;z-index:4}
+.dlg .panel{padding:20px 22px;width:min(640px,100%);max-height:calc(100% - 32px);overflow-y:auto;box-sizing:border-box}.dlg h2{margin:0 0 10px;font-size:24px}
+#jlist h4{margin:14px 0 6px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.ja{display:flex;gap:10px;align-items:baseline;padding:4px 0 4px 22px;position:relative;font-size:13px;color:var(--dim)}.ja b{flex:0 0 190px;font-weight:600}.ja::before{content:"";position:absolute;left:3px;top:9px;width:9px;height:9px;border:1.5px solid var(--dim);border-radius:50%}
+.ja.ok{color:var(--ink)}.ja.ok::before{background:var(--buoy);border-color:var(--buoy)}
+#mapcv{width:100%;display:block;border-radius:8px;cursor:crosshair;margin:8px 0}#mapinfo{margin:0;font-size:14px}.note{font-size:12px;color:var(--dim);margin:0 0 12px}
+#wanted{left:50%;top:74px;transform:translateX(-50%);padding:5px 14px;border-radius:999px;background:rgba(20,40,110,.78);font-size:13px;text-shadow:none;white-space:nowrap;animation:wn .9s steps(2) infinite}#wanted b{color:#ffd21f;letter-spacing:2px;margin-right:6px}
+@keyframes wn{0%{box-shadow:0 0 0 2px rgba(255,60,60,.8)}100%{box-shadow:0 0 0 2px rgba(70,120,255,.9)}}
+@media (max-width:640px){.ja{flex-direction:column;gap:0}.ja b{flex:none}#wanted{top:120px;font-size:12px}}
+#gfx .chip{flex:1 1 90px;padding:7px 10px}#gfx .chip b{font-size:13px;font-weight:600}#gfx{margin-bottom:16px}
+/* телефон: название наверху над сценой, управление -- нижним листом под большой палец */
+@media (max-width:640px){
+  #menu{background:linear-gradient(180deg,rgba(4,18,46,.7) 0,rgba(4,18,46,0) 22%);align-items:stretch;padding-block:0}
+  #card{max-width:none;margin:0;width:100%;display:flex;flex-direction:column;justify-content:space-between;padding-top:22px;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
+  #card h1{font-size:40px;letter-spacing:-1px}
+  #card p.lead{font-size:14px;margin:8px 0 0;max-width:30ch;color:var(--ink);opacity:.85}
+  .lbl{margin-bottom:6px}
+  .chips{flex-wrap:nowrap;gap:6px;margin-bottom:12px}
+  .chip{flex:1 1 0;min-width:0;padding:9px 6px;text-align:center}
+  .chip b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chip small.full{display:none}.chip small.short{display:block;font-size:11px}
+  .modes{flex-direction:column;gap:8px}
+  .btn{flex:none;padding:14px 16px;font-size:17px;min-height:56px}
+  #how{margin-top:10px;font-size:12px;line-height:1.5}
+}
+@media (max-width:640px){#how{display:none}#card h1{text-shadow:0 2px 14px rgba(0,18,50,.8)}#crafts .chip{flex:0 0 118px;padding:9px 6px}#crafts .chip small{display:none}#crafts{margin-bottom:12px}#card p.lead{display:none}#card h1{font-size:34px}}
+@media (max-width:640px) and (max-height:700px){#card p.lead{display:none}#gfx{margin-bottom:10px}}
+@media (max-height:460px){#card p.lead,#how,#gfx,#gfx-lbl{display:none}#card h1{font-size:30px}.chips{margin-bottom:10px}.modes{flex-direction:row}}
+@media (max-width:520px){#brief{width:150px;top:124px}#brief p{font-size:11px}#speed b{font-size:34px}#dial{width:92px;height:92px}#toast{font-size:18px;white-space:normal;width:86vw}#hint{font-size:13px}#race{top:86px}}
+</style>
+<canvas id="gl"></canvas>
+<div id="vign"></div>
+<div id="lens"></div>
+<div id="game" hidden>
+  <div id="speed" class="hud"><b id="kn">0.0</b><small>уз</small><div id="pos"></div>
+    <div id="tools"><button id="bmenu" aria-label="Меню">☰</button><button id="bcam" aria-label="Сменить камеру">◉</button></div></div>
+  <div id="race" class="hud" hidden><b id="rtime">0:00</b><div id="rinfo"></div></div>
+  <div id="dialwrap" class="hud"><canvas id="dial" width="352" height="352"></canvas><div id="windtxt"></div></div>
+  <div id="mark" class="hud" hidden><span id="markd"></span><i></i></div>
+  <div id="brief" class="hud panel" hidden><canvas id="briefc" width="400" height="460"></canvas><p>Первый знак — <b>против ветра</b>. Прямо в ветер парус не тянет: идите зигзагом, под 45° к ветру.</p></div>
+  <div id="wanted" class="hud" hidden></div>
+  <div id="toast" class="hud"></div>
+  <div id="hint" class="hud" hidden></div>
+  <svg id="ring" class="hud" viewBox="0 0 120 120" hidden><circle cx="60" cy="60" r="50" fill="rgba(7,26,58,.45)" stroke="rgba(255,255,255,.25)" stroke-width="6"/><circle id="ringarc" cx="60" cy="60" r="50" fill="none" stroke="#ff8a2a" stroke-width="6" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="314" transform="rotate(-90 60 60)"/></svg>
+  <button id="ts" aria-label="Травить шкот">шкот</button>
+</div>
+<div id="menu" hidden>
+  <svg id="coast"><path class="f"/><path class="c1"/><path class="c2"/><path class="rv"/><path class="l"/></svg>
+  <div id="card">
+    <div id="mtop">
+      <h1>Парус <em>Иссык-Куля</em></h1>
+      <p class="lead">Чолпон-Ата, северный берег. Настоящий рельеф, порывы, волна и яхта, которая не прощает зевка у руля.</p>
+    </div>
+    <div id="mbot">
+      <p class="lbl">Снаряд</p>
+      <div class="chips" id="crafts"></div>
+      <p class="lbl">Ветер</p>
+      <div class="chips" id="winds"></div>
+      <p class="lbl">Графика</p>
+      <div class="chips" id="gfx"></div>
+      <div class="modes">
+        <button class="btn go" id="bfree">Свободное плавание<small>бухта, мыс, открытая вода</small></button>
+        <button class="btn" id="brace">Регата<small>три соперника, старт по сигналу</small></button>
+        <button class="btn" id="briver" hidden>Сплав: Чон-Ак-Суу<small>горная река, 2 км порогов</small></button>
+      </div>
+      <div class="links"><button id="bmap">Место: Чолпон-Ата</button><button id="bjournal">Журнал</button></div>
+      <div id="how"><b>← →</b> руль. <b>Пробел</b> — потравить шкот: сбросить ветер из паруса, когда кренит. Паруса экипаж подбирает сам.<br>Против ветра лодка не идёт: держите угол и лавируйте. Тёмная рябь на воде — идёт порыв.</div>
+    </div>
+  </div>
+</div>
+<div id="journal" class="dlg" hidden><div class="panel"><h2>Журнал достижений</h2><div id="jlist"></div><div class="modes"><button class="btn" id="jclose">Закрыть</button></div></div></div>
+<div id="mapdlg" class="dlg" hidden><div class="panel"><h2>Место старта</h2><p id="mapinfo"></p><canvas id="mapcv"></canvas><p class="note">Можно выбрать любую точку озера. Или гору: посмотрим, что получится.</p><div class="modes"><button class="btn go" id="mclose">Готово</button><button class="btn" id="mreset">Вернуть Чолпон-Ату</button></div></div></div>
+<div id="result" hidden><div class="panel"><h2 id="rh"></h2><div id="rs" style="color:var(--dim)"></div><table id="rt"></table><div class="modes"><button class="btn go" id="ragain">Ещё гонка</button><button class="btn" id="rmenu">В меню</button></div></div></div>
+<div id="load"><div id="loadimg"></div><div id="loadsrc">фото: pastvu.com/1397881</div>
+  <div id="loadbox"><p id="loadcap">Берег Иссык-Куля · архивный снимок</p><h2>Парус <em>Иссык-Куля</em></h2>
+    <p id="loadtip"></p><div id="loadbar"><div id="loadfill"></div></div><div id="loadmsg">Поднимаем паруса…</div></div></div>
+<script>(function(){var T=["Иссык-Куль не замерзает зимой — отсюда и название: «тёплое озеро».","Озеро лежит на высоте около 1600 метров. Воздух здесь разрежен, и парус тянет чуть слабее, чем на море.","«Улан» дует с запада, из Боомского ущелья, «Санташ» — с востока. Встречаясь, они разводят крутую волну.","Тёмная рябь на воде — это идёт порыв. Увидели её с наветра — готовьтесь травить шкот.","Прямо против ветра парус не тянет. К цели на ветру идут зигзагом — лавировкой.","Кренит слишком сильно — потравите шкот или приведитесь носом к ветру.","Самая быстрая лодка — на курсе вполветра, когда ветер дует точно в борт."];
+var el=document.getElementById('loadtip'),i=Math.floor(Math.random()*T.length);el.textContent=T[i];
+window.__tipTimer=setInterval(function(){el.style.opacity=0;setTimeout(function(){i=(i+1)%T.length;el.textContent=T[i];el.style.opacity=.92},500)},4200);})();</script>

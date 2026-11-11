@@ -1,0 +1,13 @@
+import { createRequire } from 'node:module'; const { chromium } = createRequire('/')('playwright');
+import path from 'node:path';
+const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 1000, height: 560 }, deviceScaleFactor: 1 }); p.setDefaultTimeout(300000);
+const errs = []; p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text().slice(0, 200)); }); p.on('pageerror', (e) => errs.push('PAGEERROR ' + e.message));
+await p.goto('file://' + path.resolve('dist/index.html'));
+await p.waitForFunction(() => window.__game && window.__game(), null, { timeout: 90000 });
+await p.click('#w_santash'); await p.click('#bfree');
+const w = () => p.evaluate(() => { const G = window.__game(), b = G.player.b; return JSON.stringify({ ring: +G.pow.toFixed(2), power: Math.round(b.power), ease: +b.ease.toFixed(2), awa: Math.round(b.awa * 57.3), kn: +(b.speed * 1.94).toFixed(1) }); });
+await p.evaluate(() => { const G = window.__game(), b = G.player.b; b.reset(300, -900, G.wind.dir0 + 1.5); b.vx = Math.sin(b.th) * 3; b.vy = Math.cos(b.th) * 3; window.__tick(5, { left: false, right: false, ease: false }); });
+await p.waitForTimeout(1500); console.log('beam reach, sheet in:', await w()); await p.screenshot({ path: 'shots/pow.png' });
+await p.evaluate(() => window.__tick(4, { left: false, right: false, ease: true })); await p.waitForTimeout(2500); console.log('sheet eased:', await w()); await p.screenshot({ path: 'shots/pow2.png' });
+console.log(errs.join('\n') || 'no console errors'); await b.close();

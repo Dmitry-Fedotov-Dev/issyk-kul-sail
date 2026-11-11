@@ -1,0 +1,18 @@
+{
+  "name": "issyk-sail",
+  "version": "1.0.0",
+  "description": "Парус Иссык-Куля: браузерный симулятор яхты у Чолпон-Аты",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node server.js",
+    "test": "node test/polar.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "three": "^0.160.0"
+  },
+  "private": true
+}
