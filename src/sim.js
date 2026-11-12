@@ -139,7 +139,7 @@ export class Boat {
     const hr = waves.sample(x + rx * 1.1, z + rz * 1.1, t, att, WS).h, hl = waves.sample(x - rx * 1.1, z - rz * 1.1, t, att, WS).h;
     const ty = (hb + hs + hr + hl) / 4, tp = Math.atan2(hb - hs, 5.2);
     this.y += (ty - this.y) * 0.35; this.pitch += (tp - this.pitch) * 0.3;
-    this.slopeF = (hb - hs) / 5.2; this.slopeR = (hr - hl) / 2.2; this.depth = depth;
+    this.slopeF = (hb - hs) / 5.2; this.slopeR = (hr - hl) / 2.2; this.depth = depth; this.wg = clamp((waves.Hs || 0.3) / 0.55, 0.35, 2.2);
   }
 
   step(dt, inp, wind, terrainH) {
@@ -178,7 +178,7 @@ export class Boat {
 
     const alpha = Math.max(0, absA - Math.abs(this.boom)), aDeg = alpha / DEG;
     this.alpha = alpha; this.luff = 1 - smooth(3, 11, aDeg);
-    const ce = Math.pow(Math.max(0, Math.cos(this.phi)), 1.2) * this.skill;
+    const ce = Math.pow(Math.max(0, Math.cos(this.phi)), 1.2) * this.skill * (1 - 0.35 * (this.wearA || 0)); // растянутый парус тянет хуже
     const q = 0.5 * B.rhoAir * aws * aws * B.sail * ce, hx = ax / aws, hy = ay / aws;
     // нормаль паруса (подветренная сторона) -- выбирает знак подъёмной силы
     const sb = this.boom >= 0 ? 1 : -1, cb = Math.cos(Math.abs(this.boom)), snb = Math.sin(Math.abs(this.boom));
@@ -196,7 +196,7 @@ export class Boat {
     const Fr = sR - 500 * (0.95 * V2 * clk * kEff + 2.2 * vs * Math.abs(vs)) - 300 * vs;
     const au = Math.abs(u), xs = au / B.hullSpeed, wave = xs < 1 ? 250 * xs ** 6 : 250 * (1 + 2.0 * (xs - 1));
     const sp2 = Math.sin(this.phi) ** 2;
-    const res = (20 * au * au * (1 + 1.3 * sp2) + wave + 500 * 0.95 * V2 * clk * clk * 0.11 + 42 * au * au * this.rudder * this.rudder) * Math.sign(u) + 25 * u;
+    const res = (20 * au * au * (1 + 1.3 * sp2) * (1 + 0.7 * (this.wearH || 0)) + wave + 500 * 0.95 * V2 * clk * clk * 0.11 + 42 * au * au * this.rudder * this.rudder) * Math.sign(u) + 25 * u;
     const Ff = sF - res - B.mass * G * 0.25 * this.slopeF * this.att;
     this.vx += (fx * Ff / B.mass + rx * Fr / B.massSide) * dt;
     this.vy += (fy * Ff / B.mass + ry * Fr / B.massSide) * dt;
@@ -211,7 +211,9 @@ export class Boat {
     this.r += rd * dt; this.th = wrapPi(this.th + this.r * dt);
 
     // --- крен ---
-    const mh = sR * B.ceH;
+    // крутая волна в борт: кроме наклона по склону, гребень бьёт в корпус -- на малом ходу лагом к волне яхту может положить
+    const ws = this.slopeR * this.att * (this.wg || 1), wk = Math.max(0, Math.abs(ws) - 0.3) * Math.sign(ws) * 26000 * (1 - Math.min(1, au / 3.5) * 0.6);
+    const mh = sR * B.ceH + wk;
     this.crew += clamp(clamp(-mh / B.crewM, -1, 1) - this.crew, -1.3 * dt, 1.3 * dt);
     const pr = this.phi + Math.atan(this.slopeR) * 0.8 * this.att;
     const rm = B.K * Math.sin(Math.PI * clamp(pr, -1.9, 1.9) / B.phiV);

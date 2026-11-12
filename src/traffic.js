@@ -39,7 +39,7 @@ export function makeTraffic(scene, ctx) {
     for (const e of list) { const b = e.b; if (!e.model.root.visible) continue; e.T -= dt;
       if (e.police && law.stars > 0) { // погоня: идём в упреждённую точку, вблизи уравниваем ход, чтобы подойти к борту
         const d = Math.hypot(pb.X - b.X, pb.Y - b.Y), lead = Math.min(2.5, d / 18); e.tgt = { X: pb.X + pb.vx * lead, Y: pb.Y + pb.vy * lead };
-        const cap = [0, 12, 14, 15.5][law.stars]; e.vt = Math.min(cap, d < 10 ? ps : d < 30 ? Math.max(2.5, ps + 2.5) : cap); // катер (17.5 м/с) и гидроцикл уходят по прямой, гребные и яхта -- нет b.siren = true;
+        const cap = [0, 11.5, 13, 14][law.stars]; e.vt = Math.min(cap, d < 10 ? ps : d < 30 ? Math.max(2.5, ps + 2.5) : cap); // катер (17.5 м/с) и гидроцикл уходят по прямой, гребные и яхта -- нет b.siren = true;
       } else { if (e.police) b.siren = false;
         if (!e.tgt || e.T <= 0 || Math.hypot(e.tgt.X - b.X, e.tgt.Y - b.Y) < (e.phys ? 18 : 60)) { const r = e.type === 'steamer' ? [1200, 3500] : e.type === 'fishing' ? [300, 1500] : e.type === 'sup' ? [60, 350] : [150, 900];
           e.tgt = pick(r[0], r[1], e.home.X, e.home.Y, e.phys ? 3 : 8); e.T = e.type === 'fishing' ? 60 + Math.random() * 60 : 90; e.drift = e.type === 'fishing' && Math.random() < 0.4 ? 25 : 0; }
@@ -69,12 +69,13 @@ export function makeTraffic(scene, ctx) {
     if (law.stars > 0) { let d = 1e9, near = null; for (const p of patrols) if (p.model.root.visible) { const q = Math.hypot(pb.X - p.b.X, pb.Y - p.b.Y); if (q < d) { d = q; near = p; } }
       // патруль далеко -- на вызов выходит ближайший катер: он появляется в 600-800 м, а не идёт через всё озеро
       if (law.call) { law.call = false; if (d > 900) { place(patrols[0], pick(600, 800, pb.X, pb.Y, 8), 0); patrols[0].home = { X: pb.X, Y: pb.Y }; d = 700; } }
-      if (d < 350 || law.t > 20) law.seen = true; // уйти можно только от того, кто вас уже нашёл
+      if (d < 350) law.seen = true; // уйти можно только от того, кто вас уже нашёл
       law.t += dt; law.warn -= dt; ctx.audio.siren(true, clamp(d / 400, 0, 1));
       if (patrols[1].reserve && law.stars >= 3 && !patrols[1].model.root.visible) { patrols[1].model.root.visible = true; patrols[1].wake.mesh.visible = true; place(patrols[1], pick(500, 800, pb.X, pb.Y, 8), 0); patrols[1].home = { ...patrols[0].home }; }
       if (d < 130 && law.warn <= 0) { law.warn = 9; ctx.toast(ps > 1 ? 'Береговая милиция! Заглушите ход!' : 'Оставайтесь на месте'); }
       if (ps < 1.8 && d < 60) { law.stopT += dt; if (law.stopT > 2.5) { const f = 500 * law.stars; law.fines += f; ctx.ach('l_stop'); clear(`Протокол составлен. Штраф ${f} сом. Счастливого плавания`); } } else law.stopT = 0;
-      if (law.stars && law.seen && d > 380) { law.lost += dt; if (law.lost > 12) { ctx.ach('l_run'); clear('Оторвались. Милиция потеряла вас из виду'); } } else law.lost = 0;
+      // оторваться -- значит уходить: стоящий на месте игрок не «теряется», даже пока патруль ещё в пути
+      if (law.stars && d > 380 && ps > 3 && (law.seen || law.t > 25)) { law.lost += dt; if (law.lost > 12) { ctx.ach('l_run'); clear('Оторвались. Милиция потеряла вас из виду'); } } else law.lost = 0;
       if (law.stars && d < 14 && ps < 4.5 && ps >= 1.8) { law.near += dt; if (law.near > 2.5) { const f = 2000 * law.stars; law.fines += f; ctx.ach('l_bust'); clear(`Задержаны. Штраф ${f} сом, судно отбуксировано к причалу`); ctx.onBust(); } } else law.near = Math.max(0, law.near - dt);
       // розыск растёт, только если уходить от катера, который уже рядом; кто заглушил ход -- того не трогают
       law.evade = d < 160 && ps > 3 ? (law.evade || 0) + dt : 0;

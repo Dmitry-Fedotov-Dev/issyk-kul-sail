@@ -40,14 +40,16 @@ void main(){ vec2 pc=gl_PointCoord-0.5; float d=length(pc);
 // Кильватерный след: лента по РЕАЛЬНО пройденному пути. Точка ставится каждые 0.9 м хода и остаётся на воде там, где
 // прошла корма, поэтому в повороте след изгибается дугой, а не тянется прямой за лодкой. Ширина растёт с пройденным
 // расстоянием под углом Кельвина (~19.5 градуса): в середине бурун, по краям расходящиеся усы.
+// общая для всех следов освещённость: ночью пена и взбитая вода не должны светиться
+export const WAKE_LIGHT = { value: 1 };
 export function makeWake(N = 110) {
   const pos = new Float32Array(N * 2 * 3), wk = new Float32Array(N * 2 * 3), uv = new Float32Array(N * 2 * 2), idx = [];
   for (let i = 0; i < N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
   for (let i = 0; i < N; i++) { uv[i * 4] = 0; uv[i * 4 + 2] = 1; }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('wk', new THREE.BufferAttribute(wk, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx);
-  const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, extensions: { derivatives: true }, uniforms: { uT: { value: 0 } },
+  const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide, extensions: { derivatives: true }, uniforms: { uT: { value: 0 }, uL: WAKE_LIGHT },
     vertexShader: `attribute vec3 wk; varying vec3 vK; varying vec2 vU; varying vec3 vP; void main(){ vK=wk; vU=uv; vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-    fragmentShader: FOAM_GLSL + `uniform float uT; varying vec3 vK; varying vec2 vU; varying vec3 vP;
+    fragmentShader: FOAM_GLSL + `uniform float uT, uL; varying vec3 vK; varying vec2 vU; varying vec3 vP;
 float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 float vn(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(hash(i),hash(i+vec2(1,0)),f.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x), f.y); }
 void main(){ float w=vK.x, d=vK.y, e=abs(vU.x-0.5)*2.*w; // e -- метры от оси следа
@@ -59,7 +61,7 @@ void main(){ float w=vK.x, d=vK.y, e=abs(vU.x-0.5)*2.*w; // e -- метры от
   // подложка обязана сойти на нет ДО края ленты и к её хвосту, иначе за кормой видна резкая граница «след / чистая вода»
   float un=(1.-smoothstep(cw*0.5,cw*2.4+0.6,e))*smoothstep(w,w*0.45,e)*exp(-d/(16.+46.*vK.z))*(1.-smoothstep(55.,95.,d))*smoothstep(0.,3.,d)*vK.z*0.46*(0.75+0.25*fn);
   float al=max(a*0.92,un); if(al<0.01) discard;
-  gl_FragColor=vec4(mix(vec3(0.30,0.80,0.84),vec3(0.95,0.975,1.),clamp(a*0.92/max(al,1e-3),0.,1.)), al); }` });
+  gl_FragColor=vec4(mix(vec3(0.30,0.80,0.84),vec3(0.95,0.975,1.),clamp(a*0.92/max(al,1e-3),0.,1.))*uL, al); }` });
   const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 3;
   const pts = [];
   return { mesh, pts,

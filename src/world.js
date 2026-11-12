@@ -35,10 +35,10 @@ export async function loadHeight() {
 // Общее состояние неба и света: одни и те же объекты uniform'ов разделяют небо, рельеф и вода.
 export const ENV = {
   uSun: { value: SUN }, uHor: { value: new THREE.Vector3(0.56, 0.76, 0.97) }, uCover: { value: 0.4 }, uCirrus: { value: 0.3 },
-  uStorm: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
+  uStorm: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
 };
 export const GLSL_COMMON = /* glsl */`
-uniform vec3 uSun, uHor; uniform float uCover, uCirrus, uStorm, uCloudScale, uSunI; uniform vec2 uCloud;
+uniform vec3 uSun, uHor; uniform float uCover, uCirrus, uStorm, uCloudScale, uSunI, uDay, uDusk; uniform vec2 uCloud;
 #define HOR uHor
 float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -49,6 +49,8 @@ vec3 skyBase(vec3 d){ float y=max(d.y,0.);
   // высокогорное небо: воздуха над головой меньше, поэтому зенит тёмный, густо-синий с фиолетовым оттенком
   vec3 c=mix(uHor, vec3(0.045,0.235,0.78), smoothstep(0.,0.24,y)); c=mix(c, vec3(0.010,0.085,0.50), smoothstep(0.10,0.55,y)); c=mix(c, vec3(0.006,0.030,0.27), smoothstep(0.40,1.,y));
   c=mix(c, vec3(0.20,0.24,0.30)*(0.75+0.5*y), uStorm*0.85);
+  c*=mix(0.025,1.,uDay); // ночь
+  { float sg=max(dot(normalize(d.xz+1e-4),normalize(uSun.xz)),0.); c+=vec3(1.,0.42,0.14)*uDusk*(1.-uStorm)*pow(1.-y,5.)*(0.25+0.75*sg*sg); } // заря у горизонта со стороны солнца
   // солнце высокогорья: слепящий диск и широкое сияние вокруг
   float s=max(dot(d,uSun),0.), sunny=uSunI*(1.-uStorm); c+=vec3(1.,.86,.62)*(pow(s,10.)*.16+pow(s,220.)*.55)*uSunI+vec3(1.,.9,.7)*(pow(s,3.)*.10+pow(s,40.)*.35+pow(s,900.)*2.5)*sunny; return c; }
 vec2 cloudUV(vec3 d){ return d.xz/(d.y+0.10)*uCloudScale+uCloud; }
@@ -59,7 +61,7 @@ float cloudCov(float n){ float lo=cloudLo(); return smoothstep(lo, lo+0.075, n);
 // дымка: густая у воды, редкая на высоте -- поэтому снежные вершины за 80 км видны над маревом
 vec3 applyFog(vec3 c, float dist, float y){ float f=min((1.-exp(-dist/mix(42000.,16000.,uStorm)))*mix(1.,0.34,smoothstep(150.,2600.,y)), mix(0.70,0.93,uStorm));
   // цвет дали задан в линейном пространстве: после тональной обработки он заметно светлеет
-  return mix(c, mix(HOR, mix(vec3(0.13,0.26,0.60),HOR*0.8,uStorm), smoothstep(12000.,60000.,dist)), f); }
+  return mix(c, mix(HOR, mix(vec3(0.13,0.26,0.60)*mix(0.04,1.,uDay),HOR*0.8,uStorm), smoothstep(12000.,60000.,dist)), f); }
 `;
 // Уровни качества. На слабом устройстве выгоднее упростить шейдеры (меньше октав шума, дешевле отражение облаков),
 // чем опускать разрешение: при низком разрешении «мылится» и идёт квадратами вообще всё -- тени, брызги, пена.
@@ -75,21 +77,22 @@ export function makeSky() {
     vertexShader: `varying vec3 vDir; void main(){ vDir=position; vec4 p=modelViewMatrix*vec4(position,0.); gl_Position=projectionMatrix*vec4(p.xyz,1.); gl_Position.z=gl_Position.w; }`,
     fragmentShader: GLSL_COMMON + /* glsl */`
 uniform float uEnvW; varying vec3 vDir;
-void main(){ vec3 d=normalize(vDir); vec3 c=skyBase(d);
+void main(){ vec3 d=normalize(vDir); vec3 c=skyBase(d); float dk=mix(0.05,1.,uDay); vec3 dt3=mix(vec3(1.),vec3(1.2,0.72,0.5),uDusk)*dk;
+  if(uDay<0.7 && d.y>0.){ vec2 sp=d.xz/(d.y+0.3)*110.; float hs=hash(floor(sp)); c+=vec3(0.9,0.95,1.)*step(0.982,hs)*smoothstep(0.4,0.05,length(fract(sp)-0.5))*smoothstep(0.42,0.04,uDay)*(1.-uStorm)*(0.6+2.*fract(hs*57.)); } // звёзды
   c+=vec3(1.,.95,.8)*smoothstep(0.99955,0.9998,dot(d,uSun))*6.*uSunI;
   // перистые: высокий слой, волокна вытянуты вдоль потока
   if(uCirrus>0.01 && d.y>0.02){ vec2 q=d.xz/(d.y+0.35)*0.6+uCloud*0.25; q=mat2(0.8,0.6,-0.6,0.8)*q;
     float w=fbm(q*1.3); float n=fbm(vec2(q.x*0.6+w*1.6, q.y*4.2+w*0.8));
     float a=smoothstep(0.46,0.80,n)*smoothstep(0.30,0.62,fbm(q*0.35+9.))*uCirrus*smoothstep(0.03,0.4,d.y);
-    c=mix(c, vec3(1.,0.99,0.97), a*0.62); }
+    c=mix(c, vec3(1.,0.99,0.97)*dt3, a*0.62); }
   #ifndef LOW
   // тонкая высокая пелена: едва заметные полосы, дают небу глубину
   if(d.y>0.02){ vec2 v=d.xz/(d.y+0.5)*0.35+uCloud*0.12; float vl=fbm(vec2(v.x*0.7+v.y*0.4, v.y*2.6-v.x*0.3)+21.);
-    c=mix(c, vec3(0.93,0.96,1.), smoothstep(0.45,0.9,vl)*0.20*(1.-uStorm)*uCirrus*smoothstep(0.02,0.3,d.y)); }
+    c=mix(c, vec3(0.93,0.96,1.)*dt3, smoothstep(0.45,0.9,vl)*0.20*(1.-uStorm)*uCirrus*smoothstep(0.02,0.3,d.y)); }
   // средний ярус: мелкие высококучевые «барашки», идут быстрее и в другом масштабе -- при движении видна разница высот
   if(d.y>0.03){ vec2 p2=d.xz/(d.y+0.24)*uCloudScale*2.7+uCloud*1.8+vec2(37.,11.); float n=fbm(p2)*0.6+vnoise(p2*3.1)*0.4, gate=smoothstep(0.42,0.62,fbm(p2*0.13+5.));
     float a=smoothstep(0.60-uCover*0.08,0.74,n)*gate*smoothstep(0.03,0.25,d.y)*0.7*clamp(uCirrus*2.+uStorm,0.,1.);
-    c=mix(c, mix(mix(vec3(0.80,0.86,0.96),vec3(1.),smoothstep(0.6,0.85,n)), vec3(0.30,0.33,0.38), uStorm), a); }
+    c=mix(c, mix(mix(vec3(0.80,0.86,0.96),vec3(1.),smoothstep(0.6,0.85,n)), vec3(0.30,0.33,0.38), uStorm)*dt3, a); }
   #endif
   // кучевые: плотность -> покрытие, освещённость -- по перепаду плотности в сторону солнца
   if(d.y>0.004){ vec2 p=cloudUV(d); float n=cloudDens(p), a=cloudCov(n);
@@ -99,7 +102,7 @@ void main(){ vec3 d=normalize(vDir); vec3 c=skyBase(d);
       vec3 bright=mix(vec3(1.,0.985,0.95), vec3(0.50,0.54,0.60), uStorm*0.85);
       vec3 cc=mix(dark, bright, clamp(lit*(1.-0.5*core)+0.22*(1.-core),0.,1.));
       cc*=mix(1.,0.78,smoothstep(0.25,0.9,d.y)*core); // прямо над головой видны тёмные основания
-      cc=mix(cc, uHor, exp(-d.y*8.)*0.78);
+      cc*=dt3; cc=mix(cc, uHor, exp(-d.y*8.)*0.78);
       c=mix(c, cc, a*smoothstep(0.004,0.07,d.y)); } }
   c=mix(c,uHor,smoothstep(0.02,-0.01,d.y));
   // для карты отражений: под горизонтом -- вода, иначе борт отражал бы «небо снизу»
@@ -152,8 +155,8 @@ void main(){ vec3 N=normalize(vN); float h=vH, mt=smoothstep(70.,600.,h);
   float px=length(fwidth(vP.xz)), kR=1.-smoothstep(22.,95.,px), kF=1.-smoothstep(3.,13.,px), kT=1.-smoothstep(0.2,0.9,px);
   N=normalize(N+vec3(r0-rx,0.,r0-rz)*(7.5*mt*kR)); float sl=1.-N.y; r0=mix(0.45,r0,kR);
   float kN=1.-smoothstep(10.,45.,px), n=mix(mix(0.5,vnoise(vP.xz*0.0035),1.-smoothstep(90.,260.,px)), fbm(vP.xz*0.0035), kN), n2=mix(0.5,fbm(vP.xz*0.045),kF), n3=mix(0.5,vnoise(vP.xz*0.6),kT);
-  vec3 sand=vec3(0.90,0.80,0.56), green=vec3(0.30,0.56,0.16), steppe=vec3(0.74,0.60,0.33), forest=vec3(0.10,0.28,0.13),
-       meadow=vec3(0.46,0.56,0.24), rock=vec3(0.50,0.43,0.38), snow=vec3(0.98,0.99,1.);
+  vec3 sand=vec3(0.93,0.80,0.52), green=vec3(0.24,0.62,0.13), steppe=vec3(0.88,0.62,0.27), forest=vec3(0.06,0.30,0.14),
+       meadow=vec3(0.38,0.68,0.18), rock=vec3(0.56,0.42,0.42), snow=vec3(0.98,0.99,1.);
   vec3 c=sand*(0.92+0.12*n3);
   c=mix(c, green*(0.75+0.5*n2), smoothstep(1.6,4.5,h+n2*2.5));
   c=mix(c, steppe*(0.85+0.3*n2), smoothstep(40.,230.,h+n*160.-60.*(1.-N.y)*8.));
@@ -178,8 +181,9 @@ void main(){ vec3 N=normalize(vN); float h=vH, mt=smoothstep(70.,600.,h);
   float cs=1.-0.55*cloudCov(cloudDens(vP.xz*0.00011*uCloudScale+uCloud))*mt;
   float l=max(dot(N,uSun),0.)*uSunI*cs; vec3 amb=vec3(0.22,0.29,0.44)*mix(1.,0.62,uStorm)*ao;
   // живопись светом: солнечные склоны тёплые, золотистые; тени холодные, сине-фиолетовые; цвета гуще
-  c=mix(vec3(dot(c,vec3(0.3,0.59,0.11))), c, 1.12);
-  vec3 sunC=mix(vec3(1.08,1.0,0.88), vec3(0.8,0.85,0.9), uStorm), shC=mix(vec3(0.27,0.33,0.50), vec3(0.22,0.25,0.30), uStorm);
+  // погодный фильтр: на солнце краски сочные, в шторм -- выцветшие и холодные, на заре -- тёплые
+  float wxS=uSunI*(1.-uStorm); c=mix(vec3(dot(c,vec3(0.3,0.59,0.11))), c, 0.62+0.78*wxS); c=mix(c, c*vec3(0.78,0.86,1.02), uStorm);
+  vec3 sunC=mix(mix(vec3(1.08,1.0,0.88), vec3(1.5,0.72,0.38), uDusk), vec3(0.8,0.85,0.9), uStorm), shC=mix(vec3(0.27,0.33,0.50), vec3(0.22,0.25,0.30), uStorm);
   c*=mix(1.,0.88,mt*(1.-snowM)); // камень и трава в горах темнее выгоревшей степи у берега
   float sunny=uSunI*(1.-uStorm); // в ясный день горы залиты светом: солнечные склоны почти слепят, тени наполнены отражённым
   vec3 col=c*(sunC*l*(1.25+0.75*sunny)+shC*ao*(1.25+0.3*sunny)+snowM*vec3(0.36,0.42,0.60)*mix(1.,0.5,uStorm)*ao);
@@ -191,6 +195,7 @@ void main(){ vec3 N=normalize(vN); float h=vH, mt=smoothstep(70.,600.,h);
   col=mix(col, mix(vec3(0.93,0.95,0.99),vec3(0.30,0.33,0.37),uStorm), band*(0.42+0.45*uStorm));
   // в шторм вершины уходят в тучу
   col=mix(col, vec3(0.24,0.27,0.31), uStorm*smoothstep(1300.,2600.,h)*0.8);
+  col*=mix(vec3(0.045,0.06,0.11), vec3(1.), uDay); // ночью -- синий полумрак
   col=applyFog(col, dist, h);
   // дно под водой не должно давать контуров сквозь воду: пишем ему глубину «бесконечность». Заодно кромка берега
   // получает чистую линию ровно по урезу воды
@@ -340,14 +345,14 @@ void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
   #endif
   // у горизонта отражения облаков сжаты в полоски тоньше пикселя: там берём среднюю облачность, а не рисунок
   cr=mix(cr, uCover*0.45, smoothstep(0.8,10.,pxw));
-  sky=mix(sky, mix(vec3(0.86,0.88,0.90), vec3(0.16,0.18,0.21), uStorm), cr*0.75);
+  sky=mix(sky, mix(vec3(0.86,0.88,0.90), vec3(0.16,0.18,0.21), uStorm)*mix(0.05,1.,uDay), cr*0.75);
   float sd=max(dot(R,uSun),0.), far=smoothstep(100.,4000.,dist);
   vec3 spec=vec3(1.,.93,.78)*(pow(sd,mix(700.,90.,far))*mix(8.,1.2,far))*uSunI;
   vec3 deep=vec3(0.004,0.075,0.34), turq=vec3(0.0,0.34,0.60), shal=vec3(0.06,0.72,0.70);
   deep=mix(deep, vec3(0.012,0.045,0.07), uStorm*0.85); turq=mix(turq, vec3(0.03,0.16,0.20), uStorm*0.8);
   vec3 body=mix(shal, mix(turq,deep,smoothstep(7.,42.,depth)), smoothstep(0.4,9.,depth));
   // у борта вода взбита и насыщена воздухом -- светло-бирюзовая кайма под пеной
-  body=mix(body, mix(vec3(0.16,0.60,0.66),vec3(0.10,0.24,0.26),uStorm), clamp(hullF*0.85,0.,1.)*0.6);
+  body=mix(body, mix(vec3(0.16,0.60,0.66),vec3(0.10,0.24,0.26),uStorm), clamp(hullF*0.85,0.,1.)*0.6*uDay);
   // тень лодки и парусов на воде: одна сплошная сужающаяся полоса вдоль луча солнца (расстояние до отрезка
   // «подножие мачты -- тень топа» с радиусом, убывающим к концу). Цепочка отдельных пятен читалась как кружки.
   vec2 sdir=-uSun.xz/max(uSun.y,0.25), sa=bf*0.2, sb=sdir*uHull.z+bf*0.9, sab=sb-sa; float st=clamp(dot(rel-sa,sab)/dot(sab,sab),0.,1.), sr=mix(min(2.4,uHull.y*1.6),0.3,pow(st,0.8));
@@ -364,7 +369,7 @@ void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
   // ложбины темнее; мелкая фактура -- через уклон ряби к солнцу. Сам решётчатый шум в цвет не идёт: он давал клетчатые пятна
   body*=clamp(0.94+hh*0.22+dot(ds,normalize(uSun.xz))*0.05*rip,0.72,1.22);
   body*=mix(1.10,0.74,smoothstep(0.80,1.60,g));
-  body*=1.-0.42*shd;
+  body*=mix(0.07,1.,uDay); body*=1.-0.42*shd;
   vec3 col=mix(body,sky,F*(1.-0.25*shd))+spec*(1.-shd);
   float fn=fvn(o*0.9+uTime*0.05)*0.65+fvn(o*2.6-uTime*0.04)*0.35, lc=0.;
   float wf=clamp((uWind*g-4.)/8.,0.,1.), cth=mix(1.0,0.30,wf);
@@ -378,7 +383,7 @@ void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
   // рисунок считаем только там, где пена вообще есть; порог размывается на ширину пикселя -- край без «лесенки»
   float foam=0.; if(m>0.02){ lc=foamTex(o,uTime); float v=lc*0.80+fn*0.34, th=1.10-m*1.02, aa=0.10+fwidth(v)*1.2; foam=smoothstep(th-aa, th+aa, v)*smoothstep(0.02,0.2,m); }
   vec3 fcol=mix(vec3(0.97,0.99,1.), vec3(0.70,0.74,0.76), uStorm*0.7)*(0.62+0.42*max(dot(N,uSun),0.)*uSunI+0.12*lc);
-  col=mix(col, fcol, foam*0.94);
+  col=mix(col, fcol*mix(0.14,1.,uDay), foam*0.94);
   col=applyFog(col,dist,0.);
   gl_FragColor=vec4(col, smoothstep(0.01,0.75,thick)); ${END} }`,
   });

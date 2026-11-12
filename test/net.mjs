@@ -1,0 +1,20 @@
+// Сетевая игра на настоящем сервере: два игрока видят друг друга рядом и не видят издалека.
+import { createRequire } from 'node:module'; const { chromium } = createRequire('/')('playwright');
+import { spawn } from 'node:child_process';
+const PORT = 8137, srv = spawn('node', ['server.js'], { env: { ...process.env, PORT }, stdio: 'pipe' }); await new Promise((r) => setTimeout(r, 800));
+const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const open = async (craft) => { const p = await b.newPage({ viewport: { width: 900, height: 500 } }); p.setDefaultTimeout(300000); p.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  await p.goto(`http://localhost:${PORT}/`); await p.waitForFunction(() => window.__game && window.__game() && document.getElementById('load').hidden, null, { timeout: 280000 });
+  await p.click('#w_breeze'); await p.click('#c_' + craft); await p.click('#bfree'); return p; };
+const A = await open('kayak'), B = await open('boat');
+const put = (p, X, Y) => p.evaluate(([X, Y]) => { const G = window.__game(), b = G.player.b; b.reset(X, Y, 1); }, [X, Y]);
+const pump = async (sec) => { for (let i = 0; i < sec * 4; i++) { await A.evaluate(() => window.__tick(0.1, {})); await B.evaluate(() => window.__tick(0.1, {})); await new Promise((r) => setTimeout(r, 150)); } };
+const see = (p) => p.evaluate(() => { const G = window.__game(), n = G.__X.net, b = G.player.b; return { up: n.st.up, online: n.st.online, near: [...n.pups.values()].map((q) => ({ kind: q.k, dist: Math.round(Math.hypot(q.b.X - b.X, q.b.Y - b.Y)), visible: q.model.root.visible })), hud: document.getElementById('online').textContent }; });
+await put(A, 300, -900); await put(B, 330, -880); await pump(4);
+console.log('close together  A sees:', JSON.stringify(await see(A))); console.log('                B sees:', JSON.stringify(await see(B)));
+await A.evaluate(() => { const G = window.__game(); G.dbgCam = { back: 10, side: 6, up: 4 }; G.freeze = true; }); await A.waitForTimeout(1500); await A.screenshot({ path: 'shots/net_A.png' }); await A.evaluate(() => { window.__game().freeze = false; window.__game().dbgCam = null; });
+await put(B, 6000, -3000); await pump(6);
+console.log('5.7 km apart    A sees:', JSON.stringify(await see(A)));
+await B.close(); for (let i = 0; i < 24; i++) { await A.evaluate(() => window.__tick(0.1, {})); await new Promise((r) => setTimeout(r, 250)); } console.log('B disconnected  A sees:', JSON.stringify(await see(A)));
+console.log('server /health:', await (await fetch(`http://localhost:${PORT}/health`)).text());
+await b.close(); srv.kill();

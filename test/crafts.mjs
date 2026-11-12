@@ -37,4 +37,7 @@ for (const [id, lo, hi] of [['jetski', 36, 48], ['boat', 28, 38]]) {
   ok(Math.abs(coast.b.r) < Math.abs(thOn.b.r) * 0.4, `гидроцикл без газа почти не рулится (${coast.b.r.toFixed(2)} рад/с против ${thOn.b.r.toFixed(2)} с газом)`); }
 { const r = run('jetski', 'ulan', 60, (b) => ({ steer: 0, ease: true }), { twa: 0 }); ok((r.log.ev.jump || 0) >= 1, `гидроцикл в шторм против волны прыгает: ${r.log.ev.jump || 0} раз, дольше всего ${r.log.air.toFixed(2)} с в воздухе`); }
 { const r = run('boat', 'breeze', 40, (b, t, st) => aiMotor(b, 300, 300), { calm: true, twa: 0 }); ok(Math.hypot(r.b.X - 300, r.b.Y - 300) < 60 || r.b.dist > 300, `катер-автомат дошёл до точки (осталось ${Math.hypot(r.b.X - 300, r.b.Y - 300).toFixed(0)} м)`); }
+// опрокидывание на волне: лагом к волне без опоры и без хода
+for (const [id, pr] of [['kayak', 'santash'], ['kayak', 'ulan'], ['jetski', 'ulan'], ['boat', 'ulan'], ['kayak', 'breeze']]) { const r = run(id, pr, 120, () => ({ left: false, right: false, ease: false, steer: 0 }), { twa: 90 });
+  console.log(`     ${SPECS[id].name}, ${pr}, лагом без хода 2 мин: опрокидываний ${r.log.ev.capsize || 0}, макс. крен ${(r.log.maxHeel / DEG).toFixed(0)}°`); if (pr === 'breeze') ok(!r.log.ev.capsize, 'каяк в бриз не опрокидывается'); if (id === 'kayak' && pr === 'ulan') ok(r.log.ev.capsize >= 1, 'каяк в Улан лагом без опоры опрокидывается'); }
 console.log(fail ? `\nПРОВАЛЕНО: ${fail}` : '\nвсе проверки снарядов прошли'); process.exit(fail ? 1 : 0);

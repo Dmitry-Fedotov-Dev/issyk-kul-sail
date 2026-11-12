@@ -95,6 +95,11 @@ function person(parent, { x = 0, y = 0, z = 0, suit = 0x26486e, pfd = 0xf2591b, 
 function finish(root, tilt, yoff = 0) { root.add(tilt); root.rotation.order = 'YXZ'; root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   return (b) => { root.position.set(b.X, b.y + yoff, -b.Y); root.rotation.set(b.pitch * 0.9, -b.th, -b.phi); }; }
 const E = new THREE.Euler();
+// Плавная поза: каждая величина анимации идёт к цели через критически демпфированную пружину. Цель может скакать
+// (начало гребка с другой стороны, конец гребка), а поза -- нет: она догоняет плавно и без перелёта. Без гребка цель --
+// поза покоя, и модель сама возвращается в неё.
+function springs(init) { const x = { ...init }, v = {}; for (const k in init) v[k] = 0;
+  return { x, step(tgt, dt, k = 140) { const c = 2 * Math.sqrt(k), h = Math.min(dt, 0.05); for (const n in tgt) { v[n] += (k * (tgt[n] - x[n]) - c * v[n]) * h; x[n] += v[n] * h; } return x; } }; }
 
 // ---------- каяк ----------
 export function makeKayak(o = {}) {
@@ -106,9 +111,16 @@ export function makeKayak(o = {}) {
   const P = new THREE.Group(); t.add(P); const shaft = cyl(P, 0.015, 0.015, 2.15, black, 0, 0, 0, 8); shaft.rotation.z = Math.PI / 2;
   for (const sd of [-1, 1]) { const bl = box(P, 0.46, 0.17, 0.015, std(o.blade ?? 0xf4f3ee, 0.4), sd * 0.86, 0, 0); bl.rotation.x = sd * 0.5; }
   const base = finish(root, t, 0.0), h = V(0, 0, 0);
-  return { root, update(b) { base(b); const st = b.st, sg = (st ? st.side : b.lastSide) === 'L' ? -1 : 1, ph = st ? Math.min(1, st.t / st.T) : 0.5, on = st ? 1 : 0.25;
-    P.position.set(0, 0.6 - 0.1 * b.brace, -0.12); P.rotation.set(0, sg * (0.55 - 1.1 * ph) * on * (1 - b.brace), -sg * (0.28 + 0.5 * Math.sin(Math.PI * ph) * on + 0.25 * b.brace));
-    pe.body.rotation.y = -sg * 0.45 * Math.cos(Math.PI * ph) * on; pe.body.rotation.x = -0.12 - 0.1 * b.brace; E.copy(P.rotation);
+  // от первого лица корпус и голова не рисуются (иначе закрывают обзор), руки и весло остаются в кадре
+  const S = springs({ yaw: 0, roll: 0, tw: 0, py: 0.6, lean: -0.12 }), T = { yaw: 0, roll: 0, tw: 0, py: 0.6, lean: -0.12 };
+  return { root, fp(on) { pe.body.visible = !on; }, update(b, dt = 1 / 60) { base(b); const st = b.st, sg = (st ? st.side : b.lastSide) === 'L' ? -1 : 1;
+    if (st) { const ph = Math.min(1, st.t / st.T); // широкий гребок: лопасть входит у ног и выходит у бедра
+      T.yaw = sg * (1.0 - 2.0 * ph) * (1 - b.brace); T.roll = -sg * (0.36 + 0.78 * Math.sin(Math.PI * ph)); T.tw = -sg * 0.75 * Math.cos(Math.PI * ph); }
+    else { const r = Math.min(1, (b.endT || 0) / 0.6); T.yaw = -sg * 0.45 * (1 - r); T.roll = -sg * 0.3 * (1 - r) ; T.tw = sg * 0.3 * (1 - r); } // вынос и возврат в покой: весло поперёк, корпус прямо
+    if (b.capsized) { T.yaw = 0; T.roll = 0; T.tw = 0; }
+    T.roll += -sg * 0.25 * b.brace; T.py = 0.6 - 0.1 * b.brace; T.lean = -0.12 - 0.1 * b.brace;
+    const x = S.step(T, dt, st ? 160 : 70);
+    P.position.set(0, x.py, -0.12); P.rotation.set(0, x.yaw, x.roll); pe.body.rotation.y = x.tw; pe.body.rotation.x = x.lean; E.copy(P.rotation);
     for (let i = 0; i < 2; i++) pe.reach(i, h.set((i ? 1 : -1) * 0.36, 0, 0).applyEuler(E).add(P.position)); } };
 }
 // ---------- академическая одиночка ----------
@@ -121,9 +133,10 @@ export function makeScull(o = {}) {
   const oars = [-1, 1].map((sd, i) => { const g = new THREE.Group(); g.position.copy(lock[i]); t.add(g); const sh = cyl(g, 0.017, 0.02, 2.85, black, sd * 0.55, 0, 0, 8); sh.rotation.z = Math.PI / 2;
     box(g, 0.5, 0.2, 0.015, std(o.blade ?? 0x1f6fd0, 0.4), sd * 1.9, 0, 0); return { g, sd, a: 0.7, lift: 0 }; });
   const base = finish(root, t, 0.0), h = V(0, 0, 0);
-  return { root, update(b, dt) { base(b); const st = b.st, per = b.spec.period;
+  // от первого лица корпус и голова не рисуются (иначе закрывают обзор), руки и весло остаются в кадре
+  return { root, fp(on) { pe.g.visible = !on; }, update(b, dt) { base(b); const st = b.st, per = b.spec.period;
     for (const oa of oars) { const act = st && (st.side === 'B' || (st.side === 'L') === (oa.sd < 0)), ph = act ? Math.min(1, st.t / st.T) : 0;
-      const tgt = act ? 0.75 - 1.4 * ph : 0.75 - 1.4 * (1 - clamp(b.endT / (per * 0.55), 0, 1)); oa.a += (tgt - oa.a) * Math.min(1, dt * 14); oa.lift += ((act ? -0.07 : 0.1) - oa.lift) * Math.min(1, dt * 10);
+      const tgt = act ? 0.75 - 1.4 * ph : 0.75 - 1.4 * (1 - clamp(b.endT / (per * 0.55), 0, 1)); const k = act ? 170 : 75, h2 = Math.min(dt, 0.05); oa.va = (oa.va || 0) + (k * (tgt - oa.a) - 2 * Math.sqrt(k) * (oa.va || 0)) * h2; oa.a += oa.va * h2; oa.lift += ((act ? -0.07 : 0.1) - oa.lift) * Math.min(1, dt * 8);
       oa.g.rotation.set(0, oa.sd * oa.a, oa.sd * oa.lift); }
     const sl = 0.2 + 0.3 * (0.75 - oars[1].a) / 1.4; seat.position.z = sl; pe.g.position.z = sl; pe.body.rotation.x = -0.3 + 0.55 * (0.75 - oars[1].a) / 1.4;
     oars.forEach((oa, i) => { E.copy(oa.g.rotation); pe.reach(i ? 0 : 1, h.set(-oa.sd * 0.78, 0, 0).applyEuler(E).add(oa.g.position)); }); } };
@@ -135,9 +148,16 @@ export function makeSup(o = {}) {
   const pe = person(t, { y: 0.09, z: 0.2, suit: o.suit ?? 0x20242b, pfd: o.pfd ?? 0xe6452b, hat: o.hat ?? 0xf2c21b, standing: true });
   const P = new THREE.Group(); t.add(P); cyl(P, 0.014, 0.014, 1.85, black, 0, 0, 0, 8); box(P, 0.19, 0.42, 0.015, std(o.blade ?? 0xf2c21b, 0.4), 0, -1.1, 0);
   const base = finish(root, t, 0.0), h = V(0, 0, 0);
-  return { root, update(b) { base(b); const st = b.st, sg = (st ? st.side : b.lastSide) === 'L' ? -1 : 1, ph = st ? Math.min(1, st.t / st.T) : 0.35, cr = 1 - 0.28 * b.brace;
-    pe.g.scale.y = cr; pe.body.rotation.x = -0.12 - 0.35 * b.brace - 0.25 * Math.sin(Math.PI * ph) * (st ? 1 : 0); pe.body.rotation.y = -sg * 0.25; P.position.set(sg * 0.36, 1.3 * cr - 0.1, -0.15); P.rotation.set(0.6 - 1.15 * ph, 0, -sg * 0.1); E.copy(P.rotation);
-    pe.reach(sg > 0 ? 0 : 1, h.set(0, 0.9, 0).applyEuler(E).add(P.position)); pe.reach(sg > 0 ? 1 : 0, h.set(0, 0.3, 0).applyEuler(E).add(P.position)); } };
+  // от первого лица корпус и голова не рисуются (иначе закрывают обзор), руки и весло остаются в кадре
+  const S = springs({ px: 0.36, pr: 0.55, pz: -0.1, lean: -0.12, tw: -0.25, cr: 1 }), T = { px: 0.36, pr: 0.55, pz: -0.1, lean: -0.12, tw: -0.25, cr: 1 };
+  return { root, fp(on) { pe.body.visible = !on; }, update(b, dt = 1 / 60) { base(b); const st = b.st, sg = (st ? st.side : b.lastSide) === 'L' ? -1 : 1;
+    if (st) { const ph = Math.min(1, st.t / st.T); T.pr = 0.95 - 1.8 * ph; T.lean = -0.12 - 0.25 * Math.sin(Math.PI * ph); }
+    else { const r = Math.min(1, (b.endT || 0) / 0.7); T.pr = -0.85 + 1.4 * r; T.lean = -0.12; } // после гребка весло выносится вперёд, в готовность
+    T.px = sg * 0.36; T.tw = -sg * 0.25; T.cr = 1 - 0.28 * b.brace; T.lean -= 0.35 * b.brace;
+    const x = S.step(T, dt, st ? 150 : 60), cr = x.cr;
+    pe.g.scale.y = cr; pe.body.rotation.x = x.lean; pe.body.rotation.y = x.tw; P.position.set(x.px, 1.3 * cr - 0.1, -0.15); P.rotation.set(x.pr, 0, -x.px / 0.36 * 0.1); E.copy(P.rotation);
+    const sgv = x.px >= 0 ? 1 : -1;
+    pe.reach(sgv > 0 ? 0 : 1, h.set(0, 0.9, 0).applyEuler(E).add(P.position)); pe.reach(sgv > 0 ? 1 : 0, h.set(0, 0.3, 0).applyEuler(E).add(P.position)); } };
 }
 // ---------- гидроцикл ----------
 export function makeJetski(o = {}) {
@@ -148,7 +168,8 @@ export function makeJetski(o = {}) {
   const bar = new THREE.Group(); bar.position.set(0, 0.92, -0.22); t.add(bar); const hb = cyl(bar, 0.016, 0.016, 0.66, black, 0, 0, 0, 8); hb.rotation.z = Math.PI / 2; cyl(t, 0.03, 0.04, 0.3, black, 0, 0.78, -0.24, 8);
   const pe = person(t, { y: 0.62, z: 0.45, suit: o.suit ?? 0x20242b, pfd: o.pfd ?? 0xe6452b, hat: o.hat ?? 0x20242b, legs: 'ride' }); pe.body.rotation.x = -0.3;
   const base = finish(root, t, 0.02), h = V(0, 0, 0);
-  return { root, update(b) { base(b); bar.rotation.y = -b.rudder * 0.5; E.copy(bar.rotation); for (let i = 0; i < 2; i++) pe.reach(i, h.set((i ? 1 : -1) * 0.3, 0, 0).applyEuler(E).add(bar.position)); pe.g.visible = !b.capsized; } };
+  // от первого лица корпус и голова не рисуются (иначе закрывают обзор), руки и весло остаются в кадре
+  return { root, fp(on) { pe.body.visible = !on && true; }, update(b) { base(b); bar.rotation.y = -b.rudder * 0.5; E.copy(bar.rotation); for (let i = 0; i < 2; i++) pe.reach(i, h.set((i ? 1 : -1) * 0.3, 0, 0).applyEuler(E).add(bar.position)); pe.g.visible = !b.capsized; } };
 }
 // ---------- моторный катер (и на его основе -- катер милиции) ----------
 function plate(text, w, h, bg, fg) { const c = document.createElement('canvas'); c.width = 512; c.height = 96; const g = c.getContext('2d'); g.fillStyle = bg; g.fillRect(0, 0, 512, 96); g.fillStyle = fg; g.font = '800 62px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, 52);
@@ -169,7 +190,7 @@ export function makeMotorboat(o = {}) {
   const ob = new THREE.Group(); ob.position.set(0, F * 0.5, L / 2 + 0.08); t.add(ob); box(ob, 0.42, 0.62, 0.55, black, 0, 0.42, 0.22); box(ob, 0.1, 0.9, 0.22, std(0x30343a, 0.5), 0, -0.3, 0.2); cyl(ob, 0.02, 0.12, 0.2, steel, 0, -0.7, 0.34, 8).rotation.x = Math.PI / 2;
   for (const sd of [-1, 1]) { const r = cyl(t, 0.014, 0.014, L * 0.34, steel, sd * (s.bm(0.3) - 0.03), F * 1.22 + 0.2, -L * 0.2, 6); r.rotation.x = Math.PI / 2 - 0.05; r.rotation.y = -sd * 0.16; }
   const base = finish(root, t, 0.05), h = V(0, 0, 0);
-  return { root, lights, update(b, dt, tm) { base(b); ob.rotation.y = b.rudder * 0.5; wheel.rotation.z = -b.rudder * 1.5; if (!pol) for (let i = 0; i < 2; i++) pe.reach(i, h.set(wheel.position.x + (i ? 0.15 : -0.15), wheel.position.y, wheel.position.z + 0.05));
+  return { root, lights, fp(on) { if (!pol) pe.body.visible = !on; }, update(b, dt, tm) { base(b); ob.rotation.y = b.rudder * 0.5; wheel.rotation.z = -b.rudder * 1.5; if (!pol) for (let i = 0; i < 2; i++) pe.reach(i, h.set(wheel.position.x + (i ? 0.15 : -0.15), wheel.position.y, wheel.position.z + 0.05));
     if (lights) { const on = b.siren, f = Math.floor(tm * 5) % 2; lights[0].material.color.setHex(on && f ? 0x4a78ff : 0x0c1c55); lights[1].material.color.setHex(on && !f ? 0xff4040 : 0x4a1010); } } };
 }
 // ---------- туристический пароход ----------

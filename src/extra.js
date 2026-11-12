@@ -3,6 +3,7 @@
 import { SPECS, CRAFT_ORDER, YACHT_INFO, ACH, makeCraftBody, aiPaddle, aiMotor, flow } from './crafts.js';
 import { MODEL } from './craftmodels.js';
 import { makeTraffic } from './traffic.js';
+import { makeNet } from './net.js';
 import { makeRiver } from './rivermode.js';
 import { makeWake } from './fx.js';
 import { makeMark } from './world.js';
@@ -34,14 +35,29 @@ export function installExtra(A) {
   function mkEntity(id, opts, name, skill = 1) { const b = makeCraftBody(id), model = MODEL[id](opts || {}), wake = makeWake(); scene.add(model.root, wake.mesh); return { id, b, model, wake, name, skill, ai: {}, leg: 0, time: 0 }; }
   const show = (e, v) => { e.model.root.visible = v; e.wake.mesh.visible = v && G.mode !== 'river'; };
   function setPlayer(id) { if (!crafts[id]) crafts[id] = mkEntity(id, null, 'Вы'); for (const k in crafts) show(crafts[k], k === id); G.player = crafts[id]; $('ts').textContent = info(id).key; }
-  function leaveModes() { if (river) river.show(false); flow.at = flow.surf = flow.rough = null; G.rv = null; if (G.race2) { for (const r of G.race2.rivals) show(r, false); G.race2 = null; } for (const m of marks) m.visible = false; if (traffic) traffic.setActive(false); audio.engine(false); $('wanted').hidden = true; G.gag = null; }
+  function leaveModes() { setPit(null); for (const k in rivalsBy) for (const e of rivalsBy[k]) e.out = false; if (river) river.show(false); flow.at = flow.surf = flow.rough = null; G.rv = null; if (G.race2) { for (const r of G.race2.rivals) show(r, false); G.race2 = null; } for (const m of marks) m.visible = false; if (traffic) traffic.setActive(false); audio.engine(false); $('wanted').hidden = true; G.gag = null; }
 
   // ---------- акватория и закон ----------
   // суда акватории (11 моделей) создаются при первом свободном плавании
   let traffic = null; const mkTraffic = () => traffic || (traffic = makeTraffic(scene, { h: G.h, waves: G.waves, wind: G.wind, toast, ach, audio,
     setWanted(n, text) { const el = $('wanted'); el.hidden = !n; if (n) el.innerHTML = `<b>${'★'.repeat(n)}${'☆'.repeat(3 - n)}</b> ${text}`; },
-    onHit(rel) { G.shake = Math.max(G.shake, Math.min(1.2, 0.4 + rel * 0.12)); audio.thump(Math.min(1, 0.4 + rel * 0.1)); },
+    onHit(rel) { wear(G.player.b, 0, 0.02 + 0.01 * rel); G.shake = Math.max(G.shake, Math.min(1.2, 0.4 + rel * 0.12)); audio.thump(Math.min(1, 0.4 + rel * 0.1)); },
     onBust() { A.placeBoat(G.player, 22, G.shore.pierY - 70, A.openWaterHeading(22, G.shore.pierY - 70), 0); } }));
+
+  // ---------- износ и ремонт ----------
+  // wearA -- парус, весло или мотор (падает тяга), wearH -- корпус (растёт сопротивление). Копится от ошибок и нагрузки,
+  // восстанавливается у зелёного буя на дистанции или у причала: стоять рядом на малом ходу.
+  const pitMark = makeMark(0x35c96a); pitMark.visible = false; scene.add(pitMark); let pit = null, pitTold = false;
+  const wear = (b, a, h) => { b.wearA = clamp((b.wearA || 0) + a, 0, 1); b.wearH = clamp((b.wearH || 0) + h, 0, 1); };
+  function setPit(p, r, mark) { pit = p ? { ...p, r } : null; pitMark.visible = !!(p && mark); pitTold = false; }
+  function wearEvent(ev, b) { const t = ev.type;
+    if (t === 'gybe' && ev.power > 0.8) wear(b, 0.05 * ev.power, 0); else if (t === 'capsize') wear(b, 0.05, 0.02); else if (t === 'aground') wear(b, 0, 0.08);
+    else if (t === 'crab') wear(b, 0.05, 0); else if (t === 'land' && ev.impact > 5) wear(b, 0, 0.012 * ev.impact / 5); }
+  function stepWear(dt, b, sp) { const m = b.spec && b.spec.cls;
+    if (!b.capsized) { if (!b.kind) wear(b, dt * (0.0035 * b.luff * b.aws / 8 + 0.0005 * (b.aws / 8) ** 2), dt * 0.0002 * sp); else if (m === 'motor') wear(b, dt * 0.0022 * b.thr * b.thr, dt * 0.0002 * sp / 5); else wear(b, dt * 0.0006 * (b.st ? 1 : 0), dt * 0.0001); }
+    if (pit) { if (pitMark.visible) { pitMark.position.set(pit.X, G.waves.sample(pit.X, -pit.Y, G.t, 1, WS).h - 0.25, -pit.Y); }
+      if (Math.hypot(b.X - pit.X, b.Y - pit.Y) < pit.r && sp < 3.5 && (b.wearA > 0.01 || b.wearH > 0.01)) { wear(b, -dt * 0.22, -dt * 0.22); if (!pitTold) { pitTold = true; toast('Ремонт… стойте рядом'); } if (b.wearA <= 0.01 && b.wearH <= 0.01) { toast('Ресурс восстановлен'); audio.chime(); } } }
+    if (G.frame % 20 === 0) { const a = b.wearA || 0, h = b.wearH || 0, el = $('wear'); el.textContent = a > 0.03 || h > 0.03 ? `${!b.kind ? 'парус' : m === 'motor' ? 'мотор' : 'весло'} ${Math.round(100 - a * 100)}% · корпус ${Math.round(100 - h * 100)}%` : ''; el.className = a > 0.5 || h > 0.5 ? 'bad' : ''; } }
 
   // ---------- соревнования гребных и моторных ----------
   function deepLine(S, dir, len) { for (let a = 0; a <= len; a += 40) if (G.h(S.X + dir.x * a, S.Y + dir.y * a) > -5) return false; return true; }
@@ -61,9 +77,17 @@ export function installExtra(A) {
     while (marks.length < mp.length) { const m = makeMark(marks.length % 2 ? 0xffd21f : 0xff7a1a); scene.add(m); marks.push(m); }
     marks.forEach((m, i) => { m.visible = i < mp.length; if (mp[i]) m.userData.p = mp[i]; });
     G.race2 = { id, t: -5, S, dir, D, rivals: rivalsBy[id], all, over: false, beep: 9, motor, name: COMPETE[id][0] };
+    setPit(pt(D * 0.45, (motor ? 1 : -1) * lane * 3.4), 14, true);
+    // Онлайн-заезд: все, кто выбрал тот же снаряд и ту же погоду, попадают в одну комнату и стартуют одновременно --
+    // заезды уходят по серверным часам каждые 30 секунд. На старте свободные места до четырёх занимают NPC.
+    if (net.st.up && net.st.sync) { const R = G.race2, now = net.now(); R.online = true; R.room = `r:${id}:${G.preset}`; R.T0 = Math.ceil((now + 6000) / 30000) * 30000; R.t = (now - R.T0) / 1000; R.beep = 99;
+      const l = ((net.st.id % 9) - 4) * lane * 0.8 + lane * 0.4; A.placeBoat(G.player, pt(0, l).X, pt(0, l).Y, wrapPi(th), 0); G.player.course[G.player.course.length - 1] = { X: pt(D, l).X, Y: pt(D, l).Y, line: D, label: 'финиш' };
+      toast(`Онлайн-заезд: старт через ${Math.round(-R.t)} с`); }
     G.mode = 'race2'; G.race = null; A.showGame(true); A.setRivals(false); $('race').hidden = false; $('brief').hidden = true; G.camYaw = wrapPi(th); A.resetView(); G.modeT = 0;
   }
-  function stepRace2(dt) { const R = G.race2; R.t += dt; if (R.t < 0) { const s = Math.ceil(-R.t); if (s !== R.beep) { R.beep = s; audio.beep(false); } return; }
+  function stepRace2(dt) { const R = G.race2; const was = R.t; if (R.online) R.t = (net.now() - R.T0) / 1000; else R.t += dt;
+    if (R.online && was < 0 && R.t >= 0) { const peers = [...net.pups.values()].filter((p) => p.model.root.visible).length, keep = Math.max(0, 3 - peers); // минимум четверо на старте
+      R.rivals.forEach((e, i) => { if (i >= keep) { show(e, false); e.out = true; } }); R.all = R.all.filter((e) => !e.out); if (peers) toast(`Марш! Соперников онлайн: ${peers}`); } if (R.t < 0) { const s = Math.ceil(-R.t); if (s !== R.beep) { R.beep = s; audio.beep(false); } return; }
     if (R.beep !== 0) { R.beep = 0; audio.horn(); toast('Марш!'); }
     for (const e of R.all) { if (e.time) continue; const c = e.course[e.leg], b = e.b;
       const hit = c.line !== undefined ? (b.X - R.S.X) * R.dir.x + (b.Y - R.S.Y) * R.dir.y >= c.line : Math.hypot(c.X - b.X, c.Y - b.Y) < c.rad;
@@ -71,9 +95,10 @@ export function installExtra(A) {
     for (let i = 0; i < R.all.length; i++) for (let j = i + 1; j < R.all.length; j++) { const a = R.all[i].b, b = R.all[j].b, dx = b.X - a.X, dy = b.Y - a.Y, d = Math.hypot(dx, dy), rr = a.hl * 0.9 + (R.motor ? 0.6 : 0.2);
       if (d < rr && d > 0.01) { const p = (rr - d) / 2 / d; a.X -= dx * p; a.Y -= dy * p; b.X += dx * p; b.Y += dy * p; } } }
   function finish2() { const R = G.race2; R.over = true; audio.horn(); const P = G.player, prog = (e) => (e.time ? 1e6 - e.time : e.leg * 1e4 + (e.b.X - R.S.X) * R.dir.x + (e.b.Y - R.S.Y) * R.dir.y);
-    const all = [...R.all].sort((a, b) => prog(b) - prog(a)), place = all.indexOf(P) + 1, key = 'best2.' + R.id, best = store.get(key), rec = !best || P.time < best; if (rec) store.set(key, P.time);
+    const peers = R.online ? [...net.pups.values()].map((p) => ({ name: `Игрок ${p.id}`, time: p.r[1] || 0, leg: p.r[0] || 0, b: p.b, net: true })) : [];
+    const all = [...R.all, ...peers].sort((a, b) => prog(b) - prog(a)), place = all.indexOf(P) + 1, key = 'best2.' + R.id, best = store.get(key), rec = !best || P.time < best; if (rec) store.set(key, P.time);
     ach({ kayak: 'k_sprint', scull: 's_race', sup: 'p_race', jetski: 'j_slalom', boat: 'b_slalom' }[R.id]);
-    $('rh').textContent = place === 1 ? 'Победа!' : place + '-е место'; $('rs').textContent = `${R.name} · ваше время ${A.fmt(P.time)}` + (rec ? ' · личный рекорд' : best ? ` · рекорд ${A.fmt(best)}` : '');
+    $('rh').textContent = place === 1 ? 'Победа!' : place + '-е место'; $('rs').textContent = `${R.name}${R.online ? ' · онлайн' : ''} · ваше время ${A.fmt(P.time)}` + (rec ? ' · личный рекорд' : best ? ` · рекорд ${A.fmt(best)}` : '');
     $('rt').innerHTML = all.map((e, i) => `<tr class="${e === P ? 'me' : ''}"><td>${i + 1}</td><td>${e.name}</td><td>${e.time ? A.fmt(e.time) : 'в пути'}</td></tr>`).join('');
     setTimeout(() => { if (G.race2 === R) $('result').hidden = false; }, 1500); }
 
@@ -86,7 +111,7 @@ export function installExtra(A) {
     const hit = !b.capsized && river.hitRock(b);
     // камень всегда выталкивает лодку и гасит встречную скорость (она соскальзывает вбок); «касание» считается не чаще раза в секунду
     if (hit) { b.X += hit.nx * hit.pen; b.Y += hit.ny * hit.pen; const vn = b.vx * hit.nx + b.vy * hit.ny; if (vn < 0) { b.vx -= 1.2 * vn * hit.nx; b.vy -= 1.2 * vn * hit.ny; } }
-    if (hit && rv.cool <= 0) { rv.cool = 1; rv.hits++; b.vx *= 0.75; b.vy *= 0.75; b.p += (Math.random() < 0.5 ? -1 : 1) * 2.0;
+    if (hit && rv.cool <= 0) { rv.cool = 1; rv.hits++; wear(b, 0, 0.07); b.vx *= 0.75; b.vy *= 0.75; b.p += (Math.random() < 0.5 ? -1 : 1) * 2.0;
       G.shake = Math.max(G.shake, 0.6); audio.thump(0.8); toast('Камень!'); for (let i = 0; i < 24; i++) G.spray.emit(b.X, b.y + 0.2, -b.Y, (Math.random() - 0.5) * 5, 2 + Math.random() * 3, (Math.random() - 0.5) * 5, 1.5, 1); }
     if (pr.rap > 0.25 && Math.random() < dt * 30 * pr.rap) { const fx = Math.sin(b.th), fz = -Math.cos(b.th); G.spray.emit(b.X + fx * 2, b.y + 0.15, -b.Y + fz * 2, b.vx * 0.5 + (Math.random() - 0.5) * 3, 1.5 + Math.random() * 2, -b.vy * 0.5 + (Math.random() - 0.5) * 3, 1.5, 2, Math.random() < 0.3 ? 1 : 0); }
     if (!rv.over && pr.s >= river.len) { rv.over = true; audio.horn(); ach('k_river'); if (!rv.hits) ach('k_clean'); const key = 'best.river', best = store.get(key), rec = !best || rv.t < best; if (rec) store.set(key, rv.t);
@@ -125,9 +150,11 @@ export function installExtra(A) {
       const az = (Math.atan2(X, Y) / DEG + 360) % 360, dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'][Math.round(az / 45) % 8];
       startAt = { X, Y, land: h > -2, label: `${d.toFixed(0)} км к ${dirs} · ${h > -2 ? `суша, ${Math.round(h + 1601)} м` : 'озеро'}` }; refreshMenu(); openMap(); }; }
 
+  const net = makeNet(scene, { waves: G.waves, h: G.h, active: () => G.mode !== 'menu' });
   buildMenu();
   return {
-    ach, get traffic() { return traffic; }, get sel() { return sel; },
+    net,
+    wearEvent, pit: () => pit, ach, get traffic() { return traffic; }, get sel() { return sel; },
     boats: (P) => (G.mode === 'race' ? [P, ...G.rivals] : G.race2 ? [P, ...G.race2.rivals] : [P]),
     th: () => (G.mode === 'river' && river ? river.h : G.hb), poseTh: () => (G.mode === 'river' && river ? river.h : G.h),
     filterCtl: (c) => ((G.race2 && G.race2.t < 0) ? { steer: 0, ease: false, left: false, right: false } : c),
@@ -140,7 +167,7 @@ export function installExtra(A) {
     onFree() { G.modeT = 0; const P = G.player; let cx = 0, cy = -600;
       if (startAt) { A.placeBoat(P, startAt.X, startAt.Y, A.openWaterHeading(startAt.X, startAt.Y), startAt.land ? 0 : 1); G.camYaw = P.b.th; if (!startAt.land) { cx = startAt.X; cy = startAt.Y; } }
       else if (P.b.kind) { P.b.vx *= 0.3; P.b.vy *= 0.3; }
-      mkTraffic().relocate(cx, cy, 0, G.shore.pierY - 50); traffic.setActive(true); },
+      mkTraffic().relocate(cx, cy, 0, G.shore.pierY - 50); traffic.setActive(true); setPit({ X: 0, Y: G.shore.pierY - 25 }, 45, false); },
     markTarget() { const R = G.race2; if (!R || G.player.time) return null; return G.player.course[G.player.leg]; },
     hud() { const R = G.race2, P = G.player;
       if (R) { const c = P.course[Math.min(P.leg, P.course.length - 1)], all = [...R.all].sort((a, b) => (b.leg - a.leg) || (((b.b.X - R.S.X) * R.dir.x + (b.b.Y - R.S.Y) * R.dir.y) - ((a.b.X - R.S.X) * R.dir.x + (a.b.Y - R.S.Y) * R.dir.y)));
@@ -171,7 +198,9 @@ export function installExtra(A) {
       else if (ev.type === 'righted') { audio.chime(); if (id === 'kayak') ach('k_roll'); }
       else if (ev.type === 'aground' && !G.gag) { G.shake = 0.6; audio.thump(0.8); if (G.mode !== 'river') toast('Сели на мель!'); } },
     // раз в кадр после физики
-    after(P, dt, boats) { const b = P.b, sp = b.speed; G.modeT = (G.modeT || 0) + dt; for (let i = 1; i < boats.length; i++) boats[i].b.events.length = 0;
+    after(P, dt, boats) { const b = P.b, sp = b.speed; net.tick(dt, P, G.race2 && G.race2.online ? G.race2.room : G.mode === 'river' ? 'river' : 'lake', G.t, G.race2 ? [P.leg, P.time || 0] : null);
+      if (G.mode !== 'menu') stepWear(dt, b, sp); if (G.race && !pit) setPit(G.race.pt(G.race.aW * 0.4, 80), 16, true);
+      if (G.frame % 30 === 0) { const el = $('online'); el.hidden = !(net.st.up && G.mode !== 'menu'); if (!el.hidden) el.textContent = `в сети ${net.st.online} · рядом ${net.pups.size}`; } G.modeT = (G.modeT || 0) + dt; for (let i = 1; i < boats.length; i++) boats[i].b.events.length = 0;
       if (G.race2 && !G.race2.over) stepRace2(dt); if (G.mode === 'river') stepRiver(dt, b);
       if (G.mode === 'free') { stepGag(dt, b); traffic.update(dt, G.t, P); }
       for (const m of marks) if (m.visible) { const p = m.userData.p; m.position.set(p.X, G.waves.sample(p.X, -p.Y, G.t, 1, WS).h - 0.25, -p.Y); m.rotation.z = WS.sx * 0.6; m.rotation.x = -WS.sz * 0.6; }

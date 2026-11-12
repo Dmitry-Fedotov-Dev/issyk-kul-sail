@@ -1,0 +1,10 @@
+import { createRequire } from 'node:module'; const { chromium } = createRequire('/')('playwright');
+import path from 'node:path';
+const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 800, height: 450 } }); p.setDefaultTimeout(600000); p.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+await p.goto('file://' + path.resolve('dist/index.html'));
+await p.waitForFunction(() => window.__game && window.__game() && document.getElementById('load').hidden, null, { timeout: 280000 });
+await p.click('#w_breeze'); await p.click('#c_boat'); await p.click('#bfree');
+console.log(await p.evaluate(() => { const G = window.__game(), b = G.player.b, T = G.__X.traffic; b.reset(400, -1400, 2.4); T.offence(1, 'тест'); const out = [];
+  for (let i = 0; i < 8; i++) { window.__tick(5, {}); const q = T.patrols[0], L = T.law; out.push({ d: Math.round(Math.hypot(q.b.X - b.X, q.b.Y - b.Y)), v: +q.v.toFixed(1), vt: q.vt, vis: q.model.root.visible, stars: L.stars, seen: L.seen, sp: +b.speed.toFixed(1), cap: b.capsized, pX: Math.round(b.X), pY: Math.round(b.Y) }); } return JSON.stringify(out); }));
+await b.close();

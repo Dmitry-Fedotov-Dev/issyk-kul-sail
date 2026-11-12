@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Boat, Wind, Waves, PRESETS, DEG, KN, clamp, wrapPi, smooth, pointOfSail, aiControl } from './sim.js';
 import { applyQuality, loadHeight, makeSky, makeTerrain, makeFarTerrain, makeWater, makeShore, makeMark, SUN, HAZE, ENV, MAP } from './world.js';
 import { makeBoat } from './boatmodel.js';
-import { makeSpray, makeWake } from './fx.js';
+import { makeSpray, makeWake, WAKE_LIGHT } from './fx.js';
 import { makeAudio } from './audio.js';
 import { installExtra } from './extra.js';
 import { makePost, postSupported } from './post.js';
@@ -93,6 +93,7 @@ function applyPreset() {
   // небо и свет под погоду
   const k = p.sky; ENV.uCover.value = k.cover; ENV.uCirrus.value = k.cirrus; ENV.uStorm.value = k.storm; ENV.uCloudScale.value = k.scale; ENV.uSunI.value = k.sun;
   ENV.uHor.value.set(...k.hor); scene.fog.color.setRGB(...k.hor); sunL.intensity = 3.1 * k.sun; hemi.intensity = 1.9 * (1 - 0.35 * k.storm);
+  G.wx = k; dayCycle(0);
   renderer.toneMappingExposure = 1.08 + 0.17 * k.sun * (1 - k.storm); // ясный день ярче
   updateEnv(G.sky); G.spray.uniforms.uLight.value = 0.35 + 0.65 * k.sun;
   store.set('preset', G.preset);
@@ -300,6 +301,7 @@ function toast(t) { const el = $('toast'); el.textContent = t; el.style.opacity 
 function playerEvents(e) {
   const b = e.b;
   for (const ev of b.events) {
+    X.wearEvent(ev, b);
     if (b.kind) { X.craftEvent(ev, b); continue; }
     if (ev.type === 'gybe') { G.shake = Math.min(1.4, 0.35 + ev.power * 0.5); audio.thump(clamp(ev.power, 0.3, 1.3)); if (ev.power > 0.8) toast('Гик перелетел!'); else goal('gybe'); lens(4 + ev.power * 4); }
     else if (ev.type === 'tack') { if (G.free && !G.free.done.tack) goal('tack'); }
@@ -340,6 +342,20 @@ function waveImpacts(P, dt, sp) {
 }
 function splash(b, n) { const fx = Math.sin(b.th), fz = -Math.cos(b.th); for (let i = 0; i < n; i++) { const s = (Math.random() - 0.5) * 6; G.spray.emit(b.X + fx * s, 0.2, -b.Y + fz * s, (Math.random() - 0.5) * 5, 3 + Math.random() * 4, (Math.random() - 0.5) * 5, 2, 1); } }
 
+// Время суток, как в GTA: игровая минута идёт одну секунду, сутки -- 24 минуты. Солнце ходит по настоящей дуге для
+// широты Чолпон-Аты (42.6 с. ш.) в середине лета; от его высоты зависят свет, цвет неба, заря, звёзды и ночной полумрак.
+const LIGHT = new THREE.Vector3().copy(SUN); let envT = 0;
+function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; G.clock = (G.clock + dt / 60) % 24; const k = G.wx; if (!k) return;
+  const la = 42.6 * DEG, de = 20 * DEG, Hh = (G.clock - 13) * 15 * DEG, sinEl = Math.sin(la) * Math.sin(de) + Math.cos(la) * Math.cos(de) * Math.cos(Hh), el = Math.asin(sinEl);
+  const az = Math.atan2(Math.sin(Hh), Math.cos(Hh) * Math.sin(la) - Math.tan(de) * Math.cos(la)) + Math.PI;
+  SUN.set(Math.sin(az) * Math.cos(el), sinEl, -Math.cos(az) * Math.cos(el));
+  const day = smooth(-0.1, 0.14, sinEl), dusk = clamp(1 - Math.abs(sinEl - 0.04) / 0.26, 0, 1), sI = k.sun * smooth(-0.02, 0.22, sinEl), st = k.storm;
+  ENV.uDay.value = day; ENV.uDusk.value = dusk; ENV.uSunI.value = sI; G.night = day < 0.35;
+  const d2 = dusk * 0.55 * (1 - st), m = 0.03 + 0.97 * day; ENV.uHor.value.set((k.hor[0] * (1 - d2) + 0.98 * d2) * m, (k.hor[1] * (1 - d2) + 0.56 * d2) * m, (k.hor[2] * (1 - d2) + 0.36 * d2) * m + 0.012 * (1 - day)); scene.fog.color.setRGB(ENV.uHor.value.x, ENV.uHor.value.y, ENV.uHor.value.z); // Color.copy от вектора дала бы NaN и чёрные лодки
+  // ночью светит луна: слабый холодный свет с противоположной стороны неба
+  if (sinEl > 0.02) { LIGHT.copy(SUN); sunL.color.setRGB(1, 0.95 - 0.33 * dusk, 0.86 - 0.5 * dusk); sunL.intensity = 3.1 * sI; } else { LIGHT.set(-SUN.x, 0.55, -SUN.z).normalize(); sunL.color.setRGB(0.6, 0.72, 1); sunL.intensity = 0.32 * (1 - st); }
+  hemi.intensity = 1.9 * (1 - 0.35 * st) * (0.1 + 0.9 * day); G.spray.uniforms.uLight.value = 0.12 + 0.88 * sI; WAKE_LIGHT.value = 0.1 + 0.9 * day;
+  envT -= dt; if (dt > 0 && envT <= 0) { envT = 12; updateEnv(G.sky); } }
 // ---------- главный цикл ----------
 const WSa = { x: 0, y: 0, speed: 0, dir: 0 }, tmpV = new THREE.Vector3(), tmpS = { h: 0, sx: 0, sz: 0 };
 let last = performance.now(), acc = 0, fpsT = 0, fpsN = 0; const sunDir = new THREE.Vector3();
@@ -349,7 +365,7 @@ function loop(now) {
   if (!G.freeze) tick(dt); // freeze -- только для тестов: мир стоит, картинка рисуется
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
-  sunL.target.position.set(b.X, b.base || 0, -b.Y); sunL.position.set(b.X + SUN.x * 30, (b.base || 0) + SUN.y * 30, -b.Y + SUN.z * 30);
+  sunL.target.position.set(b.X, b.base || 0, -b.Y); sunL.position.set(b.X + LIGHT.x * 30, (b.base || 0) + LIGHT.y * 30, -b.Y + LIGHT.z * 30);
   audio.update(b);
   if (G.mode !== 'menu') updateHud(dt, b, sp);
   // адаптивное разрешение -- ДО отрисовки: смена размера очищает холст, после неё был бы пустой кадр
@@ -368,7 +384,7 @@ function loop(now) {
 // один шаг мира: физика, гонка, эффекты. Без отрисовки -- им же пользуются автотесты для перемотки.
 function tick(dt) {
   const P = G.player, b = P.b, R = G.race;
-  G.t += dt; G.wind.update(dt);
+  G.t += dt; G.wind.update(dt); dayCycle(dt);
   const boats = X.boats(P);
   // управление
   let ctl;
@@ -438,6 +454,7 @@ function updateCamera(dt, b, sp) {
   G.shake = Math.max(0, G.shake - dt * 1.6);
   const sh = G.shake * G.shake, jx = (Math.random() - 0.5) * sh * 0.5, jy = (Math.random() - 0.5) * sh * 0.5;
   const yaw = G.camYaw + G.orbit, fx = Math.sin(yaw), fz = -Math.cos(yaw);
+  if (G.player.model.fp) G.player.model.fp(G.cam === 1 && G.mode !== 'menu');
   const bx = b.X, bz = -b.Y;
   if (G.cam === 1 && G.mode !== 'menu') {
     const root = G.player.model.root; if (b.eye) tmpV.set(b.eye[0], b.eye[1], b.eye[2]); else tmpV.set(-b.crew * 0.35, 2.15, 3.3); root.localToWorld(tmpV); camera.position.copy(tmpV);
@@ -517,7 +534,7 @@ function updateHud(dt, b, sp) {
   $('kn').textContent = (sp * KN).toFixed(1);
   $('pos').textContent = b.kind ? b.status() : (b.capsized ? 'оверкиль' : pointOfSail(Math.abs(b.twa)).toLowerCase()) + (heel > 12 ? ` · крен ${heel.toFixed(0)}°` : '');
   $('pos').style.color = heel > 34 ? '#ff8a7a' : '';
-  $('windtxt').textContent = `${(b.tws * KN).toFixed(0)} уз`;
+  { const hh = Math.floor(G.clock), mm = Math.floor((G.clock % 1) * 60); $('windtxt').textContent = `${(b.tws * KN).toFixed(0)} уз · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`; }
   drawDial(b);
   if (R) { const P = G.player, all = [P, ...G.rivals].sort((x, y) => progress(R, y) - progress(R, x)), tg = target(R, P.leg, false), d = Math.hypot(tg.X - b.X, tg.Y - b.Y);
     $('rtime').textContent = fmt(R.over ? P.time : R.t);

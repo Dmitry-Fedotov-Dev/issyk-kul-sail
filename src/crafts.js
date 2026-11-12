@@ -6,16 +6,16 @@ import { Boat, clamp, smooth, wrapPi, DEG } from './sim.js';
 const GR = 9.81, W = { x: 0, y: 0, speed: 0, dir: 0 }, S1 = { h: 0, sx: 0, sz: 0 };
 
 export const SPECS = {
-  kayak: { id: 'kayak', cls: 'paddle', name: 'Каяк', sub: 'морской каяк · гребок по ритму', key: 'опора', hl: 2.3, hbm: 0.3, draft: 0.14, camD: 7, eye: [0, 0.95, 0.75],
-    mass: 95, force: 265, drive: 0.42, period: 0.62, recover: 0.12, turn: 1.05, c1: 4, c2: 14, lat: 5.5, yawDamp: 2.4, stab: 34, rollDamp: 7, waveGain: 1.0, capAngle: 58 * DEG, capPhi: 172 * DEG, rightHold: 1.1, rightT: 0.9, windA: 0.5, surf: 0.55 },
-  scull: { id: 'scull', cls: 'paddle', name: 'Академическая одиночка', sub: 'скиф · захват, проводка, вынос', key: 'гребок', hl: 3.8, hbm: 0.16, draft: 0.12, camD: 9, eye: [0, 0.85, -0.4],
-    mass: 105, force: 520, drive: 0.75, period: 1.9, recover: 0.75, turn: 0.55, c1: 3, c2: 7, lat: 7, yawDamp: 1.6, stab: 26, rollDamp: 6, waveGain: 1.15, capAngle: 34 * DEG, capPhi: 95 * DEG, rightHold: 2.4, rightT: 1.6, windA: 0.45, surf: 0.3 },
-  sup: { id: 'sup', cls: 'paddle', name: 'SUP-доска', sub: 'стоя с веслом · держи баланс', key: 'стойка', hl: 1.6, hbm: 0.4, draft: 0.2, camD: 6.5, eye: [0, 1.65, 0.3],
-    mass: 95, force: 150, drive: 0.5, period: 0.9, recover: 0.15, turn: 0.75, c1: 4, c2: 16, lat: 4, yawDamp: 2.0, stab: 11, rollDamp: 1.5, waveGain: 1.3, capAngle: 27 * DEG, capPhi: 80 * DEG, rightHold: 1.4, rightT: 1.0, windA: 0.75, surf: 0.7 },
-  jetski: { id: 'jetski', cls: 'motor', name: 'Гидроцикл', sub: 'без газа не рулится · прыжки', key: 'газ', hl: 1.6, hbm: 0.5, draft: 0.3, camD: 8, eye: [0, 1.35, 0.5],
-    mass: 380, thrust: 5200, vmax: 23, d1: 20, d2: 13.8, up0: 5, up1: 9, turn: 1.35, yawTau: 0.22, lat: 3.2, lean: 0.55, needThr: 1, windA: 0.6 },
-  boat: { id: 'boat', cls: 'motor', name: 'Моторный катер', sub: 'подвесной мотор · выход на глиссер', key: 'газ', hl: 2.9, hbm: 1.0, draft: 0.45, camD: 11, eye: [-0.35, 1.55, 0.7],
-    mass: 1100, thrust: 8200, vmax: 18, d1: 40, d2: 35.6, up0: 6, up1: 10, turn: 0.85, yawTau: 0.4, lat: 4.5, lean: 0.3, needThr: 0, windA: 1.6 },
+  kayak: { id: 'kayak', cls: 'paddle', name: 'Каяк', sub: 'морской каяк · гребок по ритму', key: 'опора', hl: 2.3, hbm: 0.3, draft: 0.14, camD: 7, eye: [0, 0.84, 0.1],
+    mass: 95, force: 265, drive: 0.42, period: 0.62, recover: 0.12, turn: 1.05, c1: 4, c2: 14, lat: 5.5, yawDamp: 2.4, stab: 24, rollDamp: 7, waveGain: 2.3, capAngle: 58 * DEG, capPhi: 172 * DEG, rightHold: 1.1, rightT: 0.9, windA: 0.5, surf: 0.55 },
+  scull: { id: 'scull', cls: 'paddle', name: 'Академическая одиночка', sub: 'скиф · захват, проводка, вынос', key: 'гребок', hl: 3.8, hbm: 0.16, draft: 0.12, camD: 9, eye: [0, 0.98, 0.35],
+    mass: 105, force: 520, drive: 0.75, period: 1.9, recover: 0.75, turn: 0.55, c1: 3, c2: 7, lat: 7, yawDamp: 1.6, stab: 26, rollDamp: 6, waveGain: 1.5, capAngle: 34 * DEG, capPhi: 95 * DEG, rightHold: 2.4, rightT: 1.6, windA: 0.45, surf: 0.3 },
+  sup: { id: 'sup', cls: 'paddle', name: 'SUP-доска', sub: 'стоя с веслом · держи баланс', key: 'стойка', hl: 1.6, hbm: 0.4, draft: 0.2, camD: 6.5, eye: [0, 1.72, 0.12],
+    mass: 95, force: 150, drive: 0.5, period: 0.9, recover: 0.15, turn: 0.75, c1: 4, c2: 16, lat: 4, yawDamp: 2.0, stab: 11, rollDamp: 1.5, waveGain: 1.1, capAngle: 27 * DEG, capPhi: 80 * DEG, rightHold: 1.4, rightT: 1.0, windA: 0.75, surf: 0.7 },
+  jetski: { id: 'jetski', cls: 'motor', name: 'Гидроцикл', sub: 'без газа не рулится · прыжки', key: 'газ', hl: 1.6, hbm: 0.5, draft: 0.3, camD: 8, eye: [0, 1.42, 0.3],
+    rightHold: 1.6, rightT: 1.2, mass: 380, thrust: 5200, vmax: 23, d1: 20, d2: 13.8, up0: 5, up1: 9, turn: 1.35, yawTau: 0.22, lat: 3.2, lean: 0.55, needThr: 1, windA: 0.6 },
+  boat: { id: 'boat', cls: 'motor', name: 'Моторный катер', sub: 'подвесной мотор · выход на глиссер', key: 'газ', hl: 2.9, hbm: 1.0, draft: 0.45, camD: 11, eye: [-0.42, 1.52, 0.38],
+    rightHold: 3, rightT: 2.2, mass: 1100, thrust: 8200, vmax: 18, d1: 40, d2: 35.6, up0: 6, up1: 10, turn: 0.85, yawTau: 0.4, lat: 4.5, lean: 0.3, needThr: 0, windA: 1.6 },
 };
 export const CRAFT_ORDER = ['yacht', 'kayak', 'scull', 'sup', 'jetski', 'boat'];
 export const YACHT_INFO = { id: 'yacht', name: 'Яхта', sub: 'килевой шлюп · ветер и крен', key: 'шкот' };
@@ -34,6 +34,7 @@ class Craft extends Boat {
   // поза на волне; у моторных -- ещё и отрыв от гребня
   updatePose(waves, t, terrainH) {
     const fx = Math.sin(this.th), fz = -Math.cos(this.th), rx = Math.cos(this.th), rz = Math.sin(this.th), a = this.hl * 0.85, c = this.hbm;
+    this.wg = clamp((waves.Hs || 0.3) / 0.55, 0.35, 2.2); // сила волны: у ряби и у штормовой волны уклон похожий, а энергия разная
     if (flow.surf) { // река: уровень воды задаёт русло, а не волны озера
       const ty = flow.surf(this.X, this.Y), yb = flow.surf(this.X + fx * a, this.Y - fz * a), ys = flow.surf(this.X - fx * a, this.Y + fz * a);
       this.base = ty; this.att = 1; this.depth = 2; this.slopeF = 0; this.slopeR = 0; this.y += (ty - this.y) * 0.6; this.pitch += (Math.atan2(yb - ys, 2 * a) - this.pitch) * 0.4; this.poseT = t; return; }
@@ -113,16 +114,16 @@ export class PaddleCraft extends Craft {
     this.brace += clamp((!sc && inp.ease ? 1 : 0) - this.brace, -dt * 4, dt * 5); // каяк: опора на весло; SUP: присесть
     let F = 0, yaw = 0, kick = 0;
     if (this.st) { const s = this.st; s.t += dt; const w = Math.sin(Math.PI * Math.min(1, s.t / s.T)), sg = s.side === 'L' ? 1 : s.side === 'R' ? -1 : 0;
-      F = S.force * s.q * w * (s.side === 'B' ? 1 : sc ? 0.5 : 1) * (1 - 0.4 * this.brace); yaw = sg * S.turn * s.q * w * (sc ? 1.6 : 1); kick = -sg * 0.9 * (1.2 - s.q) * w;
+      F = S.force * (1 - 0.3 * (this.wearA || 0)) * s.q * w * (s.side === 'B' ? 1 : sc ? 0.5 : 1) * (1 - 0.4 * this.brace); yaw = sg * S.turn * s.q * w * (sc ? 1.6 : 1); kick = -sg * 0.9 * (1.2 - s.q) * w;
       this.powerN = s.q * w; if (s.t >= s.T) { this.st = null; this.endT = 0; } } else this.powerN = 0;
     if (flow.rough) kick += (Math.sin(this.dist * 1.7) + Math.sin(this.dist * 0.63 + 1.3)) * flow.rough(this.X, this.Y) * 2.4; // пороги раскачивают
     const wA = 0.6 * S.windA, au = Math.abs(c.u);
-    const aF = (F - S.c1 * c.u - S.c2 * c.u * au * (1 + 0.35 * this.brace) + wA * c.wf) / S.mass - GR * this.slopeF * S.surf * this.att;
+    const aF = (F - S.c1 * c.u - S.c2 * (1 + 0.6 * (this.wearH || 0)) * c.u * au * (1 + 0.35 * this.brace) + wA * c.wf) / S.mass - GR * this.slopeF * S.surf * this.att;
     const aR = -S.lat * c.vs + (wA * c.wr) / S.mass;
     this.vx += (c.fx * aF + c.rx * aR) * dt; this.vy += (c.fy * aF + c.ry * aR) * dt;
     this.r += (yaw - S.yawDamp * this.r) * dt; this.th = wrapPi(this.th + this.r * dt);
     // крен: лодка идёт за склоном волны, гребок не в ритм раскачивает, опора держит
-    const K = S.stab * (1 + 1.6 * this.brace) * (sc && this.st ? 1.5 : 1), tgt = Math.atan(this.slopeR) * S.waveGain * this.att - this.r * au * 0.05;
+    const K = S.stab * (1 + 1.6 * this.brace) * (sc && this.st ? 1.5 : 1), tgt = Math.atan(this.slopeR) * S.waveGain * (this.wg || 1) * this.att * (1 - 0.62 * this.brace) - this.r * au * 0.05; // опора -- наклон корпуса в волну: лодку кренит втрое меньше
     this.p += (-K * (this.phi - tgt) - S.rollDamp * (1 + this.brace) * this.p + kick * S.stab * 0.25) * dt; this.phi += this.p * dt;
     if (Math.abs(this.phi) > S.capAngle) { this.capsized = true; this.rightHold = 0; this.righting = 0; this.events.push({ type: 'capsize', braced: this.brace > 0.5 }); }
     else if (this.brace > 0.6 && Math.abs(this.phi) > S.capAngle * 0.62 && !this.saved) { this.saved = true; this.events.push({ type: 'saved' }); } else if (Math.abs(this.phi) < S.capAngle * 0.3) this.saved = false;
@@ -148,14 +149,16 @@ export class MotorCraft extends Craft {
     const au = Math.abs(c.u), pl = smooth(S.up0, S.up1, c.u), wasPl = this.pl; this.pl = pl;
     if (pl > 0.6 && wasPl <= 0.6) this.events.push({ type: 'plane' });
     const wet = this.air ? 0 : 1;
-    const T = S.thrust * this.thr * Math.max(0.2, 1 - 0.35 * c.u / S.vmax) * wet, D = (S.d1 * c.u + S.d2 * c.u * au * (1 - 0.6 * pl)) * wet + 0.6 * S.windA * 0;
+    const T = S.thrust * (1 - 0.3 * (this.wearA || 0)) * this.thr * Math.max(0.2, 1 - 0.35 * c.u / S.vmax) * wet, D = (S.d1 * c.u + S.d2 * (1 + 0.5 * (this.wearH || 0)) * c.u * au * (1 - 0.6 * pl)) * wet + 0.6 * S.windA * 0;
     const aF = (T - D + 0.6 * S.windA * c.wf) / S.mass - GR * this.slopeF * 0.3 * wet, aR = -S.lat * (1 - 0.45 * pl * Math.abs(this.rudder)) * c.vs * wet;
     this.vx += (c.fx * aF + c.rx * aR) * dt; this.vy += (c.fy * aF + c.ry * aR) * dt;
     const grip = S.needThr ? 0.1 + 0.9 * this.thr : clamp(au / 5, 0.18, 1) * (0.55 + 0.45 * this.thr);
     const rT = this.rudder * S.turn * grip * Math.min(1, au / 3 + 0.25) * (1 - 0.3 * pl) * wet;
     this.r += ((rT - this.r) / S.yawTau) * dt * (wet ? 1 : 0.1); this.th = wrapPi(this.th + this.r * dt);
-    const pt = this.r * au * 0.035 * S.lean / 0.3 + Math.atan(this.slopeR) * 0.7 * (1 - 0.6 * pl) * this.att;
-    this.phi += (clamp(pt, -0.9, 0.9) - this.phi) * Math.min(1, dt * 5); this.powerN = this.thr;
+    // на малом ходу лагом к крутой волне моторное судно кладёт на борт; на глиссере оно идёт поверх волны и устойчиво
+    const pt = this.r * au * 0.035 * S.lean / 0.3 + Math.atan(this.slopeR) * (S.id === 'jetski' ? 2.1 : 1.7) * (this.wg || 1) * (1 - 0.7 * pl) * this.att;
+    this.phi += (clamp(pt, -1.2, 1.2) - this.phi) * Math.min(1, dt * 5); this.powerN = this.thr;
+    if (Math.abs(this.phi) > (S.id === 'jetski' ? 0.72 : 0.8) && !this.air) { this.capsized = true; this.rightHold = 0; this.righting = 0; this.events.push({ type: 'capsize', wave: true }); }
     this.u = c.u; this.vs = c.vs; this.move(dt, terrainH);
   }
   // жёсткое приводнение боком сбрасывает с гидроцикла
