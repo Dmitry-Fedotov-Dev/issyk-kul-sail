@@ -22,13 +22,31 @@ function nameTag(text) {
   s.scale.set(0.16, 0.04, 1); s.renderOrder = 10; return s;
 }
 export const radiusOf = (b) => (b.kind ? b.hl * 0.85 : 2.6);
+const r2 = (v, n = 2) => +v.toFixed(n);
+// состояние рук и снастей одной строкой чисел -- одинаково для игрока и для NPC, которых хозяин ведёт за всех
+export function encA(b) { return b.kind ? (b.spec.cls === 'motor' ? [b.capsized ? 1 : 0, r2(b.rudder), r2(b.thr)] : [b.capsized ? 1 : 0, 0, b.strokes, r2(b.brace), b.st ? (b.st.side === 'L' ? 1 : b.st.side === 'B' ? 2 : 0) : b.lastSide === 'L' ? 1 : 0])
+  : [b.capsized ? 1 : 0, r2(b.rudder), r2(b.boom), r2(b.awa), r2(b.aws, 1), r2(b.luff)]; }
+export function applyA(b, a, p) { b.capsized = !!a[0]; b.rudder = a[1] || 0;
+  if (b.kind) { if (b.spec.cls === 'motor') b.thr = a[2] || 0; else { b.brace = a[3] || 0; if (a[2] !== p.sk) { p.sk = a[2]; b.lastSide = a[4] === 1 ? 'L' : 'R'; b.st = { side: a[4] === 1 ? 'L' : a[4] === 2 ? 'B' : 'R', t: 0, T: b.spec.drive, q: 1 }; b.endT = 0; } } }
+  else { b.boom = a[2] || 0; b.awa = a[3] || 0; b.aws = a[4] || 5; b.luff = a[5] || 0; } }
+// NPC в сети: [X, Y, th, phi, vx, vy, номер полёта, vx, vy, vz полёта, ...руки]; e.fseq/e.fv ставит удар (knock)
+export const encNpc = (e) => { const b = e.b, f = e.fv || [0, 0, 0]; return [r2(b.X, 1), r2(b.Y, 1), r2(b.th, 3), r2(b.phi, 3), r2(b.vx), r2(b.vy), e.fseq || 0, r2(f[0]), r2(f[1]), r2(f[2]), ...(e.phys === false ? [b.capsized ? 1 : 0, r2(b.rudder), r2(e.v || 0)] : encA(b))]; };
+// кукла NPC: тянем к присланному положению, между пакетами -- по скорости (s -- свежий массив от хозяина)
+export function followNpc(e, s, dt) { const b = e.b, q = e.nf || (e.nf = { s: null, fs: null });
+  if (q.s !== s) { const fresh = !q.s || Math.hypot(s[0] - b.X, s[1] - b.Y) > 40; q.s = s; q.tx = s[0]; q.ty = s[1]; b.vx = s[4]; b.vy = s[5];
+    if (fresh) { b.X = s[0]; b.Y = s[1]; b.th = s[2]; }
+    if (q.fs === null) q.fs = s[6]; else if (s[6] !== q.fs) { q.fs = s[6]; if (e.model.fling && !e.model.flying()) { e.model.fling(s[7], s[8], s[9]); b.noRight = 2 * s[8] / 7.5 + 2.6; } }
+    const a = s.slice(10); if (e.phys === false) { b.capsized = false; b.rudder = a[1] || 0; e.v = a[2] || 0; } else applyA(b, a, q); }
+  q.tx += b.vx * dt; q.ty += b.vy * dt; const k = Math.min(1, dt * 7);
+  b.X += b.vx * dt + (q.tx - b.X) * k; b.Y += b.vy * dt + (q.ty - b.Y) * k; b.th = wrapPi(b.th + wrapPi(q.s[2] - b.th) * k); b.phi += (q.s[3] - b.phi) * k;
+  if (b.kind) { if (b.st) { b.st.t += dt; if (b.st.t >= b.st.T) { b.st = null; b.endT = 0; } } else b.endT = (b.endT || 0) + dt; } }
 
 export function makeNet(scene, ctx) {
   const pups = new Map(), st = { online: 0, id: 0, up: false, off: 0, sync: false }; let ws = null, acc = 0, retry = 2, wait = 0;
   const can = typeof WebSocket !== 'undefined' && /^https?:$/.test(location.protocol);
   const sendJ = (o) => { if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify(o)); return true; } catch (e) { /* соединение рвётся -- переподключимся */ } } return false; };
   function connect() { if (!can) return; try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'); } catch (e) { ws = null; return; } // соединения запрещены средой -- остаёмся в одиночной игре
-    ws.onopen = () => { st.up = true; retry = 2; }; ws.onclose = () => { st.up = false; ws = null; wait = retry; retry = Math.min(retry * 2, 60); for (const p of pups.values()) p.model.root.visible = false; st.online = 0; if (ctx.onDown) ctx.onDown(); };
+    ws.onopen = () => { st.up = true; retry = 2; sendJ({ t: 'hello', pid: ctx.pid() }); }; ws.onclose = () => { st.up = false; ws = null; wait = retry; retry = Math.min(retry * 2, 60); for (const p of pups.values()) p.model.root.visible = false; st.online = 0; if (ctx.onDown) ctx.onDown(); };
     ws.onerror = () => {}; // причина придёт в onclose, там и переподключение
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
       if (m.t === 'hi') st.id = m.id;
@@ -41,15 +59,13 @@ export function makeNet(scene, ctx) {
   function world(list) { const now = performance.now();
     for (const s of list) { let p = pups.get(s.id); if (p && p.k !== s.k) { drop(s.id, p); p = null; }
       if (!p) { if (pups.size >= 64) continue; p = make(s.k); pups.set(s.id, p); }
-      p.r = s.r || [0, 0]; p.id = s.id; p.name = s.n || `Игрок ${s.id}`;
+      p.r = s.r || [0, 0]; p.id = s.id; p.name = s.n || `Игрок ${s.id}`; p.npc = Array.isArray(s.npc) && s.npc.length ? s.npc : null; p.w = s.w;
       if (p.tagText !== p.name) { p.tagText = p.name; const old = p.tag; p.tag = nameTag(p.name); scene.remove(old); old.material.map.dispose(); old.material.dispose(); scene.add(p.tag); }
       p.tx = s.X; p.ty = s.Y; p.tth = s.th; p.tphi = s.phi; p.b.vx = s.vx; p.b.vy = s.vy; p.seen = now; const b = p.b, a = s.a || [];
       if (p.fresh) { b.X = s.X; b.Y = s.Y; b.th = s.th; p.fresh = false; }
       // полёт сапбордиста: новый номер -- запускаем кувырок с той же скоростью вылета, что у него самого
       const f = s.f || [0, 0, 0, 0]; if (p.fseq === null) p.fseq = f[0]; else if (f[0] !== p.fseq) { p.fseq = f[0]; if (p.model.fling && !p.model.flying()) p.model.fling(f[1], f[2], f[3]); }
-      b.capsized = !!a[0]; b.rudder = a[1] || 0;
-      if (b.kind) { if (b.spec.cls === 'motor') b.thr = a[2] || 0; else { b.brace = a[3] || 0; if (a[2] !== p.sk) { p.sk = a[2]; b.lastSide = a[4] === 1 ? 'L' : 'R'; b.st = { side: a[4] === 1 ? 'L' : a[4] === 2 ? 'B' : 'R', t: 0, T: b.spec.drive, q: 1 }; b.endT = 0; } } }
-      else { b.boom = a[2] || 0; b.awa = a[3] || 0; b.aws = a[4] || 5; b.luff = a[5] || 0; } } }
+      applyA(b, a, p); } }
   connect();
   return { st, pups,
     now: () => Date.now() + st.off,
@@ -61,11 +77,9 @@ export function makeNet(scene, ctx) {
     tick(dt, P, world_, t, rr) {
       if (!can) return; if (!ws) { wait -= dt; if (wait <= 0) { wait = 1e9; connect(); } }
       acc += dt; const b = P.b;
-      if (st.up && acc >= 0.1 && ws.readyState === 1 && ctx.active()) { acc = 0; const r = (v, n = 2) => +v.toFixed(n);
-        const a = b.kind ? (b.spec.cls === 'motor' ? [b.capsized ? 1 : 0, r(b.rudder), r(b.thr)] : [b.capsized ? 1 : 0, 0, b.strokes, r(b.brace), b.st ? (b.st.side === 'L' ? 1 : b.st.side === 'B' ? 2 : 0) : b.lastSide === 'L' ? 1 : 0])
-          : [b.capsized ? 1 : 0, r(b.rudder), r(b.boom), r(b.awa), r(b.aws, 1), r(b.luff)];
-        const fl = ctx.fling(); // [номер полёта, vx, vy, vz] своего сапбордиста
-        sendJ({ t: 's', k: b.kind || 'yacht', X: r(b.X, 1), Y: r(b.Y, 1), th: r(b.th, 3), phi: r(b.phi, 3), vx: r(b.vx), vy: r(b.vy), w: world_, a, r: rr || [0, 0], n: ctx.name(), f: fl.map((v) => r(v)) }); }
+      if (st.up && acc >= 0.1 && ws.readyState === 1 && ctx.active()) { acc = 0; const r = r2;
+        const fl = ctx.fling(), npc = ctx.npc ? ctx.npc() : null; // [номер полёта, vx, vy, vz] своего сапбордиста; NPC, если ведём их за всех
+        sendJ({ t: 's', k: b.kind || 'yacht', X: r(b.X, 1), Y: r(b.Y, 1), th: r(b.th, 3), phi: r(b.phi, 3), vx: r(b.vx), vy: r(b.vy), w: world_, a: encA(b), r: rr || [0, 0], n: ctx.name(), f: fl.map((v) => r(v)), npc: npc || undefined }); }
       const now = performance.now();
       for (const [id, p] of pups) { const q = p.b, age = now - p.seen; if (age > 4000 || !ctx.active()) { drop(id, p); continue; }
         p.model.root.visible = age < 1500; p.tx += q.vx * dt; p.ty += q.vy * dt; const k = Math.min(1, dt * 7);

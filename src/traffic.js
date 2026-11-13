@@ -4,6 +4,7 @@ import { clamp, wrapPi } from './sim.js';
 import { makeCraftBody, aiPaddle, aiMotor, SPECS } from './crafts.js';
 import { MODEL, makeMotorboat, makeSteamer, makeFishing } from './craftmodels.js';
 import { makeWake } from './fx.js';
+import { followNpc } from './net.js';
 
 const WS = { h: 0, sx: 0, sz: 0 };
 const NAMES = { kayak: 'каяк', scull: 'академическая одиночка', sup: 'SUP', jetski: 'гидроцикл', boat: 'катер', steamer: 'пароход', fishing: 'промысловое судно', police: 'катер милиции' };
@@ -23,6 +24,11 @@ export function makeTraffic(scene, ctx) {
   const steamer = addShip('steamer', makeSteamer(), { R: 15, turn: 0.06, cruise: 5.2, acc: 0.25, sway: 0.15 }), fishing = addShip('fishing', makeFishing(), { R: 6.5, turn: 0.12, cruise: 3.2, acc: 0.3, sway: 0.5 });
   const patrols = [addShip('police', makeMotorboat({ police: true }), { R: 4.2, turn: 0.7, cruise: 4.5, acc: 4, sway: 0.8 }), addShip('police', makeMotorboat({ police: true }), { R: 4.2, turn: 0.7, cruise: 4.5, acc: 4, sway: 0.8 })];
   patrols[1].reserve = true;
+  // общие для всех суда (без милиции: она у каждого гоняется за своим нарушителем). Порядок одинаков у всех клиентов --
+  // по нему хозяин акватории шлёт их состояние, а остальные двигают свои модели следом.
+  const civ = list.filter((e) => !e.police); let following = false;
+  function shipPose(e, dt, t) { const b = e.b, s = ctx.waves.sample(b.X, -b.Y, t, 1, WS); b.y += (s.h * e.sway - b.y) * 0.2; const fx = Math.sin(b.th), fz = -Math.cos(b.th);
+    b.pitch += ((s.sx * fx + s.sz * fz) * e.sway - b.pitch) * 0.1; b.phi += (-(s.sx * fz - s.sz * fx) * e.sway * 0.8 + b.rudder * Math.min(1, e.v / 12) * 0.25 - b.phi) * 0.1; }
 
   function place(e, p, th) { const b = e.b; if (e.phys) b.reset(p.X, p.Y, th); else { b.X = p.X; b.Y = p.Y; b.th = th; b.vx = b.vy = 0; e.v = 0; } e.home = { ...p }; e.tgt = null; e.T = 0; if (e.wake) e.wake.reset(); }
   function relocate(cx, cy, px, py) { center = { X: cx, Y: cy }; pier = { X: px, Y: py };
@@ -38,7 +44,16 @@ export function makeTraffic(scene, ctx) {
     // кого обходить: игрока и онлайн-игроков рядом -- для акватории это такие же суда, как все
     const others = [{ b: pb, r: (pb.hl || 2.6) }, ...peers.map((p) => ({ b: p.b, r: p.b.hl || 2.6 }))];
     law.hitCool -= dt; law.harborCool -= dt;
+    // рядом хозяин акватории -- суда идут по его данным; ушёл -- продолжаем сами с того же места
+    const fd = ctx.follow ? ctx.follow() : null;
+    if (!fd && following) for (const e of civ) { e.home = { X: e.b.X, Y: e.b.Y }; e.tgt = null; e.nf = null; } following = !!fd;
     for (const e of list) { const b = e.b; if (!e.model.root.visible) continue; e.T -= dt;
+      const fs = fd && !e.police ? fd[civ.indexOf(e)] : null;
+      if (fs) { followNpc(e, fs, dt); if (e.phys) b.updatePose(ctx.waves, t, ctx.h); else shipPose(e, dt, t); e.model.update(b, dt, t); if (e.wake) e.wake.update(b, dt, t, ctx.waves);
+        const dx = pb.X - b.X, dy = pb.Y - b.Y, d = Math.hypot(dx, dy), R = e.R + (pb.hl || 3.2) * 0.8;
+        if (d < R && d > 0.01) { const nx = dx / d, ny = dy / d, rel = (pb.vx - b.vx) * nx + (pb.vy - b.vy) * ny; pb.X += nx * (R - d); pb.Y += ny * (R - d); if (rel < 0) { pb.vx -= rel * nx * 1.4; pb.vy -= rel * ny * 1.4; }
+          if (ctx.onBump) ctx.onBump(e, nx, ny, -rel); if (-rel > 1.2 && law.hitCool <= 0) { law.hitCool = 3; ctx.onHit(-rel); } }
+        continue; }
       if (e.police && law.stars > 0) { // погоня: идём в упреждённую точку, вблизи уравниваем ход, чтобы подойти к борту
         const d = Math.hypot(pb.X - b.X, pb.Y - b.Y), lead = Math.min(2.5, d / 18); e.tgt = { X: pb.X + pb.vx * lead, Y: pb.Y + pb.vy * lead };
         const cap = [0, 11.5, 13, 14][law.stars]; e.vt = Math.min(cap, d < 10 ? ps : d < 30 ? Math.max(2.5, ps + 2.5) : cap); // катер (17.5 м/с) и гидроцикл уходят по прямой, гребные и яхта -- нет b.siren = true;
@@ -58,9 +73,7 @@ export function makeTraffic(scene, ctx) {
         for (const ev of b.events) if (ev.type === 'land' && b.afterLand) b.afterLand(ev); b.events.length = 0;
       } else { const err = wrapPi(Math.atan2(ax - b.X, ay - b.Y) - b.th), k = Math.min(1, e.v / 3 + 0.2); b.rudder = clamp(err * 2, -1, 1);
         b.th = wrapPi(b.th + clamp(err, -e.turn * dt, e.turn * dt) * k); e.v += clamp(e.vt * (Math.abs(err) > 1.2 ? 0.5 : 1) - e.v, -e.acc * 1.5 * dt, e.acc * dt);
-        b.vx = Math.sin(b.th) * e.v; b.vy = Math.cos(b.th) * e.v; b.X += b.vx * dt; b.Y += b.vy * dt;
-        const s = ctx.waves.sample(b.X, -b.Y, t, 1, WS); b.y += (s.h * e.sway - b.y) * 0.2; const fx = Math.sin(b.th), fz = -Math.cos(b.th);
-        b.pitch += ((s.sx * fx + s.sz * fz) * e.sway - b.pitch) * 0.1; b.phi += (-(s.sx * fz - s.sz * fx) * e.sway * 0.8 + b.rudder * Math.min(1, e.v / 12) * 0.25 - b.phi) * 0.1; }
+        b.vx = Math.sin(b.th) * e.v; b.vy = Math.cos(b.th) * e.v; b.X += b.vx * dt; b.Y += b.vy * dt; shipPose(e, dt, t); }
       e.model.update(b, dt, t); if (e.wake) e.wake.update(b, dt, t, ctx.waves);
       // столкновение с игроком
       const dx = pb.X - b.X, dy = pb.Y - b.Y, d = Math.hypot(dx, dy), R = e.R + (pb.hl || 3.2) * 0.8;
@@ -95,5 +108,5 @@ export function makeTraffic(scene, ctx) {
       if (law.stars) ctx.setWanted(law.stars, d < 380 || !law.seen ? `катер милиции в ${Math.round(d)} м` : 'вас теряют из виду…');
     }
   }
-  return { list, law, patrols, update, relocate, setActive, offence };
+  return { list, civ, law, patrols, update, relocate, setActive, offence, get following() { return following; } };
 }

@@ -184,7 +184,7 @@ function startRace() {
   const placeRivals = (rem) => G.rivals.forEach((r, i) => { r.out = false; const a = -(v0 * 0.62 * (Math.min(rem, 40) + 1 + i * 1.5)) - 4, p = pt(a, [-96, -26, 0][i]); placeBoat(r, p.X, p.Y, th, v0 * 0.8); });
   placeRivals(25);
   // онлайн: лобби ждёт других яхтсменов; каждый следующий встаёт чуть дальше от линии, чтобы не на одно место
-  if (X.lobbyStart(R, 'yacht', (slot) => { const q = pt(-56 - (slot % 4) * 14, -56 - Math.floor(slot / 4) * 12); placeBoat(G.player, q.X, q.Y, th, 1.0); })) { R.onT0 = () => placeRivals(-R.t); placeRivals(-R.t); }
+  if (X.lobbyStart(R, 'yacht', (slot) => { const q = pt(-56 - (slot % 4) * 14, -56 - Math.floor(slot / 4) * 12); placeBoat(G.player, q.X, q.Y, th, 1.0); })) { R.onT0 = () => placeRivals((R.T0 - X.net.now()) / 1000); placeRivals(-R.t); }
   setRivals(true); G.camYaw = th; resetView(); drawBrief(R); $('brief').hidden = false;
 }
 const al = (R, b) => (b.X - R.S.X) * R.up.x + (b.Y - R.S.Y) * R.up.y, lat = (R, b) => (b.X - R.S.X) * R.cr.x + (b.Y - R.S.Y) * R.cr.y;
@@ -201,7 +201,7 @@ function advance(R, e) {
   else if (e.leg === 3 && e.prevA <= 0 && a > 0 && l < 58) { e.leg = 4; e.time = R.t; ch = true; }
   e.prevA = a; return ch;
 }
-const progress = (R, e) => { const t = target(R, e.leg, false); return e.leg >= 4 ? 1e6 - e.time : e.leg * 10000 - Math.hypot(t.X - e.b.X, t.Y - e.b.Y); };
+const progress = (R, e) => { const t = target(R, e.leg, false); return e.leg >= 4 ? 1e6 - e.time : e.leg * 10000 - (e.b ? Math.hypot(t.X - e.b.X, t.Y - e.b.Y) : 5000); };
 const fmt = (t) => { const s = Math.abs(t); return (t < 0 ? '−' : '') + Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'); };
 
 // схема дистанции: ветер сверху, цифры -- порядок прохождения
@@ -228,7 +228,7 @@ function drawBrief(R) {
 function stepRace(dt) {
   const R = G.race, P = G.player, was = R.t; if (R.online) R.t = (X.net.now() - R.T0) / 1000; else R.t += dt;
   // онлайн: на старте NPC добирают число яхт до четырёх
-  if (R.online && was < 0 && R.t >= 0) { const peers = X.peerList().length, keep = Math.max(0, 3 - peers); G.rivals.forEach((r, i) => { r.out = i >= keep; }); setRivals(true); if (peers) toast(`Соперников онлайн: ${peers}`); }
+  if (R.online && was < 0 && R.t >= 0) { const peers = X.racePeers(R), keep = Math.max(0, 3 - peers); G.rivals.forEach((r, i) => { r.out = i >= keep; }); setRivals(true); if (peers) toast(`Соперников онлайн: ${peers}`); }
   if (R.t < 0) { const s = Math.ceil(-R.t); if (s !== R.lastBeep && s <= 10) { R.lastBeep = s; audio.beep(false); } }
   else if (R.lastBeep !== 0) { R.lastBeep = 0; audio.horn(); R.ocs = al(R, P.b) > 0; toast(R.ocs ? 'Фальстарт! Вернитесь за линию' : 'Старт! Вверх, против ветра'); }
   if (R.t > 12) $('brief').hidden = true;
@@ -249,12 +249,14 @@ function stepRace(dt) {
 function finishRace() {
   X.ach('regatta');
   const R = G.race; R.over = true; audio.horn();
-  const peers = R.online ? X.peerList().map((p) => ({ name: p.name, leg: p.r[1] ? 4 : Math.min(3, p.r[0] || 0), time: p.r[1] || 0, b: p.b })) : [];
-  const all = [G.player, ...G.rivals.filter((r) => !r.out), ...peers].sort((a, b) => progress(R, b) - progress(R, a)), place = all.indexOf(G.player) + 1;
   const key = 'best.' + G.preset, best = store.get(key), rec = !best || G.player.time < best; if (rec) store.set(key, G.player.time);
-  $('rh').textContent = place === 1 ? 'Победа!' : place + '-е место';
-  $('rs').textContent = `${PRESETS[G.preset].name} · ваше время ${fmt(G.player.time)}` + (rec ? ' · личный рекорд' : best ? ` · рекорд ${fmt(best)}` : '');
-  $('rt').innerHTML = all.map((e, i) => `<tr class="${e === G.player ? 'me' : ''}"><td>${i + 1}</td><td>${e.name}</td><td>${e.leg >= 4 ? fmt(e.time) : 'в пути'}</td></tr>`).join('');
+  const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  // в протоколе -- все участники онлайн-заезда; пока остальные финишируют, он перерисовывается
+  R.redraw = () => { const all = [G.player, ...G.rivals.filter((r) => !r.out), ...X.onlineRows(R, true)].sort((a, b) => progress(R, b) - progress(R, a)), place = all.indexOf(G.player) + 1;
+    $('rh').textContent = place === 1 ? 'Победа!' : place + '-е место';
+    $('rs').textContent = `${PRESETS[G.preset].name}${R.online ? ' · онлайн' : ''} · ваше время ${fmt(G.player.time)}` + (rec ? ' · личный рекорд' : best ? ` · рекорд ${fmt(best)}` : '');
+    $('rt').innerHTML = all.map((e, i) => `<tr class="${e === G.player ? 'me' : ''}"><td>${i + 1}</td><td>${esc(e.name)}</td><td>${e.leg >= 4 ? fmt(e.time) : e.off ? 'вышел' : 'в пути'}</td></tr>`).join(''); };
+  R.redraw();
   setTimeout(() => { if (G.race === R) $('result').hidden = false; }, 1600);
 }
 
@@ -270,7 +272,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyR' && G.mode === 'race') startRace(); else if (e.code === 'KeyR' && G.mode === 'free') startFree();
 });
 window.addEventListener('keyup', (e) => { if (KEY[e.code]) { input[KEY[e.code]] = false; e.preventDefault(); } });
-window.addEventListener('blur', () => { input.left = input.right = input.ease = false; });
+window.addEventListener('blur', () => { input.left = input.right = input.ease = false; input.joy = null; });
 if (TOUCH) document.body.classList.add('touchdev');
 // касание левой половины экрана -- руль влево, правой -- вправо; несколько пальцев учитываются по отдельности
 // Обзор и руль делят один экран. Мышь: перетаскивание -- обзор, колесо -- приближение (рулят с клавиатуры).
@@ -283,7 +285,7 @@ canvas.addEventListener('pointerdown', (e) => { if (!G || G.mode === 'menu') ret
   const mouse = e.pointerType === 'mouse'; ptr.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, look: mouse, t: performance.now() });
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* захват недоступен -- обзор просто кончится, когда палец уйдёт с холста */ }
   if (ptr.size === 2) { const [a, c] = [...ptr.values()]; pinch = Math.hypot(a.x - c.x, a.y - c.y); for (const q of ptr.values()) q.look = true; held.clear(); syncTouch(); }
-  else if (!mouse) { held.set(e.pointerId, e.clientX < window.innerWidth / 2 ? 'left' : 'right'); syncTouch(); } });
+  else if (!mouse && !document.body.classList.contains('motor')) { held.set(e.pointerId, e.clientX < window.innerWidth / 2 ? 'left' : 'right'); syncTouch(); } });
 canvas.addEventListener('pointermove', (e) => { const q = ptr.get(e.pointerId); if (!q || !G) return; const dx = e.clientX - q.x, dy = e.clientY - q.y; q.x = e.clientX; q.y = e.clientY;
   if (ptr.size === 2) { const [a, c] = [...ptr.values()], d = Math.hypot(a.x - c.x, a.y - c.y); if (pinch > 0) G.zoom = clamp(G.zoom * pinch / Math.max(d, 1), 0.45, 3.2); pinch = d; return; }
   // палец сдвинулся -- это обзор, а не руль
@@ -294,6 +296,14 @@ for (const n of ['pointerup', 'pointercancel']) window.addEventListener(n, (e) =
 canvas.addEventListener('wheel', (e) => { if (!G || G.mode === 'menu') return; e.preventDefault(); G.zoom = clamp(G.zoom * Math.exp(e.deltaY * 0.0012), 0.45, 3.2); }, { passive: false });
 { const el = $('ts'), set = (v) => (e) => { e.preventDefault(); e.stopPropagation(); input.ease = v; el.classList.toggle('on', v); };
   el.addEventListener('pointerdown', set(true)); for (const n of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(n, set(false)); }
+// джойстик моторных на сенсорном экране: кружок с точкой; точку тянут -- куда тянут, туда и рулит, дальше -- больше газа
+{ const el = $('joy'), dot = el.firstElementChild; let id = null;
+  const move = (e) => { const r = el.getBoundingClientRect(), R = r.width / 2; let x = (e.clientX - r.left - R) / R, y = (e.clientY - r.top - R) / R; const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
+    input.joy = { x, y }; dot.style.transform = `translate(${x * R * 0.62}px,${y * R * 0.62}px)`; };
+  const end = (e) => { if (e.pointerId !== id) return; id = null; input.joy = null; dot.style.transform = ''; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); audio.start(); id = e.pointerId; try { el.setPointerCapture(id); } catch (err) { /* без захвата -- джойстик отпустится, когда палец уйдёт */ } el.classList.add('on'); move(e); });
+  el.addEventListener('pointermove', (e) => { if (e.pointerId === id) { e.preventDefault(); move(e); } });
+  for (const n of ['pointerup', 'pointercancel']) el.addEventListener(n, end); }
 $('bmenu').onclick = () => toMenu();
 $('bcam').onclick = () => { G.cam = (G.cam + 1) % 3; resetView(); };
 let drag = null;
@@ -401,6 +411,9 @@ function tick(dt) {
     const th = b.th, ahead = G.hb(b.X + Math.sin(th) * 350, b.Y + Math.cos(th) * 350);
     if (ahead > -6 || Math.hypot(b.X, b.Y) > 2500) G.menuSide = -(G.menuSide || 1);
     const want = G.wind.dir0 + (G.menuSide || 1) * 95 * DEG; ctl = aiControl(b, b.X + Math.sin(want) * 500, b.Y + Math.cos(want) * 500, P.ai, dt);
+  } else if (input.joy && b.spec && b.spec.cls === 'motor') { // джойстик моторных: угол от «вверх» -- руль, отклонение -- газ, назад не бывает
+    const j = input.joy, m = Math.min(1, Math.hypot(j.x, j.y)), on = m > 0.15, a = Math.atan2(j.x, -j.y);
+    ctl = X.filterCtl({ steer: on ? clamp(a / (Math.PI / 2), -1, 1) : 0, thr: on ? (m - 0.15) / 0.85 : 0, ease: on && b.capsized, left: false, right: false });
   } else ctl = X.filterCtl({ steer: (input.right ? 1 : 0) - (input.left ? 1 : 0), ease: input.ease, left: input.left, right: input.right });
   const ctls = boats.map((e, i) => { if (i === 0) return ctl; if (G.race2) return X.aiFor(e, dt);
     const tg = target(R, e.leg, true), c = aiControl(e.b, tg.X, tg.Y, e.ai, dt);
@@ -549,7 +562,7 @@ function updateHud(dt, b, sp) {
   $('pos').style.color = heel > 34 ? '#ff8a7a' : '';
   { const hh = Math.floor(G.clock), mm = Math.floor((G.clock % 1) * 60); $('windtxt').textContent = `${(b.tws * KN).toFixed(0)} уз · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`; }
   drawDial(b);
-  if (R) { const P = G.player, all = [P, ...G.rivals.filter((r) => !r.out), ...(R.online ? X.peerList().map((p) => ({ leg: p.r[1] ? 4 : Math.min(3, p.r[0] || 0), time: p.r[1] || 0, b: p.b })) : [])].sort((x, y) => progress(R, y) - progress(R, x)), tg = target(R, P.leg, false), d = Math.hypot(tg.X - b.X, tg.Y - b.Y);
+  if (R) { const P = G.player, all = [P, ...G.rivals.filter((r) => !r.out), ...X.onlineRows(R, true)].sort((x, y) => progress(R, y) - progress(R, x)), tg = target(R, P.leg, false), d = Math.hypot(tg.X - b.X, tg.Y - b.Y);
     $('rtime').textContent = fmt(R.over ? P.time : R.t);
     $('rinfo').textContent = R.t < 0 ? 'до старта' : `${['старт', 'верхний знак', 'нижний знак', 'финиш', 'финиш'][P.leg]} ${d.toFixed(0)} м · ${all.indexOf(P) + 1}/${all.length}`; } else X.hud();
   // подсказка: одна, самая важная; спокойные гаснут сами
