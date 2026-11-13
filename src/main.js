@@ -105,7 +105,7 @@ function applyPreset() {
 // тропы и грунтовки в горах из OpenStreetMap (src/trails.js). Масштаб один по обеим осям: берег и горы в настоящих
 // пропорциях. На широком экране карта повёрнута: север справа (панель справа, озеро слева). На телефоне панель снизу,
 // север вниз. Берег ставится так, чтобы вся колонка управления стояла на «суше» с запасом и ничего не легло на озеро.
-const MENU = { lakeW: 600, lakeH: 300, phone: false };
+const MENU = { lakeW: 600, lakeH: 300, boatT: 80, boatB: 320, phone: false };
 let MLINES = null;
 const parseLines = (str) => str.split(';').map((w) => { const a = w.split(','), p = []; for (let i = 0; i + 1 < a.length; i += 2) p.push([+a[i] * 4, +a[i + 1] * 4]); return p; });
 function coastY(X) { let y = -9000; while (y < 8000 && G.h(X, y) < 0) y += 25; let a = y - 25, b = y; for (let k = 0; k < 9; k++) { const m = (a + b) / 2; if (G.h(X, m) < 0) a = m; else b = m; } return (a + b) / 2; }
@@ -136,10 +136,12 @@ function coastMask() { const W = window.innerWidth, H = window.innerHeight, ph =
     let ym = -1e9; for (const v of pts) ym = Math.max(ym, v[1]); const ox = cardL - 40 - ym * s;
     P = (X, Y) => [ox + Y * s, (X - X0) * s]; Ymax = (W - ox) / s + 300; close = `L${W + 4},${H + 4} L${W + 4},-4 Z`;
     let mn = 1e9; for (const v of pts) mn = Math.min(mn, P(v[0], v[1])[0]); MENU.lakeW = mn - 60;
-  } else { // телефон: верх нижнего листа -- граница, ниже которой только суша
-    const mb = $('mbot').getBoundingClientRect(), top = mb.height ? mb.top : H * 0.42;
-    s = clamp((H - top + 90) / 11000, 0.03, 0.12); fit(W / s); s = W / (X1 - X0); sample(Math.ceil(W / 1.5));
-    let ym = -1e9; for (const v of pts) ym = Math.max(ym, v[1]); const oy = top - 30 - ym * s;
+  } else { // телефон: яхта -- в полосе между заголовком и «Ваше имя», берег ниже середины экрана (верх листа -- над водой)
+    const mt = $('mtop').getBoundingClientRect(), mb = $('mbot').getBoundingClientRect(), top = mb.height ? mb.top : H * 0.4;
+    MENU.boatT = mt.height ? mt.bottom + 6 : H * 0.1; MENU.boatB = Math.max(MENU.boatT + 120, top - 4);
+    const shore = Math.max(H * 0.6, top + 120); // самая северная точка уреза (дно залива)
+    s = clamp((H - shore + 220) / 11000, 0.03, 0.12); fit(W / s); s = W / (X1 - X0); sample(Math.ceil(W / 1.5));
+    let ym = -1e9; for (const v of pts) ym = Math.max(ym, v[1]); const oy = shore - ym * s;
     P = (X, Y) => [(X1 - X) * s, oy + Y * s]; Ymax = (H - oy) / s + 300; close = `L-4,${H + 4} L${W + 4},${H + 4} Z`;
     let mn = 1e9; for (const v of pts) mn = Math.min(mn, P(v[0], v[1])[1]); MENU.lakeH = mn - 24; }
   MENU.phone = ph; const line = 'M' + pts.map((v) => f(P(v[0], v[1]))).join(' L');
@@ -517,11 +519,11 @@ function updateCamera(dt, b, sp) {
   } else if (G.mode === 'menu') {
     // лодка стоит по центру свободной части экрана (озера) с запасом: от носа, кормы и топа мачты до краёв -- не меньше 5 см
     const W = window.innerWidth, H = window.innerHeight, cm = 37.8, tan = Math.tan(27 * DEG);
-    const need = MENU.phone ? Math.max(19, 8.5 * H / (2 * tan * Math.max(60, W - 10 * cm)), 13.5 * H / (2 * tan * Math.max(60, MENU.lakeH - 3 * cm)))
+    const need = MENU.phone ? Math.max(19, 8.5 * H / (2 * tan * Math.max(60, W - 2.4 * cm)), 13.5 * H / (2 * tan * Math.max(60, MENU.boatB - MENU.boatT - 0.6 * cm)))
       : Math.max(19, 8.5 * H / (2 * tan * Math.max(80, MENU.lakeW - 10 * cm)), 13.5 * H / (2 * tan * Math.max(80, H - 10 * cm)));
     const d = Math.min(need, 90); camera.position.set(bx - fx * d, Math.max(4.2 + b.y * 0.5 + d * 0.05, G.h(bx - fx * d, -(bz - fz * d)) + 2.5), bz - fz * d);
     camera.lookAt(bx, 5.2 + b.y * 0.5, bz); camera.fov += (54 - camera.fov) * Math.min(1, dt * 3);
-    if (MENU.phone) camera.setViewOffset(W, H, 0, H / 2 - MENU.lakeH * 0.56, W, H); else camera.setViewOffset(W, H, W / 2 - MENU.lakeW / 2, 0, W, H);
+    if (MENU.phone) camera.setViewOffset(W, H, 0, H / 2 - (MENU.boatT + MENU.boatB) * 0.5, W, H); else camera.setViewOffset(W, H, W / 2 - MENU.lakeW / 2, 0, W, H);
   } else {
     // камера ходит по сфере вокруг лодки: orbit -- вокруг, orbitP -- вверх-вниз, zoom -- ближе-дальше
     const top = G.cam === 2, d = (top ? 40 : (b.camD || 13) + sp * (b.kind ? 0.22 : 0.55) + G.flyCam) * G.zoom, el = clamp((top ? 1.2 : 0.14) + G.orbitP, -0.06, 1.45), ce = Math.cos(el), se = Math.sin(el);
