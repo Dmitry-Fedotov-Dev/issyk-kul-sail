@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TRAILS, RIVERS } from './trails.js';
 import { Boat, Wind, Waves, PRESETS, DEG, KN, clamp, wrapPi, smooth, pointOfSail, aiControl } from './sim.js';
 import { applyQuality, loadHeight, makeSky, makeTerrain, makeFarTerrain, makeWater, makeShore, makeMark, SUN, HAZE, ENV, MAP } from './world.js';
 import { makeBoat } from './boatmodel.js';
@@ -99,34 +100,62 @@ function applyPreset() {
   store.set('preset', G.preset);
   for (const c of $('winds').children) c.setAttribute('aria-pressed', c.dataset.id === G.preset);
 }
-// Панель меню -- суша к северу от берега у Чолпон-Аты, нарисованная линиями по карте высот: кромка -- урез воды,
-// внутри горизонтали через 100 м (каждая пятая толще) и оранжевые линии стока -- тальвеги ущелий. Без подписей.
-// На широком экране карта повёрнута: север справа (панель справа, озеро слева). На телефоне панель снизу, север вниз.
+// Панель меню -- суша к северу от берега у Чолпон-Аты, нарисованная как топографическая карта по настоящим данным:
+// кромка -- урез воды с карты высот, горизонтали через 100 м (каждая пятая толще), реки и ручьи и оранжевым пунктиром --
+// тропы и грунтовки в горах из OpenStreetMap (src/trails.js). Масштаб один по обеим осям: берег и горы в настоящих
+// пропорциях. На широком экране карта повёрнута: север справа (панель справа, озеро слева). На телефоне панель снизу,
+// север вниз. Берег ставится так, чтобы вся колонка управления стояла на «суше» с запасом и ничего не легло на озеро.
 const MENU = { lakeW: 600, lakeH: 300, phone: false };
-function coastMask() { const W = window.innerWidth, H = window.innerHeight, ph = W <= 640, N = 130, X0 = -6500, X1 = 6500, pts = []; let lo = 1e9, hi = -1e9;
-  for (let i = 0; i <= N; i++) { const x = X0 + (X1 - X0) * i / N; let y = -3500; while (y < 3500 && G.h(x, y) < 0) y += 20; pts.push([x, y]); lo = Math.min(lo, y); hi = Math.max(hi, y); }
-  const mid = (lo + hi) / 2; let P, close, Ymax;
-  if (!ph) { const sx = 150 / (hi - lo), xc = Math.max(W - 565, W * 0.42); P = (X, Y) => [xc + (Y - mid) * sx, H * (X - X0) / (X1 - X0)]; Ymax = mid + (W - xc) / sx + 200; close = `L${W},${H} L${W},0 Z`; MENU.lakeW = xc - 75; }
-  else { const sy = 60 / (hi - lo), yc = H * 0.31; P = (X, Y) => [W * (X1 - X) / (X1 - X0), yc + (Y - mid) * sy]; Ymax = mid + (H - yc) / sy + 200; close = `L0,${H} L${W},${H} Z`; MENU.lakeH = yc - 30; }
-  MENU.phone = ph; const f = (q) => `${q[0].toFixed(1)},${q[1].toFixed(1)}`, ch = $('coast').children, line = 'M' + pts.map((q) => f(P(q[0], q[1]))).join(' L');
-  ch[0].setAttribute('d', `${line} ${close}`); ch[4].setAttribute('d', line);
-  // горизонтали: «марширующие квадраты» по сетке высот
-  const nx = 72, ny = 64, Y0 = lo - 100, gx = (i) => X0 + (X1 - X0) * i / nx, gy = (j) => Y0 + (Ymax - Y0) * j / ny, hs = [];
-  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) hs.push(G.h(gx(i), gy(j)));
+let MLINES = null;
+const parseLines = (str) => str.split(';').map((w) => { const a = w.split(','), p = []; for (let i = 0; i + 1 < a.length; i += 2) p.push([+a[i] * 4, +a[i + 1] * 4]); return p; });
+function coastY(X) { let y = -9000; while (y < 8000 && G.h(X, y) < 0) y += 25; let a = y - 25, b = y; for (let k = 0; k < 9; k++) { const m = (a + b) / 2; if (G.h(X, m) < 0) a = m; else b = m; } return (a + b) / 2; }
+// урез воды как изолиния h = 0 («марширующие квадраты»), сшитая в одну линию: проходит и вокруг мыса, и вглубь залива
+function shoreline(X0, X1, Ya, Yb, nx, ny) { const gx = (i) => X0 + (X1 - X0) * i / nx, gy = (j) => Ya + (Yb - Ya) * j / ny, v = new Float32Array((nx + 1) * (ny + 1)), at = (i, j) => v[j * (nx + 1) + i];
+  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) v[j * (nx + 1) + i] = G.h(gx(i), gy(j));
+  const pos = new Map(), adj = new Map(), H_ = (i, j) => 2 * (j * (nx + 1) + i), V_ = (i, j) => 2 * (j * (nx + 1) + i) + 1;
+  const cross = (id, v0, v1, x0, y0, x1, y1) => { if ((v0 < 0) === (v1 < 0)) return null; if (!pos.has(id)) { const t = v0 / (v0 - v1); pos.set(id, [x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]); } return id; };
+  const link = (a, b) => { for (const [p, q] of [[a, b], [b, a]]) { if (!adj.has(p)) adj.set(p, []); adj.get(p).push(q); } };
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const a = at(i, j), b = at(i + 1, j), c = at(i + 1, j + 1), d = at(i, j + 1);
+    const e = [cross(H_(i, j), a, b, gx(i), gy(j), gx(i + 1), gy(j)), cross(V_(i + 1, j), b, c, gx(i + 1), gy(j), gx(i + 1), gy(j + 1)), cross(H_(i, j + 1), d, c, gx(i), gy(j + 1), gx(i + 1), gy(j + 1)), cross(V_(i, j), a, d, gx(i), gy(j), gx(i), gy(j + 1))].filter((x) => x !== null);
+    if (e.length === 2) link(e[0], e[1]); else if (e.length === 4) { if ((a + b + c + d) / 4 < 0 === a < 0) { link(e[0], e[1]); link(e[2], e[3]); } else { link(e[0], e[3]); link(e[1], e[2]); } } }
+  let best = [], used = new Set();
+  for (const [st, nb] of adj) { if (used.has(st) || nb.length !== 1) continue; const ch = [st]; used.add(st); let cur = st;
+    for (;;) { const nx2 = adj.get(cur).find((q) => !used.has(q)); if (nx2 === undefined) break; used.add(nx2); ch.push(nx2); cur = nx2; } if (ch.length > best.length) best = ch; }
+  const out = best.map((id) => pos.get(id)); if (out.length && out[0][0] > out[out.length - 1][0]) out.reverse(); return out; }
+function coastMask() { const W = window.innerWidth, H = window.innerHeight, ph = W <= 640, svg = $('coast'), q = (c) => svg.querySelector('.' + c);
+  if (!MLINES) MLINES = { tr: parseLines(TRAILS), rv: parseLines(RIVERS) };
+  const f = (v) => `${v[0].toFixed(1)},${v[1].toFixed(1)}`, XMIN = -16000, XMAX = 11500;
+  let s, X0, X1, P, close, Ymin = 1e9, Ymax; const pts = [];
+  // грубо -- где берег по Y, затем точная изолиния уреза в полосе вокруг него (с запасом на глубину залива)
+  const sample = (n) => { let lo = 1e9, hi = -1e9; for (let i = 0; i <= 40; i++) { const y = coastY(X0 + (X1 - X0) * i / 40); lo = Math.min(lo, y); hi = Math.max(hi, y); }
+    const Ya = lo - 300, Yb = hi + 2500, line = shoreline(X0 - 60, X1 + 60, Ya, Yb, n, Math.ceil(n * (Yb - Ya) / (X1 - X0 + 120))); for (const v of line) { pts.push(v); Ymin = Math.min(Ymin, v[1]); } };
+  const fit = (span) => { span = Math.min(span, XMAX - XMIN); X0 = Math.max(XMIN, Math.min(XMAX - span, -span / 2)); X1 = X0 + span; };
+  if (!ph) { // колонка управления: её левый край -- граница, правее которой только суша
+    const cr = $('card').getBoundingClientRect(), cardL = cr.width ? cr.left : W - Math.min(W * 0.04, 48) - 440;
+    s = clamp((W - cardL + 90) / 11000, 0.03, 0.09); fit(H / s); s = H / (X1 - X0); sample(Math.ceil(H / 2.5));
+    let ym = -1e9; for (const v of pts) ym = Math.max(ym, v[1]); const ox = cardL - 40 - ym * s;
+    P = (X, Y) => [ox + Y * s, (X - X0) * s]; Ymax = (W - ox) / s + 300; close = `L${W + 4},${H + 4} L${W + 4},-4 Z`;
+    let mn = 1e9; for (const v of pts) mn = Math.min(mn, P(v[0], v[1])[0]); MENU.lakeW = mn - 60;
+  } else { // телефон: верх нижнего листа -- граница, ниже которой только суша
+    const mb = $('mbot').getBoundingClientRect(), top = mb.height ? mb.top : H * 0.42;
+    s = clamp((H - top + 90) / 11000, 0.03, 0.12); fit(W / s); s = W / (X1 - X0); sample(Math.ceil(W / 1.5));
+    let ym = -1e9; for (const v of pts) ym = Math.max(ym, v[1]); const oy = top - 30 - ym * s;
+    P = (X, Y) => [(X1 - X) * s, oy + Y * s]; Ymax = (H - oy) / s + 300; close = `L-4,${H + 4} L${W + 4},${H + 4} Z`;
+    let mn = 1e9; for (const v of pts) mn = Math.min(mn, P(v[0], v[1])[1]); MENU.lakeH = mn - 24; }
+  MENU.phone = ph; const line = 'M' + pts.map((v) => f(P(v[0], v[1]))).join(' L');
+  q('f').setAttribute('d', `${line} ${close}`); q('l').setAttribute('d', line);
+  // горизонтали: «марширующие квадраты» по сетке высот, клетка ~7 px
+  const Y0 = Ymin - 60, nx = Math.min(240, Math.ceil((X1 - X0) * s / 7)), ny = Math.min(240, Math.ceil((Ymax - Y0) * s / 7)), gx = (i) => X0 + (X1 - X0) * i / nx, gy = (j) => Y0 + (Ymax - Y0) * j / ny, hs = new Float32Array((nx + 1) * (ny + 1));
+  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) hs[j * (nx + 1) + i] = G.h(gx(i), gy(j));
   let minor = '', major = ''; const at = (i, j) => hs[j * (nx + 1) + i];
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const a = at(i, j), b = at(i + 1, j), c = at(i + 1, j + 1), d = at(i, j + 1), mn = Math.min(a, b, c, d), mx = Math.max(a, b, c, d); if (mx < 100) continue;
     for (let lv = Math.max(100, Math.ceil(mn / 100) * 100); lv <= mx; lv += 100) { const e = [], cr = (v0, v1, x0, y0, x1, y1) => { if ((v0 < lv) !== (v1 < lv)) { const t = (lv - v0) / (v1 - v0); e.push(P(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)); } };
       cr(a, b, gx(i), gy(j), gx(i + 1), gy(j)); cr(b, c, gx(i + 1), gy(j), gx(i + 1), gy(j + 1)); cr(c, d, gx(i + 1), gy(j + 1), gx(i), gy(j + 1)); cr(d, a, gx(i), gy(j + 1), gx(i), gy(j));
       for (let k = 0; k + 1 < e.length; k += 2) { const sgm = `M${f(e[k])} L${f(e[k + 1])} `; if (lv % 500 === 0) major += sgm; else minor += sgm; } } }
-  ch[1].setAttribute('d', minor); ch[2].setAttribute('d', major);
-  // тальвеги: от верхнего края карты спускаемся по уклону до воды; линии сами сходятся в ущельях
-  let riv = ''; const seen = new Set();
-  for (const [ky, step] of [[0.97, 520], [0.6, 700], [0.3, 900]]) for (let x = X0 + 260; x < X1; x += step) { let X = x, Y = Y0 + (Ymax - Y0) * ky, path = [], ok = true; const own = new Set();
-    for (let k = 0; k < 700; k++) { const hh = G.h(X, Y); if (hh < 1) break; const e = 45, dx = G.h(X + e, Y) - G.h(X - e, Y), dy = G.h(X, Y + e) - G.h(X, Y - e), n = Math.hypot(dx, dy); if (n < 0.02) { ok = false; break; }
-      const key = `${Math.round(X / 60)},${Math.round(Y / 60)}`; if (seen.has(key) && !own.has(key)) { path.push(P(X, Y)); break; } own.add(key); if (k % 2 === 0) path.push(P(X, Y)); X -= dx / n * 55; Y -= dy / n * 55; if (X < X0 || X > X1) break; }
-    for (const k2 of own) seen.add(k2); // влились в уже нарисованное русло -- дальше не дублируем
-    if (ok && path.length > 6) riv += 'M' + path.map(f).join(' L') + ' '; }
-  ch[3].setAttribute('d', riv); }
+  q('c1').setAttribute('d', minor); q('c2').setAttribute('d', major);
+  // реки и тропы: только то, что попадает в кадр
+  const lines = (L) => { let out = ''; for (const w of L) { const p = w.map((v) => P(v[0], v[1])); if (!p.some((v) => v[0] > -20 && v[0] < W + 20 && v[1] > -20 && v[1] < H + 20)) continue; out += 'M' + p.map(f).join(' L') + ' '; } return out; };
+  q('w').setAttribute('d', lines(MLINES.rv)); q('tr').setAttribute('d', lines(MLINES.tr)); }
 function buildMenu() {
   coastMask(); let rz = 0; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(coastMask, 150); });
   for (const id in PRESETS) { const p = PRESETS[id], b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'w_' + id;
@@ -149,7 +178,7 @@ function openWaterHeading(X, Y) {
   return wrapPi(best);
 }
 function placeBoat(e, X, Y, th, v = 1.6) { if (e.model.dispose) e.model.dispose(); e.b.reset(X, Y, th); e.b.vx = Math.sin(th) * v; e.b.vy = Math.cos(th) * v; e.b.trim = 0.6; e.wake.reset(); e.leg = 0; e.time = 0; e.ai = {}; e.prevA = -1; }
-function showGame(on) { $('game').hidden = !on; $('menu').hidden = on; $('result').hidden = true; }
+function showGame(on) { $('game').hidden = !on; $('menu').hidden = on; $('result').hidden = true; if (!on) requestAnimationFrame(coastMask); }
 function setRivals(v) { for (const r of G.rivals) { const on = v && !r.out; r.model.root.visible = on; r.wake.mesh.visible = on; } for (const k in G.marks) G.marks[k].visible = v; }
 
 function toMenu() {

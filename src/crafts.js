@@ -8,7 +8,7 @@ const GR = 9.81, W = { x: 0, y: 0, speed: 0, dir: 0 }, S1 = { h: 0, sx: 0, sz: 0
 export const SPECS = {
   kayak: { id: 'kayak', cls: 'paddle', name: 'Каяк', sub: 'морской каяк · гребок по ритму', key: 'опора', hl: 2.3, hbm: 0.3, draft: 0.14, camD: 7, eye: [0, 0.84, 0.1],
     mass: 95, force: 265, drive: 0.42, period: 0.62, recover: 0.12, turn: 1.05, c1: 4, c2: 14, lat: 5.5, yawDamp: 2.4, stab: 24, rollDamp: 7, waveGain: 2.3, capAngle: 58 * DEG, capPhi: 172 * DEG, rightHold: 1.1, rightT: 0.9, windA: 0.5, surf: 0.55 },
-  scull: { id: 'scull', cls: 'paddle', name: 'Академическая одиночка', sub: 'скиф · захват, проводка, вынос', key: 'гребок', hl: 3.8, hbm: 0.16, draft: 0.12, camD: 9, eye: [0, 0.98, 0.35],
+  scull: { id: 'scull', cls: 'paddle', name: 'Академическая одиночка', sub: 'академическая · скиф, захват, проводка', key: 'гребок', hl: 3.8, hbm: 0.16, draft: 0.12, camD: 9, eye: [0, 0.98, 0.35],
     mass: 105, force: 520, drive: 0.75, period: 1.9, recover: 0.75, turn: 0.55, c1: 3, c2: 7, lat: 7, yawDamp: 1.6, stab: 26, rollDamp: 6, waveGain: 1.5, capAngle: 34 * DEG, capPhi: 95 * DEG, rightHold: 2.4, rightT: 1.6, windA: 0.45, surf: 0.3 },
   sup: { id: 'sup', cls: 'paddle', name: 'SUP-доска', sub: 'стоя с веслом · держи баланс', key: 'стойка', hl: 1.6, hbm: 0.4, draft: 0.2, camD: 6.5, eye: [0, 1.72, 0.12],
     mass: 95, force: 150, drive: 0.5, period: 0.9, recover: 0.15, turn: 0.75, c1: 4, c2: 16, lat: 4, yawDamp: 2.0, stab: 11, rollDamp: 1.5, waveGain: 1.1, capAngle: 27 * DEG, capPhi: 80 * DEG, rightHold: 1.4, rightT: 1.0, windA: 0.75, surf: 0.7 },

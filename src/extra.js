@@ -36,6 +36,7 @@ export function installExtra(A) {
   let npcFollow = null, npcHost = 0; // данные NPC от хозяина (если мы ведомые) и его номер
   if (sel !== 'yacht' && !SPECS[sel]) sel = 'yacht';
   const info = (id) => (id === 'yacht' ? YACHT_INFO : SPECS[id]);
+  const SHORT = { yacht: 'Яхта', kayak: 'Каяк', scull: 'Одиночка', sup: 'SUP-доска', jetski: 'Гидроцикл', boat: 'Катер' }; // на кнопке -- коротко, полное имя в подсказке
 
   // ---------- достижения ----------
   function ach(id) { if (done.has(id)) return; const a = ACH.find((x) => x[1] === id); if (!a) return; done.add(id); store.set('ach', [...done]); audio.chime(); toast('★ ' + a[2]); journal(); }
@@ -188,7 +189,7 @@ export function installExtra(A) {
     $('how').innerHTML = sel === 'yacht' ? yachtHow : HOW[sel].replace(/<b>Пробел<\/b>/g, TOUCH ? `кнопка <b>«${SPECS[sel].key}»</b>` : '<b>Пробел</b>').replace(/<b>← →<\/b>/g, TOUCH ? '<b>касание слева и справа</b>' : '<b>← →</b>');
     $('bmap').textContent = startAt ? `Место: ${startAt.label}` : 'Место: Чолпон-Ата'; }
   function buildMenu() { yachtHow = $('how').innerHTML;
-    for (const id of CRAFT_ORDER) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${i.name}</b><small>${i.sub}</small>`; b.onclick = () => { sel = id; store.set('craft', id); refreshMenu(); }; $('crafts').appendChild(b); }
+    for (const id of CRAFT_ORDER) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); refreshMenu(); }; $('crafts').appendChild(b); }
     $('briver').onclick = () => { audio.start(); startRiver(); }; $('bjournal').onclick = () => { $('journal').hidden = false; }; $('jclose').onclick = () => { $('journal').hidden = true; };
     $('bmap').onclick = openMap; $('mclose').onclick = () => { $('mapdlg').hidden = true; }; $('mreset').onclick = () => { startAt = null; $('mapdlg').hidden = true; refreshMenu(); };
     const nm = $('pname'), setName = (v) => { name = v; store.set('name', v); };
