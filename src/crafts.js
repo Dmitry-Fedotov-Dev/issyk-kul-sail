@@ -29,7 +29,7 @@ class Craft extends Boat {
   reset(X, Y, th) {
     super.reset(X, Y, th);
     Object.assign(this, { st: null, tSince: 9, endT: 9, prevL: false, prevR: false, prevB: false, streak: 0, cadence: 0, strokes: 0, lastQ: 0, brace: 0, lastSide: 'R', powerN: 0,
-      thr: 0, pl: 0, air: false, airT: 0, vyy: 0, poseT: undefined, dist: 0, cx: 0, cy: 0 });
+      thr: 0, pl: 0, noRight: 0, air: false, airT: 0, vyy: 0, poseT: undefined, dist: 0, cx: 0, cy: 0 });
   }
   // поза на волне; у моторных -- ещё и отрыв от гребня
   updatePose(waves, t, terrainH) {
@@ -71,6 +71,7 @@ class Craft extends Boat {
     if (this.righting > 0) { this.righting += dt / (S.rightT || 1.6); this.phi = s * cp * (1 - smooth(0, 1, this.righting)); this.p = 0;
       if (this.righting >= 1) { this.capsized = false; this.righting = 0; this.phi = 0; this.events.push({ type: 'righted' }); } return; }
     this.phi += (s * cp - this.phi) * Math.min(1, 3 * dt); this.p = 0;
+    if (this.noRight > 0) { this.noRight -= dt; this.rightHold = 0; return; } // сапбордист ещё летит или плывёт к доске -- забираться некому
     this.rightHold = inp.ease ? this.rightHold + dt / (S.rightHold || 2) : Math.max(0, this.rightHold - dt);
     if (this.rightHold >= 1) { this.righting = 0.001; this.rightHold = 0; }
   }

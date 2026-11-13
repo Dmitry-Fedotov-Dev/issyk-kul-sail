@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { clamp } from './sim.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z), UP = V(0, 1, 0);
+// главный модуль подставляет сюда всплеск при приводнении вылетевшего сапбордиста: (x, y, z, сила)
+export const FX = { splash: null };
 const std = (c, r = 0.6, m = 0, extra = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m, envMapIntensity: 0.7, ...extra });
 const gloss = (c) => new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 1.3, side: THREE.DoubleSide });
 const steel = std(0xdfe4e8, 0.2, 1), black = std(0x15181c, 0.5), rubber = std(0x22252a, 0.9);
@@ -150,7 +152,43 @@ export function makeSup(o = {}) {
   const base = finish(root, t, 0.0), h = V(0, 0, 0);
   // от первого лица корпус и голова не рисуются (иначе закрывают обзор), руки и весло остаются в кадре
   const S = springs({ px: 0.36, pr: 0.55, pz: -0.1, lean: -0.12, tw: -0.25, cr: 1 }), T = { px: 0.36, pr: 0.55, pz: -0.1, lean: -0.12, tw: -0.25, cr: 1 };
-  return { root, fp(on) { pe.body.visible = !on; }, update(b, dt = 1 / 60) { base(b); const st = b.st, sg = (st ? st.side : b.lastSide) === 'L' ? -1 : 1;
+  // ---------- полёт: после удара сапбордист вылетает с доски, кувыркается, плюхается и подплывает обратно ----------
+  // Человек и весло на время полёта переезжают в свои «обёртки» прямо в сцене и летят по баллистике (тяжесть чуть
+  // меньше настоящей -- полёт дольше и смешнее), крутятся, машут руками; на воде -- всплеск, бултыхание и заплыв к доске.
+  const g0 = pe.g.position.clone(), Wg = new THREE.Group(), Wp = new THREE.Group(), qd = new THREE.Quaternion(), qu = new THREE.Quaternion(), ax = V(0, 0, 0), hand = V(0, 0, 0), C = V(0, 0.95, 0);
+  let fly = null;
+  const rnd = (a) => (Math.random() - 0.5) * 2 * a;
+  function fling(vx, vy, vz) { if (fly || !root.parent) return; root.updateMatrixWorld(true);
+    t.matrixWorld.decompose(Wg.position, Wg.quaternion, Wg.scale); Wg.position.copy(V(g0.x, g0.y + C.y, g0.z).applyMatrix4(t.matrixWorld));
+    P.getWorldPosition(Wp.position); P.getWorldQuaternion(Wp.quaternion); Wp.scale.set(1, 1, 1);
+    root.parent.add(Wg, Wp); Wg.add(pe.g); pe.g.position.set(0, -C.y, 0); Wp.add(P); P.position.set(0, 0, 0); P.rotation.set(0, 0, 0); P.quaternion.identity();
+    const sp = Math.hypot(vx, vz) || 1;
+    fly = { ph: 'air', t: 0, v: V(vx, vy, vz), w: V(rnd(9) + vz / sp * 11, rnd(6), rnd(9) - vx / sp * 11), pv: V(vx * 0.8 + rnd(3), vy * 1.25, vz * 0.8 + rnd(3)), pw: V(rnd(14), rnd(14), rnd(14)), sq: 0, wl: root.position.y };
+    pe.body.visible = true; }
+  function flyStep(dt) { const f = fly, gr = 7.5; f.t += dt; f.wl = root.position.y;
+    // весло: своя баллистика, на воде ложится плашмя и дрейфует
+    if (Wp.position.y > f.wl + 0.05 || f.pv.y > 0) { f.pv.y -= gr * dt; Wp.position.addScaledVector(f.pv, dt); ax.copy(f.pw).multiplyScalar(dt); qd.setFromAxisAngle(ax.clone().normalize(), ax.length()); Wp.quaternion.premultiply(qd); }
+    else { Wp.position.y = f.wl + 0.03; f.pv.multiplyScalar(Math.exp(-3 * dt)); f.pv.y = 0; Wp.position.addScaledVector(f.pv, dt); qu.setFromEuler(E.set(Math.PI / 2, Wp.rotation.y, 0)); Wp.quaternion.slerp(qu, Math.min(1, dt * 3)); }
+    const k = Math.min(1, dt * 4);
+    if (f.ph === 'air') { f.v.y -= gr * dt; Wg.position.addScaledVector(f.v, dt); ax.copy(f.w).multiplyScalar(dt); qd.setFromAxisAngle(ax.clone().normalize(), ax.length()); Wg.quaternion.premultiply(qd);
+      // руки-ноги враскидку: тело гнётся, руки молотят воздух, фигура тянется вдоль полёта
+      pe.body.rotation.set(Math.sin(f.t * 15) * 0.7, Math.sin(f.t * 11) * 0.5, Math.sin(f.t * 13 + 1) * 0.6);
+      const st = 1 + Math.min(0.25, Math.abs(f.v.y) * 0.03); pe.g.scale.set(1 / Math.sqrt(st), st, 1 / Math.sqrt(st));
+      for (let i = 0; i < 2; i++) { const sd = i ? 1 : -1; pe.reach(i, hand.set(sd * (0.55 + 0.15 * Math.sin(f.t * 21 + i * 2)), -C.y + 1.55 + 0.35 * Math.sin(f.t * 19 + i * 3), 0.35 * Math.cos(f.t * 23 + i))); }
+      if (f.v.y < 0 && Wg.position.y < f.wl + 0.25) { f.ph = 'float'; f.t = 0; f.sq = 1; if (FX.splash) FX.splash(Wg.position.x, f.wl, Wg.position.z, Math.min(1.6, 0.6 + Math.hypot(f.v.x, f.v.y, f.v.z) / 14)); f.v.multiplyScalar(0.25); f.v.y = 0; } }
+    else { // в воде: по грудь, бултыхается; потом подплывает к доске
+      f.v.multiplyScalar(Math.exp(-2.5 * dt)); Wg.position.addScaledVector(f.v, dt); f.sq = Math.max(0, f.sq - dt * 2.5);
+      const wob = Math.sin(f.t * 9) * f.sq * 0.35; pe.g.scale.set(1 + wob, 1 - wob, 1 + wob);
+      qu.setFromEuler(E.set(0.25 + Math.sin(f.t * 3) * 0.08, Math.atan2(root.position.x - Wg.position.x, root.position.z - Wg.position.z) + Math.PI, Math.sin(f.t * 2.3) * 0.12)); Wg.quaternion.slerp(qu, k * 0.6);
+      pe.body.rotation.set(Math.sin(f.t * 6) * 0.15, 0, Math.sin(f.t * 5) * 0.15);
+      for (let i = 0; i < 2; i++) { const sd = i ? 1 : -1, ph = f.t * 7 + i * Math.PI; pe.reach(i, hand.set(sd * (0.4 + 0.15 * Math.cos(ph)), -C.y + 1.2 + 0.25 * Math.sin(ph), -0.35 + 0.25 * Math.cos(ph))); }
+      const yW = f.wl - 0.4 + Math.sin(f.t * 4) * 0.06; Wg.position.y += (yW - Wg.position.y) * k;
+      if (f.ph === 'float' && f.t > 1.6) { f.ph = 'swim'; f.t = 0; }
+      if (f.ph === 'swim') { const a = Math.min(1, dt * 2.2); Wg.position.x += (root.position.x - Wg.position.x) * a; Wg.position.z += (root.position.z - Wg.position.z) * a; Wp.position.x += (root.position.x - Wp.position.x) * a; Wp.position.z += (root.position.z - Wp.position.z) * a;
+        if (f.t > 1.3 || Math.hypot(root.position.x - Wg.position.x, root.position.z - Wg.position.z) < 0.4) land(); } } }
+  function land() { t.add(pe.g); pe.g.position.copy(g0); pe.g.scale.set(1, 1, 1); pe.body.rotation.set(0, 0, 0); t.add(P); if (Wg.parent) Wg.parent.remove(Wg); if (Wp.parent) Wp.parent.remove(Wp); fly = null; }
+  return { root, fling, flying: () => !!fly, flyPos: () => (fly ? Wg.position : null), fp(on) { pe.body.visible = !on || !!fly; }, dispose() { if (fly) land(); },
+    update(b, dt = 1 / 60) { base(b); if (fly) { root.updateMatrixWorld(); flyStep(Math.min(dt, 0.05)); return; } const st = b.st, sg = (st ? st.side : b.lastSide) === 'L' ? -1 : 1;
     if (st) { const ph = Math.min(1, st.t / st.T); T.pr = 0.95 - 1.8 * ph; T.lean = -0.12 - 0.25 * Math.sin(Math.PI * ph); }
     else { const r = Math.min(1, (b.endT || 0) / 0.7); T.pr = -0.85 + 1.4 * r; T.lean = -0.12; } // после гребка весло выносится вперёд, в готовность
     T.px = sg * 0.36; T.tw = -sg * 0.25; T.cr = 1 - 0.28 * b.brace; T.lean -= 0.35 * b.brace;

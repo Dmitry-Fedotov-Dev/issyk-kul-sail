@@ -29,12 +29,14 @@ export function makeTraffic(scene, ctx) {
     for (const e of list) { const far = e.type === 'steamer' ? [1500, 3200] : e.type === 'fishing' ? [900, 2200] : e.type === 'police' ? [350, 700] : e.type === 'sup' || e.type === 'kayak' ? [120, 600] : [300, 1200];
       place(e, pick(far[0], far[1], cx, cy, e.phys ? 3 : 8), Math.random() * 6.283); }
     law.stars = 0; law.t = 0; ctx.setWanted(0, ''); }
-  function setActive(v) { active = v; for (const e of list) { e.model.root.visible = v && !(e.reserve && law.stars < 3); if (e.wake) e.wake.mesh.visible = e.model.root.visible; } if (!v) { ctx.audio.siren(false); ctx.setWanted(0, ''); law.stars = 0; } }
+  function setActive(v) { active = v; for (const e of list) { if (!v && e.model.dispose) e.model.dispose(); e.model.root.visible = v && !(e.reserve && law.stars < 3); if (e.wake) e.wake.mesh.visible = e.model.root.visible; } if (!v) { ctx.audio.siren(false); ctx.setWanted(0, ''); law.stars = 0; } }
   function offence(n, msg) { const was = law.stars; law.stars = Math.min(3, law.stars + n); if (!was) { law.t = 0; law.lost = 0; law.stopT = 0; law.near = 0; law.seen = false; law.call = true; } ctx.toast(msg); ctx.setWanted(law.stars, 'Береговая милиция: заглушите ход'); }
   function clear(msg) { law.stars = 0; ctx.setWanted(0, ''); ctx.audio.siren(false); ctx.toast(msg); for (const p of patrols) p.b.siren = false; }
 
   function update(dt, t, P) {
-    if (!active) return; const pb = P.b, ps = Math.hypot(pb.vx, pb.vy);
+    if (!active) return; const pb = P.b, ps = Math.hypot(pb.vx, pb.vy), peers = ctx.peers ? ctx.peers() : [];
+    // кого обходить: игрока и онлайн-игроков рядом -- для акватории это такие же суда, как все
+    const others = [{ b: pb, r: (pb.hl || 2.6) }, ...peers.map((p) => ({ b: p.b, r: p.b.hl || 2.6 }))];
     law.hitCool -= dt; law.harborCool -= dt;
     for (const e of list) { const b = e.b; if (!e.model.root.visible) continue; e.T -= dt;
       if (e.police && law.stars > 0) { // погоня: идём в упреждённую точку, вблизи уравниваем ход, чтобы подойти к борту
@@ -46,10 +48,15 @@ export function makeTraffic(scene, ctx) {
         e.vt = e.cruise; if (e.drift > 0) { e.drift -= dt; e.vt = 0.4; } } // промысловик ложится в дрейф у сетей
       const hx = Math.sin(b.th), hy = Math.cos(b.th), look = e.phys ? 35 : e.R * 5 + 40;
       if (!water(b.X + hx * look, b.Y + hy * look, e.phys ? 1.5 : 5) && !(e.police && law.stars)) { e.tgt = pick(100, 600, e.home.X, e.home.Y, 6); e.T = 40; }
-      if (e.phys) { const paddle = b.spec.cls === 'paddle', c = paddle ? aiPaddle(b, e.tgt.X, e.tgt.Y, e.ai, dt, 0.75) : aiMotor(b, e.tgt.X, e.tgt.Y, e.thrMax);
+      // расхождение: чужое судно впереди на сходящемся курсе -- забираем в сторону (по правилам -- вправо), большие ещё и сбавляют ход
+      let ax = e.tgt.X, ay = e.tgt.Y; if (!(e.police && law.stars)) { const look2 = e.phys ? 28 : e.R * 4 + 40;
+        for (const o of others) { const q = o.b, rx = q.X - b.X, ry = q.Y - b.Y, along = rx * hx + ry * hy, side = rx * hy - ry * hx; // side > 0 -- препятствие справа
+          if (along < 0 || along > look2 || Math.abs(side) > e.R + o.r + 6) continue; const dir = side > 0 ? -1 : 1;
+          ax = b.X + hx * 30 + hy * dir * 26; ay = b.Y + hy * 30 - hx * dir * 26; if (!e.phys) e.vt = Math.min(e.vt, e.cruise * (0.3 + 0.7 * along / look2)); break; } }
+      if (e.phys) { const paddle = b.spec.cls === 'paddle', c = paddle ? aiPaddle(b, ax, ay, e.ai, dt, 0.75) : aiMotor(b, ax, ay, e.thrMax);
         b.updatePose(ctx.waves, t, ctx.h); const n = Math.min(4, Math.max(1, Math.round(dt * 120))); for (let i = 0; i < n; i++) b.step(dt / n, c, ctx.wind, ctx.h);
         for (const ev of b.events) if (ev.type === 'land' && b.afterLand) b.afterLand(ev); b.events.length = 0;
-      } else { const err = wrapPi(Math.atan2(e.tgt.X - b.X, e.tgt.Y - b.Y) - b.th), k = Math.min(1, e.v / 3 + 0.2); b.rudder = clamp(err * 2, -1, 1);
+      } else { const err = wrapPi(Math.atan2(ax - b.X, ay - b.Y) - b.th), k = Math.min(1, e.v / 3 + 0.2); b.rudder = clamp(err * 2, -1, 1);
         b.th = wrapPi(b.th + clamp(err, -e.turn * dt, e.turn * dt) * k); e.v += clamp(e.vt * (Math.abs(err) > 1.2 ? 0.5 : 1) - e.v, -e.acc * 1.5 * dt, e.acc * dt);
         b.vx = Math.sin(b.th) * e.v; b.vy = Math.cos(b.th) * e.v; b.X += b.vx * dt; b.Y += b.vy * dt;
         const s = ctx.waves.sample(b.X, -b.Y, t, 1, WS); b.y += (s.h * e.sway - b.y) * 0.2; const fx = Math.sin(b.th), fz = -Math.cos(b.th);
@@ -59,8 +66,13 @@ export function makeTraffic(scene, ctx) {
       const dx = pb.X - b.X, dy = pb.Y - b.Y, d = Math.hypot(dx, dy), R = e.R + (pb.hl || 3.2) * 0.8;
       if (d < R && d > 0.01) { const nx = dx / d, ny = dy / d, rel = (pb.vx - b.vx) * nx + (pb.vy - b.vy) * ny; pb.X += nx * (R - d); pb.Y += ny * (R - d);
         if (rel < 0) { pb.vx -= rel * nx * 1.4; pb.vy -= rel * ny * 1.4; if (e.phys) { b.vx += rel * nx * 0.5; b.vy += rel * ny * 0.5; } }
+        if (ctx.onBump) ctx.onBump(e, nx, ny, -rel);
         if (-rel > 1.2 && law.hitCool <= 0) { law.hitCool = 3; ctx.onHit(-rel);
-          if (e.police) { ctx.ach('l_ram'); offence(2, 'Навал на катер милиции!'); } else offence(1, `Столкновение: ${NAMES[e.type]}. Нарушение правил плавания`); } } }
+          if (e.police) { ctx.ach('l_ram'); offence(2, 'Навал на катер милиции!'); } else offence(1, `Столкновение: ${NAMES[e.type]}. Нарушение правил плавания`); } }
+      // онлайн-игроки: толкаем только своё NPC-судно (большие суда не сдвинуть -- у их владельца наших NPC нет)
+      if (e.phys) for (const p of peers) { const q = p.b, ex = b.X - q.X, ey = b.Y - q.Y, dd = Math.hypot(ex, ey), RR = e.R + (q.hl ? q.hl * 0.85 : 2.6); if (dd >= RR || dd < 0.01) continue;
+        const nx = ex / dd, ny = ey / dd, rel = (b.vx - q.vx) * nx + (b.vy - q.vy) * ny; b.X += nx * (RR - dd); b.Y += ny * (RR - dd); if (rel < 0) { b.vx -= rel * nx * 1.3; b.vy -= rel * ny * 1.3; }
+        if (e.type === 'sup' && -rel > 1.1 && ctx.knock) ctx.knock(e, nx, ny, -rel); } }
     // малый ход у причала: моторным не быстрее 5 узлов
     const motor = pb.spec && pb.spec.cls === 'motor', dp = Math.hypot(pb.X - pier.X, pb.Y - pier.Y), inZone = dp < 230;
     if (motor && inZone) { if (!law.zone) law.zone = { fast: false }; if (ps > 2.7) { law.zone.fast = true; law.harborT += dt; if (law.harborT > 3 && law.harborCool <= 0) { law.harborCool = 40; law.harborT = 0; offence(1, 'У причала — малый ход! Превышение скорости'); } } else law.harborT = Math.max(0, law.harborT - dt); }

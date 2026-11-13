@@ -76,6 +76,8 @@ export function makeAudio() {
     splash(p = 1) { noise(1500, 0.5, 1.4, 0.55 * p, 0, 300); noise(4000, 0.7, 1.8, 0.2 * p, 0, 1200); },
     beep(hi) { tone(hi ? 1175 : 784, hi ? 0.5 : 0.12, 'square', 0.1); },
     horn() { tone(220, 1.1, 'sawtooth', 0.16); tone(277, 1.1, 'sawtooth', 0.12); },
+    // вылет с доски: «бдыщ» и «уиии» вверх-вниз, как в мультике
+    whee(p = 1) { tone(160, 0.3, 'sine', 0.45 * p, 520); setTimeout(() => { tone(420, 0.55, 'triangle', 0.13 * p, 1500); setTimeout(() => tone(1500, 0.8, 'triangle', 0.11 * p, 260), 520); }, 90); },
     chime() { tone(784, 0.25, 'sine', 0.14); setTimeout(() => tone(1175, 0.4, 'sine', 0.14), 110); },
     toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.75; return muted; },
   };

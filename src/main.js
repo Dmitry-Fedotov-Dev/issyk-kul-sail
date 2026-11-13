@@ -148,9 +148,9 @@ function openWaterHeading(X, Y) {
   for (const s of [90, -90, 120, -120, 60, -60]) { const th = G.wind.dir0 + s * DEG; let d = 0; for (const r of [150, 400, 800]) d += -G.h(X + Math.sin(th) * r, Y + Math.cos(th) * r); if (d > bd) { bd = d; best = th; } }
   return wrapPi(best);
 }
-function placeBoat(e, X, Y, th, v = 1.6) { e.b.reset(X, Y, th); e.b.vx = Math.sin(th) * v; e.b.vy = Math.cos(th) * v; e.b.trim = 0.6; e.wake.reset(); e.leg = 0; e.time = 0; e.ai = {}; e.prevA = -1; }
+function placeBoat(e, X, Y, th, v = 1.6) { if (e.model.dispose) e.model.dispose(); e.b.reset(X, Y, th); e.b.vx = Math.sin(th) * v; e.b.vy = Math.cos(th) * v; e.b.trim = 0.6; e.wake.reset(); e.leg = 0; e.time = 0; e.ai = {}; e.prevA = -1; }
 function showGame(on) { $('game').hidden = !on; $('menu').hidden = on; $('result').hidden = true; }
-function setRivals(v) { for (const r of G.rivals) { r.model.root.visible = v; r.wake.mesh.visible = v; } for (const k in G.marks) G.marks[k].visible = v; }
+function setRivals(v) { for (const r of G.rivals) { const on = v && !r.out; r.model.root.visible = on; r.wake.mesh.visible = on; } for (const k in G.marks) G.marks[k].visible = v; }
 
 function toMenu() {
   $('brief').hidden = true; $('mark').hidden = true; if (X) X.toMenuCraft();
@@ -180,8 +180,12 @@ function startRace() {
   const th = wrapPi(D + 47 * DEG), v0 = { breeze: 2.0, santash: 2.7, ulan: 2.9 }[G.preset];
   // игрок стоит так, чтобы обычный курс в бейдевинд сам вывел его на середину стартовой линии
   placeBoat(G.player, pt(-56, -56).X, pt(-56, -56).Y, th, 1.0); // в стороне от нижнего знака
-  G.rivals.forEach((r, i) => { const a = -(v0 * 0.62 * (25 + 1 + i * 1.5)) - 4, p = pt(a, [-96, -26, 0][i]); placeBoat(r, p.X, p.Y, th, v0 * 0.8); });
-  G.camYaw = th; resetView(); drawBrief(R); $('brief').hidden = false;
+  // соперники стоят так, чтобы к сигналу подойти к линии: чем больше времени до старта, тем дальше
+  const placeRivals = (rem) => G.rivals.forEach((r, i) => { r.out = false; const a = -(v0 * 0.62 * (Math.min(rem, 40) + 1 + i * 1.5)) - 4, p = pt(a, [-96, -26, 0][i]); placeBoat(r, p.X, p.Y, th, v0 * 0.8); });
+  placeRivals(25);
+  // онлайн: лобби ждёт других яхтсменов; каждый следующий встаёт чуть дальше от линии, чтобы не на одно место
+  if (X.lobbyStart(R, 'yacht', (slot) => { const q = pt(-56 - (slot % 4) * 14, -56 - Math.floor(slot / 4) * 12); placeBoat(G.player, q.X, q.Y, th, 1.0); })) { R.onT0 = () => placeRivals(-R.t); placeRivals(-R.t); }
+  setRivals(true); G.camYaw = th; resetView(); drawBrief(R); $('brief').hidden = false;
 }
 const al = (R, b) => (b.X - R.S.X) * R.up.x + (b.Y - R.S.Y) * R.up.y, lat = (R, b) => (b.X - R.S.X) * R.cr.x + (b.Y - R.S.Y) * R.cr.y;
 function target(R, leg, ai) {
@@ -222,12 +226,14 @@ function drawBrief(R) {
 }
 
 function stepRace(dt) {
-  const R = G.race, P = G.player; R.t += dt;
+  const R = G.race, P = G.player, was = R.t; if (R.online) R.t = (X.net.now() - R.T0) / 1000; else R.t += dt;
+  // онлайн: на старте NPC добирают число яхт до четырёх
+  if (R.online && was < 0 && R.t >= 0) { const peers = X.peerList().length, keep = Math.max(0, 3 - peers); G.rivals.forEach((r, i) => { r.out = i >= keep; }); setRivals(true); if (peers) toast(`Соперников онлайн: ${peers}`); }
   if (R.t < 0) { const s = Math.ceil(-R.t); if (s !== R.lastBeep && s <= 10) { R.lastBeep = s; audio.beep(false); } }
   else if (R.lastBeep !== 0) { R.lastBeep = 0; audio.horn(); R.ocs = al(R, P.b) > 0; toast(R.ocs ? 'Фальстарт! Вернитесь за линию' : 'Старт! Вверх, против ветра'); }
   if (R.t > 12) $('brief').hidden = true;
   if (R.ocs && al(R, P.b) < 0) { R.ocs = false; toast('Чисто. Стартуйте!'); }
-  const all = [P, ...G.rivals];
+  const all = [P, ...G.rivals.filter((r) => !r.out)];
   for (const e of all) { if (e.leg >= 4) continue; if (advance(R, e) && e === P) {
     if (e.leg === 1) { audio.chime(); } else if (e.leg === 2) { audio.chime(); toast('Верхний знак взят — теперь по ветру к жёлтому'); }
     else if (e.leg === 3) { audio.chime(); toast('Нижний знак взят — на финиш, снова против ветра'); } else if (e.leg === 4) finishRace(); } }
@@ -238,11 +244,13 @@ function stepRace(dt) {
     if (d < 5.2 && d > 0.01) { const nx = dx / d, ny = dy / d, p = (5.2 - d) / 2; a.X -= nx * p; a.Y -= ny * p; b.X += nx * p; b.Y += ny * p; kill(a, -nx, -ny); kill(b, nx, ny); if (i === 0) bump(P, 'Навал!'); } }
   for (const k of ['W', 'L', 'pin', 'com']) for (const e of all) { const m = R[k], dx = e.b.X - m.X, dy = e.b.Y - m.Y, d = Math.hypot(dx, dy);
     if (d < 3 && d > 0.01) { e.b.X = m.X + dx / d * 3; e.b.Y = m.Y + dy / d * 3; kill(e.b, dx / d, dy / d); bump(e, 'Касание знака!'); } }
+  X.npcPeers(all.slice(1));
 }
 function finishRace() {
   X.ach('regatta');
   const R = G.race; R.over = true; audio.horn();
-  const all = [G.player, ...G.rivals].sort((a, b) => progress(R, b) - progress(R, a)), place = all.indexOf(G.player) + 1;
+  const peers = R.online ? X.peerList().map((p) => ({ name: p.name, leg: p.r[1] ? 4 : Math.min(3, p.r[0] || 0), time: p.r[1] || 0, b: p.b })) : [];
+  const all = [G.player, ...G.rivals.filter((r) => !r.out), ...peers].sort((a, b) => progress(R, b) - progress(R, a)), place = all.indexOf(G.player) + 1;
   const key = 'best.' + G.preset, best = store.get(key), rec = !best || G.player.time < best; if (rec) store.set(key, G.player.time);
   $('rh').textContent = place === 1 ? 'Победа!' : place + '-е место';
   $('rs').textContent = `${PRESETS[G.preset].name} · ваше время ${fmt(G.player.time)}` + (rec ? ' · личный рекорд' : best ? ` · рекорд ${fmt(best)}` : '');
@@ -253,6 +261,7 @@ function finishRace() {
 // ---------- ввод ----------
 const KEY = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'ease', ArrowDown: 'ease', KeyS: 'ease' };
 window.addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return; // печатают имя -- не рулим
   if (KEY[e.code]) { input[KEY[e.code]] = true; e.preventDefault(); return; }
   if (!G || e.repeat) return;
   if (e.code === 'KeyC') { G.cam = (G.cam + 1) % 3; resetView(); }
@@ -455,7 +464,11 @@ function updateCamera(dt, b, sp) {
   const sh = G.shake * G.shake, jx = (Math.random() - 0.5) * sh * 0.5, jy = (Math.random() - 0.5) * sh * 0.5;
   const yaw = G.camYaw + G.orbit, fx = Math.sin(yaw), fz = -Math.cos(yaw);
   if (G.player.model.fp) G.player.model.fp(G.cam === 1 && G.mode !== 'menu');
-  const bx = b.X, bz = -b.Y;
+  let bx = b.X, bz = -b.Y, fly = 0;
+  // сапбордиста выбросило с доски: камера отъезжает и держит в кадре и доску, и летящего
+  const fp = G.mode !== 'menu' && G.player.model.flyPos && G.player.model.flyPos();
+  if (fp && G.cam !== 1) { fly = Math.hypot(fp.x - bx, fp.z - bz) * 0.7 + Math.max(0, fp.y - b.y) * 0.6; bx = (bx + fp.x) / 2; bz = (bz + fp.z) / 2; }
+  G.flyCam = (G.flyCam || 0) + (fly - (G.flyCam || 0)) * Math.min(1, dt * 3);
   if (G.cam === 1 && G.mode !== 'menu') {
     const root = G.player.model.root; if (b.eye) tmpV.set(b.eye[0], b.eye[1], b.eye[2]); else tmpV.set(-b.crew * 0.35, 2.15, 3.3); root.localToWorld(tmpV); camera.position.copy(tmpV);
     camera.quaternion.copy(root.quaternion); camera.rotateY(-G.orbit); camera.rotateX(-0.1 - G.orbitP * 0.8 + 0.25); camera.fov = clamp(68 * G.zoom, 30, 95);
@@ -469,7 +482,7 @@ function updateCamera(dt, b, sp) {
     if (MENU.phone) camera.setViewOffset(W, H, 0, H / 2 - MENU.lakeH * 0.56, W, H); else camera.setViewOffset(W, H, W / 2 - MENU.lakeW / 2, 0, W, H);
   } else {
     // камера ходит по сфере вокруг лодки: orbit -- вокруг, orbitP -- вверх-вниз, zoom -- ближе-дальше
-    const top = G.cam === 2, d = (top ? 40 : (b.camD || 13) + sp * (b.kind ? 0.22 : 0.55)) * G.zoom, el = clamp((top ? 1.2 : 0.14) + G.orbitP, -0.06, 1.45), ce = Math.cos(el), se = Math.sin(el);
+    const top = G.cam === 2, d = (top ? 40 : (b.camD || 13) + sp * (b.kind ? 0.22 : 0.55) + G.flyCam) * G.zoom, el = clamp((top ? 1.2 : 0.14) + G.orbitP, -0.06, 1.45), ce = Math.cos(el), se = Math.sin(el);
     const by = b.base || 0, ty = by + (top ? 1 : (b.kind ? 1.3 : 2.2) + (b.y - by) * 0.5), ahead = top ? 0 : 4.5 * Math.cos(G.orbit) * ce; // за кормой смотрим чуть вперёд лодки, сбоку -- на неё
     const hx = Math.sin(b.th), hz = -Math.cos(b.th), tx = bx + hx * ahead, tz = bz + hz * ahead;
     camera.position.set(tx - fx * d * ce - hx * ahead * 1.0 + jx, ty + d * se + 1.4 + jy, tz - fz * d * ce - hz * ahead * 1.0);
@@ -519,7 +532,7 @@ function updateHud(dt, b, sp) {
   if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; }
   const heel = Math.abs(b.phi) / DEG, R = G.race;
   $('vign').style.boxShadow = `inset 0 0 180px 40px rgba(190,20,10,${(smooth(32, 58, heel) * 0.5).toFixed(2)})`;
-  const hold = b.capsized && !b.righting; $('ring').hidden = !hold; if (hold) $('ringarc').setAttribute('stroke-dashoffset', String(314 * (1 - b.rightHold)));
+  const hold = b.capsized && !b.righting && !(b.noRight > 0); $('ring').hidden = !hold; if (hold) $('ringarc').setAttribute('stroke-dashoffset', String(314 * (1 - b.rightHold)));
   // метка цели: висит над знаком, а если он вне кадра -- прижата к краю экрана с той стороны, где он есть
   const mk = $('mark');
   const tgM = R ? (G.player.leg < 4 ? target(R, G.player.leg, false) : null) : X.markTarget();
@@ -536,9 +549,9 @@ function updateHud(dt, b, sp) {
   $('pos').style.color = heel > 34 ? '#ff8a7a' : '';
   { const hh = Math.floor(G.clock), mm = Math.floor((G.clock % 1) * 60); $('windtxt').textContent = `${(b.tws * KN).toFixed(0)} уз · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`; }
   drawDial(b);
-  if (R) { const P = G.player, all = [P, ...G.rivals].sort((x, y) => progress(R, y) - progress(R, x)), tg = target(R, P.leg, false), d = Math.hypot(tg.X - b.X, tg.Y - b.Y);
+  if (R) { const P = G.player, all = [P, ...G.rivals.filter((r) => !r.out), ...(R.online ? X.peerList().map((p) => ({ leg: p.r[1] ? 4 : Math.min(3, p.r[0] || 0), time: p.r[1] || 0, b: p.b })) : [])].sort((x, y) => progress(R, y) - progress(R, x)), tg = target(R, P.leg, false), d = Math.hypot(tg.X - b.X, tg.Y - b.Y);
     $('rtime').textContent = fmt(R.over ? P.time : R.t);
-    $('rinfo').textContent = R.t < 0 ? 'до старта' : `${['старт', 'верхний знак', 'нижний знак', 'финиш', 'финиш'][P.leg]} ${d.toFixed(0)} м · ${all.indexOf(P) + 1}/4`; } else X.hud();
+    $('rinfo').textContent = R.t < 0 ? 'до старта' : `${['старт', 'верхний знак', 'нижний знак', 'финиш', 'финиш'][P.leg]} ${d.toFixed(0)} м · ${all.indexOf(P) + 1}/${all.length}`; } else X.hud();
   // подсказка: одна, самая важная; спокойные гаснут сами
   let h = '', alert = false; const twa = Math.abs(b.twa) / DEG, T = G.modeT ?? 99;
   if (b.kind) { const q = X.hint(b, T); h = q[0]; alert = q[1]; }
