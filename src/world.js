@@ -126,15 +126,27 @@ export function makeTerrain(h) {
     const nx = h(X - e, Y) - h(X + e, Y), nz = h(X, Y + e) - h(X, Y - e), l = Math.hypot(nx, 2 * e, nz);
     nor[k * 3] = nx / l; nor[k * 3 + 1] = (2 * e) / l; nor[k * 3 + 2] = nz / l;
   }
-  const idx = [];
+  const lists = new Map(), CH = Math.ceil((N - 1) / 8);
   for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) {
     const a = j * N + i, b = a + 1, c = a + N, d = c + 1;
     if (Math.max(hs[a], hs[b], hs[c], hs[d]) < -9) continue; // глубокое дно не рисуем
-    idx.push(a, b, d, a, d, c);
+    chunkList(lists, ((j / CH) | 0) * 64 + ((i / CH) | 0)).push(a, b, d, a, d, c);
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); geo.setAttribute('aH', new THREE.BufferAttribute(hs, 1)); geo.setIndex(idx);
-  const m = new THREE.Mesh(geo, terrainMaterial()); m.frustumCulled = false; return m;
+  return chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, terrainMaterial());
+}
+// Сетка рельефа режется на куски со своими границами: куски вне кадра (за спиной камеры, сбоку) видеокарта
+// не обрабатывает вовсе. Раньше обе сетки (~450 тыс. треугольников) целиком проходили через неё каждый кадр.
+// Буферы вершин общие, у каждого куска только свой список треугольников. Шейдер опускает дальние точки на кривизну
+// Земли -- на это границы куска расширены с запасом, иначе кусок у нижнего края кадра мог бы пропасть раньше времени.
+const chunkList = (lists, k) => { let l = lists.get(k); if (!l) lists.set(k, (l = [])); return l; };
+function chunked(attrs, lists, mat) {
+  const g = new THREE.Group(), p = attrs.position.array, box = new THREE.Box3(), v = new THREE.Vector3(); let tris = 0;
+  for (const idx of lists.values()) { if (!idx.length) continue;
+    const geo = new THREE.BufferGeometry(); for (const k in attrs) geo.setAttribute(k, attrs[k]); geo.setIndex(idx);
+    box.makeEmpty(); for (const i of idx) box.expandByPoint(v.fromArray(p, i * 3));
+    const sp = box.getBoundingSphere(new THREE.Sphere()), dd = Math.hypot(sp.center.x, sp.center.z) + 30000; sp.radius += (dd * dd) / 14866000; geo.boundingSphere = sp;
+    g.add(new THREE.Mesh(geo, mat)); tris += idx.length / 3; }
+  g.userData.tris = tris; return g;
 }
 
 // Геометрия гор -- строго по карте высот, без растяжения. Всё «монструозное» делает свет и фактура: рёбра и кулуары
@@ -149,12 +161,16 @@ varying vec3 vP; varying vec3 vN; varying float vH;
 float ridged(vec2 p){ float a=0.5, s=0., w=1.; for(int i=0;i<FBM_OCT;i++){ float r=1.-abs(2.*vnoise(p)-1.); r*=r*w; s+=a*r; w=clamp(r*1.6,0.,1.); p=mat2(1.6,1.2,-1.2,1.6)*p+7.; a*=0.5; } return s; }
 void main(){ vec3 N=normalize(vN); float h=vH, mt=smoothstep(70.,600.,h);
   // рельеф в нормали: склоны изрезаны рёбрами, свет ложится жёстко
-  float rs=0.0016, e=30.; vec2 rp=vP.xz*rs; float r0=ridged(rp), rx=ridged(rp+vec2(e*rs,0.)), rz=ridged(rp+vec2(0.,e*rs));
+  float rs=0.0016, e=30.; vec2 rp=vP.xz*rs; float r0=0.45, rx=0.45, rz=0.45;
   // Рябь вдали: когда деталь рисунка становится мельче пикселя, она мерцает при движении камеры. Поэтому каждая
   // фактура плавно гаснет по мере того, как её шаг приближается к размеру пикселя на местности (px, метры).
   float px=length(fwidth(vP.xz)), kR=1.-smoothstep(22.,95.,px), kF=1.-smoothstep(3.,13.,px), kT=1.-smoothstep(0.2,0.9,px);
+  // Дальше -- только то, что реально влияет на цвет: на низком берегу (mt=0) гребни, тени облаков и осыпи ни на что
+  // не влияют, под водой цвет суши целиком заменяется цветом дна, вне посёлка не нужна застройка. Результат прежний
+  if(mt*kR>0.){ r0=ridged(rp); rx=ridged(rp+vec2(e*rs,0.)); rz=ridged(rp+vec2(0.,e*rs)); }
   N=normalize(N+vec3(r0-rx,0.,r0-rz)*(7.5*mt*kR)); float sl=1.-N.y; r0=mix(0.45,r0,kR);
-  float kN=1.-smoothstep(10.,45.,px), n=mix(mix(0.5,vnoise(vP.xz*0.0035),1.-smoothstep(90.,260.,px)), fbm(vP.xz*0.0035), kN), n2=mix(0.5,fbm(vP.xz*0.045),kF), n3=mix(0.5,vnoise(vP.xz*0.6),kT);
+  float kN=1.-smoothstep(10.,45.,px), n=0.5, n2=0.5, n3=0.5;
+  if(h>=0.){ n=mix(mix(0.5,vnoise(vP.xz*0.0035),1.-smoothstep(90.,260.,px)), fbm(vP.xz*0.0035), kN); n2=mix(0.5,fbm(vP.xz*0.045),kF); n3=mix(0.5,vnoise(vP.xz*0.6),kT); }
   vec3 sand=vec3(0.93,0.80,0.52), green=vec3(0.24,0.62,0.13), steppe=vec3(0.88,0.62,0.27), forest=vec3(0.06,0.30,0.14),
        meadow=vec3(0.38,0.68,0.18), rock=vec3(0.56,0.42,0.42), snow=vec3(0.98,0.99,1.);
   vec3 c=sand*(0.92+0.12*n3);
@@ -173,12 +189,12 @@ void main(){ vec3 N=normalize(vN); float h=vH, mt=smoothstep(70.,600.,h);
   else c=mix(c*0.72, c, smoothstep(0.,0.9,h));
   // застройка и сады читаются издалека как фактура: тёмные кроны и светлые пятна крыш
   float dc=length(vP-cameraPosition), tw=smoothstep(2.5,6.,h)*smoothstep(150.,60.,h)*(1.-smoothstep(5000.,11000.,dc));
-  float can=vnoise(vP.xz*0.075)*0.6+vnoise(vP.xz*0.21)*0.4; c=mix(c, vec3(0.07,0.20,0.07), tw*smoothstep(0.42,0.62,can)*0.85);
-  vec2 cell=floor(vP.xz/11.); float rf=step(0.90,hash(cell))*step(can,0.5)*tw*(1.-smoothstep(1500.,5000.,dc));
-  c=mix(c, mix(vec3(0.80,0.78,0.74), vec3(0.55,0.22,0.16), step(0.5,hash(cell+7.))), rf*0.8);
+  if(tw>0.){ float can=vnoise(vP.xz*0.075)*0.6+vnoise(vP.xz*0.21)*0.4; c=mix(c, vec3(0.07,0.20,0.07), tw*smoothstep(0.42,0.62,can)*0.85);
+    vec2 cell=floor(vP.xz/11.); float rf=step(0.90,hash(cell))*step(can,0.5)*tw*(1.-smoothstep(1500.,5000.,dc));
+    c=mix(c, mix(vec3(0.80,0.78,0.74), vec3(0.55,0.22,0.16), step(0.5,hash(cell+7.))), rf*0.8); }
   // ущелья и подножия стен темнее -- рассеянный свет туда не добирается; по склонам ползут тени облаков
   float ao=mix(1., 0.72+0.28*smoothstep(0.15,0.75,r0), mt);
-  float cs=1.-0.55*cloudCov(cloudDens(vP.xz*0.00011*uCloudScale+uCloud))*mt;
+  float cs=1.; if(mt>0.) cs-=0.55*cloudCov(cloudDens(vP.xz*0.00011*uCloudScale+uCloud))*mt;
   float l=max(dot(N,uSun),0.)*uSunI*cs; vec3 amb=vec3(0.22,0.29,0.44)*mix(1.,0.62,uStorm)*ao;
   // живопись светом: солнечные склоны тёплые, золотистые; тени холодные, сине-фиолетовые; цвета гуще
   // погодный фильтр: на солнце краски сочные, в шторм -- выцветшие и холодные, на заре -- тёплые
@@ -191,7 +207,7 @@ void main(){ vec3 N=normalize(vN); float h=vH, mt=smoothstep(70.,600.,h);
   vec3 Vd=normalize(cameraPosition-vP); col+=sunC*c*pow(1.-max(dot(N,Vd),0.),3.)*max(dot(N,uSun)+0.25,0.)*0.55*mt*uSunI;
   float dist=length(vP-cameraPosition);
   // облака цепляются за хребты: полоса тумана на высоте, рваная, плывёт по ветру
-  float band=exp(-pow((h-1500.-380.*n)/260.,2.))*smoothstep(0.52,0.74,fbm(vP.xz*0.00045+uCloud*0.6+3.))*smoothstep(6000.,16000.,dist);
+  float band=exp(-pow((h-1500.-380.*n)/260.,2.))*smoothstep(6000.,16000.,dist); band=band>0.002 ? band*smoothstep(0.52,0.74,fbm(vP.xz*0.00045+uCloud*0.6+3.)) : 0.; // вне полосы шум не считаем
   col=mix(col, mix(vec3(0.93,0.95,0.99),vec3(0.30,0.33,0.37),uStorm), band*(0.42+0.45*uStorm));
   // в шторм вершины уходят в тучу
   col=mix(col, vec3(0.24,0.27,0.31), uStorm*smoothstep(1300.,2600.,h)*0.8);
@@ -223,16 +239,14 @@ export async function makeFarTerrain(holes = []) {
   // ближний участок уже нарисован подробной сеткой -- его и открытую воду пропускаем
   const M = MAP.M, pad = 2 * STEP, nx0 = -MAP.OX * M + pad, nx1 = (MAP.N - 1 - MAP.OX) * M - pad, ny0 = (MAP.OY - (MAP.N - 1)) * M + pad, ny1 = MAP.OY * M - pad;
   const inside = (i, j) => { const X = X0 + i * STEP, Y = Y1 - j * STEP; return X > nx0 && X < nx1 && Y > ny0 && Y < ny1; };
-  const idx = [];
+  const lists = new Map(), CW = Math.ceil((W - 1) / 8), CHh = Math.ceil((H - 1) / 6);
   for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) { const a = j * W + i, b = a + 1, e = a + W, f = e + 1;
     if (Math.max(hs[a], hs[b], hs[e], hs[f]) < -1) continue;
     if (inside(i, j) && inside(i + 1, j) && inside(i, j + 1) && inside(i + 1, j + 1)) continue;
     const qx = X0 + (i + 0.5) * STEP, qy = Y1 - (j + 0.5) * STEP; if (holes.some((o) => Math.hypot(qx - o.X, qy - o.Y) < o.r)) continue; // здесь стоит подробный рельеф ущелья
-    idx.push(a, e, b, b, e, f); }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); geo.setAttribute('aH', new THREE.BufferAttribute(hs, 1)); geo.setIndex(idx);
+    chunkList(lists, ((j / CHh) | 0) * 64 + ((i / CW) | 0)).push(a, e, b, b, e, f); }
   const mat = terrainMaterial(); mat.side = THREE.DoubleSide;
-  const m = new THREE.Mesh(geo, mat); m.frustumCulled = false; m.userData.tris = idx.length / 3;
+  const m = chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, mat);
   // высота по грубой карте всей котловины (шаг 600 м): для мест за пределами подробной карты у Чолпон-Аты
   m.userData.heightAt = (X, Y) => { const fx = clamp((X - X0) / STEP, 0, W - 1.001), fy = clamp((Y1 - Y) / STEP, 0, H - 1.001), i = fx | 0, j = fy | 0, u = fx - i, v = fy - j;
     const a = hs[j * W + i], b = hs[j * W + i + 1], c = hs[(j + 1) * W + i], d = hs[(j + 1) * W + i + 1], y = (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v; return y < 0 ? y * 5 : y; };
@@ -390,6 +404,12 @@ void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
   QMATS.push(mat);
   const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = 2;
   const gdata = gustTex.image.data;
+  // Ветровая тень берега зависит только от места и направления ветра, а сетка сдвигается за лодкой на клетку-другую.
+  // Поэтому тень храним и при сдвиге берём готовые значения, считая заново только новые края. Раньше каждые 6 кадров
+  // заново считались 16 тысяч клеток по 3 высоты рельефа в каждой -- на телефоне это рывок кадра
+  // Сам расчёт раскладывается на несколько кадров (rows строк за вызов): новая карта собирается в запасном буфере и
+  // подменяет текущую целиком, когда готова. Задержка та же, что была (6 кадров), но без пика в одном кадре
+  let shel = new Float32Array(GN * GN), shel2 = new Float32Array(GN * GN), shK = null, job = null; const gnext = new Uint8Array(GN * GN);
   return {
     mesh, uniforms,
     // путь для клина Кельвина: форштевень, корма и дальше точки следа через каждые ~3.6 м
@@ -410,14 +430,20 @@ void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
       uniforms.uBoat.value.set(b.X, -b.Y, Math.sin(b.th), -Math.cos(b.th)); uniforms.uBoatV.value = b.capsized ? 0 : Math.min(1, b.speed / 3.6); },
     setWaves(waves) { waves.w.forEach((w, i) => uniforms.uWave.value[i].set(w.dx, w.dz, w.k, w.a)); uniforms.uQ.value = waves.qf; },
     // карта порывов вокруг лодки -- тот же расчёт, что двигает лодку
-    updateGust(wind, cx, cz) {
-      const S = GS, ox = Math.round(cx / S) * S, oz = Math.round(cz / S) * S, hf = GN / 2 - 0.5;
-      for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) {
-        const X = ox + (i - hf) * S, Y = -(oz + (j - hf) * S);
-        gdata[j * GN + i] = Math.max(0, Math.min(255, wind.gust(X, Y) * wind.shelter(X, Y) * 127.5));
+    updateGust(wind, cx, cz, rows = GN) {
+      const S = GS, hf = GN / 2 - 0.5;
+      if (!job) { const ox = Math.round(cx / S) * S, oz = Math.round(cz / S) * S, ok = shK && shK.w === wind && shK.h === wind.terrainH && shK.sx === wind.sx && shK.sy === wind.sy;
+        job = { j: 0, ok, di: ok ? Math.round((ox - shK.ox) / S) : 0, dj: ok ? Math.round((oz - shK.oz) / S) : 0, key: { w: wind, h: wind.terrainH, sx: wind.sx, sy: wind.sy, ox, oz } }; }
+      const { ok, di, dj, key } = job, { ox, oz } = key, je = shK ? Math.min(GN, job.j + rows) : GN; // самая первая карта -- сразу целиком
+      for (let j = job.j; j < je; j++) for (let i = 0; i < GN; i++) {
+        const X = ox + (i - hf) * S, Y = -(oz + (j - hf) * S), i0 = i + di, j0 = j + dj, k = j * GN + i;
+        shel2[k] = ok && i0 >= 0 && i0 < GN && j0 >= 0 && j0 < GN ? shel[j0 * GN + i0] : wind.shelter(X, Y);
+        gnext[k] = Math.max(0, Math.min(255, wind.gust(X, Y) * shel2[k] * 127.5));
       }
+      job.j = je; uniforms.uWindDir.value.set(wind.sx, -wind.sy); uniforms.uWind.value = wind.U;
+      if (je < GN) return;
+      gdata.set(gnext); [shel, shel2] = [shel2, shel]; shK = key; job = null;
       gustTex.needsUpdate = true; uniforms.uGustO.value.set(ox, oz);
-      uniforms.uWindDir.value.set(wind.sx, -wind.sy); uniforms.uWind.value = wind.U;
     },
   };
 }

@@ -63,18 +63,24 @@ void main(){ float w=vK.x, d=vK.y, e=abs(vU.x-0.5)*2.*w; // e -- метры от
   float al=max(a*0.92,un); if(al<0.01) discard;
   gl_FragColor=vec4(mix(vec3(0.30,0.80,0.84),vec3(0.95,0.975,1.),clamp(a*0.92/max(al,1e-3),0.,1.))*uL, al); }` });
   const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 3;
-  const pts = [];
+  const pts = [], vis = new Uint8Array(N + 1);
   return { mesh, pts,
     reset() { pts.length = 0; },
     update(b, dt, t, waves) {
       const fx = Math.sin(b.th), fz = -Math.cos(b.th), sx = b.X - fx * 2.7, sz = -b.Y - fz * 2.7;
       const s = b.capsized ? 0 : Math.min(1, Math.hypot(b.vx, b.vy) / 3.6), live = { x: sx, z: sz, rx: Math.cos(b.th), rz: Math.sin(b.th), t, s };
       if (!pts.length || Math.hypot(sx - pts[0].x, sz - pts[0].z) > 0.9) { pts.unshift({ ...live }); if (pts.length > N - 1) pts.pop(); }
+      if (!mesh.visible) return; // скрытый след не рисуется -- и волну под ним считать незачем (точки пути копятся выше)
+      // Высота волны под каждой точкой ленты -- самое дорогое в кадре для процессора (220 расчётов волн на лодку).
+      // Точка, вокруг которой лента целиком прозрачна (след старше 26 с или дальше 98 м), на картинку не влияет:
+      // её не пересчитываем. Шейдер гасит ленту ровно по этим двум условиям, так что картинка та же
       let dist = 0, px = sx, pz = sz, lp = live;
       for (let i = 0; i < N; i++) { const p = i === 0 ? live : pts[i - 1]; let st = 0;
         if (p) { dist += Math.hypot(p.x - px, p.z - pz); px = p.x; pz = p.z; lp = p; st = p.s * Math.max(0, 1 - (t - p.t) / 26); }
         const w = Math.min(1.5 + 0.05 * dist, 5); // турбулентная струя за кормой расширяется медленно; клин волн считает сетка
-        for (let k = 0; k < 2; k++) { const sg = k ? 1 : -1, x = lp.x + lp.rx * w * sg, z = lp.z + lp.rz * w * sg, q = (i * 2 + k) * 3;
-          pos[q] = x; pos[q + 1] = waves.sample(x, z, t, b.att, WS).h + 0.05; pos[q + 2] = z; wk[q] = w; wk[q + 1] = dist; wk[q + 2] = st; } }
+        vis[i] = st > 0 && dist < 98 ? 1 : 0;
+        for (let k = 0; k < 2; k++) { const sg = k ? 1 : -1, q = (i * 2 + k) * 3; pos[q] = lp.x + lp.rx * w * sg; pos[q + 2] = lp.z + lp.rz * w * sg; wk[q] = w; wk[q + 1] = dist; wk[q + 2] = st; } }
+      for (let i = 0; i < N; i++) { if (!vis[i] && !(i && vis[i - 1]) && !vis[i + 1]) continue;
+        for (let q = i * 6; q < i * 6 + 6; q += 3) pos[q + 1] = waves.sample(pos[q], pos[q + 2], t, b.att, WS).h + 0.05; }
       m.uniforms.uT.value = t; g.attributes.position.needsUpdate = true; g.attributes.wk.needsUpdate = true; } };
 }

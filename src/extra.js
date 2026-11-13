@@ -27,6 +27,7 @@ const HOW = { kayak: '<b>← →</b> — гребок левой и правой
 
 export function installExtra(A) {
   const { G, scene, $, store, toast, audio, TOUCH } = A, yacht = G.player; yacht.id = 'yacht';
+  const txt = (id, s) => { const el = $(id); if (el.textContent !== s) el.textContent = s; }; // в DOM -- только изменившееся
   const crafts = { yacht }, rivalsBy = {}, marks = [], done = new Set(store.get('ach') || []);
   let sel = store.get('craft') || 'yacht', river = null, startAt = null, yachtHow = '', name = String(store.get('name') || '').slice(0, 16).trim();
   if (!name) { name = randomName(); store.set('name', name); }
@@ -276,8 +277,8 @@ export function installExtra(A) {
     markTarget() { const R = G.race2; if (!R || G.player.time) return null; return G.player.course[G.player.leg]; },
     hud() { const R = G.race2, P = G.player;
       if (R) { const c = P.course[Math.min(P.leg, P.course.length - 1)], fw = (e) => (e.b ? (e.b.X - R.S.X) * R.dir.x + (e.b.Y - R.S.Y) * R.dir.y : -5e3), all = [...R.all, ...onlineRows(R, false)].sort((a, b) => (b.leg - a.leg) || (fw(b) - fw(a)));
-        $('rtime').textContent = A.fmt(R.over ? P.time : R.t); $('rinfo').textContent = R.t < 0 ? 'до старта' : `${c.label} ${Math.hypot(c.X - P.b.X, c.Y - P.b.Y).toFixed(0)} м · ${all.indexOf(P) + 1}/${all.length}`; }
-      else if (G.rv) { const pr = G.rv.pr; $('rtime').textContent = A.fmt(G.rv.t); $('rinfo').textContent = pr ? `до финиша ${Math.max(0, river.len - pr.s).toFixed(0)} м · уклон ${(pr.slope * 100).toFixed(0)}% · камней: ${G.rv.hits}` : ''; } },
+        txt('rtime', A.fmt(R.over ? P.time : R.t)); txt('rinfo', R.t < 0 ? 'до старта' : `${c.label} ${Math.hypot(c.X - P.b.X, c.Y - P.b.Y).toFixed(0)} м · ${all.indexOf(P) + 1}/${all.length}`); }
+      else if (G.rv) { const pr = G.rv.pr; txt('rtime', A.fmt(G.rv.t)); txt('rinfo', pr ? `до финиша ${Math.max(0, river.len - pr.s).toFixed(0)} м · уклон ${(pr.slope * 100).toFixed(0)}% · камней: ${G.rv.hits}` : ''); } },
     hint(b, T) { const id = b.kind, key = TOUCH ? `«${SPECS[id].key}»` : 'пробел';
       const jk = TOUCH && b.spec.cls === 'motor' ? 'джойстик' : key;
       if (b.capsized) return [b.righting || b.noRight > 0 ? '' : { kayak: `Оверкиль! Держите ${key} — эскимосский переворот`, scull: `Перевернулись. Держите ${key} — забираемся в лодку`, sup: `Упали с доски. Держите ${key} — забираемся обратно`, jetski: `Сбросило. Держите ${jk} — забираемся на гидроцикл`, boat: `Держите ${jk}` }[id], true];

@@ -409,8 +409,13 @@ function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; G.clock = (G.cl
 // ---------- главный цикл ----------
 const WSa = { x: 0, y: 0, speed: 0, dir: 0 }, tmpV = new THREE.Vector3(), tmpS = { h: 0, sx: 0, sz: 0 };
 let last = performance.now(), acc = 0, fpsT = 0, fpsN = 0; const sunDir = new THREE.Vector3();
+// Экран 120 Гц и выше на телефоне: рисуем через кадр (60 к/с). Глазу разницы почти нет, а видеокарта работает
+// вдвое меньше -- телефон не греется и дольше держит заряд. 90 Гц не трогаем: там через кадр было бы 45 к/с.
+let rafPrev = 0, rafIv = 16.7, rafOdd = false;
 function loop(now) {
   requestAnimationFrame(loop);
+  if (TOUCH) { const iv = now - rafPrev; rafPrev = now; if (iv > 2 && iv < 40) rafIv += (iv - rafIv) * 0.05;
+    if (rafIv < 10.5 && (rafOdd = !rafOdd)) return; }
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (!G.freeze) tick(dt); // freeze -- только для тестов: мир стоит, картинка рисуется
   const b = G.player.b, sp = b.speed;
@@ -496,7 +501,7 @@ function tick(dt) {
 
   // вода, небо, флаг
   G.water.uniforms.uTime.value = G.t; G.water.uniforms.uCenter.value.set(camera.position.x, 0, camera.position.z);
-  if (G.frame % 6 === 0) G.water.updateGust(G.wind, b.X, -b.Y);
+  G.water.updateGust(G.wind, b.X, -b.Y, 22); // карта порывов: по шестой части за кадр
   ENV.uCloud.value.set(-G.t * 0.0035 * G.wind.sx, G.t * 0.0035 * G.wind.sy); G.water.setBoat(b); G.water.setTrail(b, P.wake.pts);
   G.shore.flag.rotation.y = Math.atan2(G.wind.sy, G.wind.sx) + Math.sin(G.t * 7) * 0.12;
 
@@ -569,14 +574,19 @@ function drawDial(b) {
   dc.strokeStyle = b.luff > 0.5 ? '#7fd0ff' : '#ff8a2a'; dc.lineWidth = 8; dc.lineCap = 'round'; dc.beginPath(); dc.moveTo(c, c - 12); dc.lineTo(c + Math.sin(b.boom) * 62, c - 12 + Math.cos(b.boom) * 62); dc.stroke();
 }
 let hintKey = '', hintT = 0;
+// Приборы обновляются много раз в секунду, а меняются редко. Запись в DOM того же значения всё равно заставляет
+// браузер пересчитывать стили и раскладку, поэтому пишем только изменившееся
+const setT = (el, s) => { if (el.textContent !== s) el.textContent = s; };
+const setP = (el, k, v) => { if (el[k] !== v) el[k] = v; };
+const setSt = (el, k, v) => { if (el.style[k] !== v) el.style[k] = v; };
 // на лавировке: знак ушёл за траверз, значит другим галсом он уже достаётся
 function tackNow(R, b) { const tg = target(R, G.player.leg, false), brg = Math.atan2(tg.X - b.X, tg.Y - b.Y);
   return Math.abs(wrapPi(brg - b.th)) > 92 * DEG && Math.abs(wrapPi(brg - b.twd)) < 120 * DEG && Math.hypot(tg.X - b.X, tg.Y - b.Y) > 25; }
 function updateHud(dt, b, sp) {
   if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; }
   const heel = Math.abs(b.phi) / DEG, R = G.race;
-  $('vign').style.boxShadow = `inset 0 0 180px 40px rgba(190,20,10,${(smooth(32, 58, heel) * 0.5).toFixed(2)})`;
-  const hold = b.capsized && !b.righting && !(b.noRight > 0); $('ring').hidden = !hold; if (hold) $('ringarc').setAttribute('stroke-dashoffset', String(314 * (1 - b.rightHold)));
+  setSt($('vign'), 'opacity', String(+smooth(32, 58, heel).toFixed(2)));
+  const hold = b.capsized && !b.righting && !(b.noRight > 0); setP($('ring'), 'hidden', !hold); if (hold) $('ringarc').setAttribute('stroke-dashoffset', String(314 * (1 - b.rightHold)));
   // метка цели: висит над знаком, а если он вне кадра -- прижата к краю экрана с той стороны, где он есть
   const mk = $('mark');
   const tgM = R ? (G.player.leg < 4 ? target(R, G.player.leg, false) : null) : X.markTarget();
@@ -584,18 +594,18 @@ function updateHud(dt, b, sp) {
     tmpV.set(tg.X, 4.5, -tg.Y).project(camera); const behind = tmpV.z > 1; let mx = (tmpV.x * 0.5 + 0.5) * w, my = (1 - (tmpV.y * 0.5 + 0.5)) * hh;
     if (behind) { mx = w - mx; my = hh * 0.5; mx = mx < w / 2 ? 0 : w; }
     const cxm = clamp(mx, 74, w - 74), cym = clamp(my, 150, hh - 150), off = behind || cxm !== mx || cym !== my;
-    mk.hidden = false; mk.className = 'hud' + (off ? ' off' : ''); mk.style.transform = `translate(${cxm}px,${cym}px) translate(-50%,-100%)`;
-    if (G.frame % 6 === 0) $('markd').textContent = `${off ? (cxm < w / 2 ? '◀ ' : '') : ''}${tg.label || ['старт', 'знак 1', 'знак 2', 'финиш'][G.player.leg]} · ${Math.hypot(tg.X - b.X, tg.Y - b.Y).toFixed(0)} м${off && cxm > w / 2 ? ' ▶' : ''}`;
-  } else mk.hidden = true;
+    setP(mk, 'hidden', false); setP(mk, 'className', 'hud' + (off ? ' off' : '')); mk.style.transform = `translate(${cxm}px,${cym}px) translate(-50%,-100%)`;
+    if (G.frame % 6 === 0) setT($('markd'), `${off ? (cxm < w / 2 ? '◀ ' : '') : ''}${tg.label || ['старт', 'знак 1', 'знак 2', 'финиш'][G.player.leg]} · ${Math.hypot(tg.X - b.X, tg.Y - b.Y).toFixed(0)} м${off && cxm > w / 2 ? ' ▶' : ''}`);
+  } else setP(mk, 'hidden', true);
   if (G.frame % 3) return;
-  $('kn').textContent = (sp * KN).toFixed(1);
-  $('pos').textContent = b.kind ? b.status() : (b.capsized ? 'оверкиль' : pointOfSail(Math.abs(b.twa)).toLowerCase()) + (heel > 12 ? ` · крен ${heel.toFixed(0)}°` : '');
-  $('pos').style.color = heel > 34 ? '#ff8a7a' : '';
-  { const hh = Math.floor(G.clock), mm = Math.floor((G.clock % 1) * 60); $('windtxt').textContent = `${(b.tws * KN).toFixed(0)} уз · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`; }
+  setT($('kn'), (sp * KN).toFixed(1));
+  setT($('pos'), b.kind ? b.status() : (b.capsized ? 'оверкиль' : pointOfSail(Math.abs(b.twa)).toLowerCase()) + (heel > 12 ? ` · крен ${heel.toFixed(0)}°` : ''));
+  setSt($('pos'), 'color', heel > 34 ? '#ff8a7a' : '');
+  { const hh = Math.floor(G.clock), mm = Math.floor((G.clock % 1) * 60); setT($('windtxt'), `${(b.tws * KN).toFixed(0)} уз · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`); }
   drawDial(b);
   if (R) { const P = G.player, all = [P, ...G.rivals.filter((r) => !r.out), ...X.onlineRows(R, true)].sort((x, y) => progress(R, y) - progress(R, x)), tg = target(R, P.leg, false), d = Math.hypot(tg.X - b.X, tg.Y - b.Y);
-    $('rtime').textContent = fmt(R.over ? P.time : R.t);
-    $('rinfo').textContent = R.t < 0 ? 'до старта' : `${['старт', 'верхний знак', 'нижний знак', 'финиш', 'финиш'][P.leg]} ${d.toFixed(0)} м · ${all.indexOf(P) + 1}/${all.length}`; } else X.hud();
+    setT($('rtime'), fmt(R.over ? P.time : R.t));
+    setT($('rinfo'), R.t < 0 ? 'до старта' : `${['старт', 'верхний знак', 'нижний знак', 'финиш', 'финиш'][P.leg]} ${d.toFixed(0)} м · ${all.indexOf(P) + 1}/${all.length}`); } else X.hud();
   // подсказка: одна, самая важная; спокойные гаснут сами
   let h = '', alert = false; const twa = Math.abs(b.twa) / DEG, T = G.modeT ?? 99;
   if (b.kind) { const q = X.hint(b, T); h = q[0]; alert = q[1]; }
@@ -613,5 +623,5 @@ function updateHud(dt, b, sp) {
   if (h !== hintKey) { hintKey = h; const el = $('hint'); el.hidden = !h; el.textContent = h; el.className = 'hud' + (alert ? ' alert' : ''); }
 }
 
-window.__setQ = (q) => setQuality(q); window.__game = () => { if (G) G.__X = X; return G; }; window.__tick = (sec, inp) => { Object.assign(input, inp || {}); for (let i = 0; i < sec * 60; i++) tick(1 / 60); }; // для автотестов
+window.__setQ = (q) => setQuality(q); window.__gfx = () => ({ renderer, scene, camera, post, sunL }); window.__game = () => { if (G) G.__X = X; return G; }; window.__tick = (sec, inp) => { Object.assign(input, inp || {}); for (let i = 0; i < sec * 60; i++) tick(1 / 60); }; // для автотестов
 init().catch((e) => { $('loadmsg').textContent = 'Не удалось запустить: ' + e.message; console.error(e); });
