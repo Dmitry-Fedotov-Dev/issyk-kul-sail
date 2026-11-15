@@ -43,6 +43,14 @@ function updateEnv(sky) { const m = sky.material; envScene.add(sky); m.uniforms.
   const old = envTex; envTex = pmrem.fromCubemap(envRT.texture).texture; scene.environment = envTex; if (old) old.dispose(); }
 function resize() { const w = window.innerWidth, h = window.innerHeight; if (G) G.spray.uniforms.uScale.value = (h * pixelRatio) / (2 * Math.tan((camera.fov * Math.PI) / 360)); renderer.setPixelRatio(pixelRatio); if (post) setTimeout(() => post.resize(), 0); renderer.setSize(w, h, false); { const d = renderer.getDrawingBufferSize(new THREE.Vector2()); setRidgeRes(d.x, d.y); } camera.aspect = w / h; camera.updateProjectionMatrix(); }
 window.addEventListener('resize', resize);
+// Браузер может отобрать у вкладки графику: открыто много вкладок с WebGL, кончилась видеопамять, сбросился драйвер.
+// Вернул -- перезапускаем страницу (ссылка друга в адресе сохраняется, если загрузка не дошла до конца). Не вернул за
+// 4 секунды -- показываем экран с объяснением; нажатие перезагружает.
+let glLost = 0;
+canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); glLost = 1;
+  setTimeout(() => { if (!glLost) return; const L = $('load'); L.hidden = false; L.classList.remove('done'); clearInterval(window.__tipTimer);
+    $('loadmsg').textContent = 'Браузер сбросил графику: похоже, открыто много вкладок с игрой или 3D. Закройте лишние и нажмите сюда'; L.style.cursor = 'pointer'; L.onclick = () => location.reload(); }, 4000); });
+canvas.addEventListener('webglcontextrestored', () => { glLost = 0; location.reload(); });
 
 const audio = makeAudio();
 const input = { left: false, right: false, ease: false };
@@ -84,7 +92,8 @@ async function init() {
   // на старте регаты). Потом рисуем один кадр -- и только после этого открываем меню.
   await loadStep(74, 'Настраиваем свет, воду и небо…');
   setRivals(true); G.player.b.updatePose(G.waves, 0, G.h); for (const e of [G.player, ...G.rivals]) e.model.update(e.b, 0.016, 0);
-  try { if (renderer.compileAsync) await renderer.compileAsync(scene, camera); else renderer.compile(scene, camera); } catch (e) { console.warn('предварительная сборка шейдеров не удалась, соберутся по ходу', e); }
+  // Ждём сборку не дольше 10 с: если браузер отобрал контекст, three.js ждал бы готовности шейдеров вечно (загрузка «висела»)
+  try { if (renderer.compileAsync) await Promise.race([renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 10000))]); else renderer.compile(scene, camera); } catch (e) { console.warn('предварительная сборка шейдеров не удалась, соберутся по ходу', e); }
   updateCamera(0.016, G.player.b, 0); if (post) post.render(scene, camera); else renderer.render(scene, camera); setRivals(false);
   await loadStep(100, 'Отдать швартовы!');
   // снимок растворяется в живой сцене; меню появляется уже поверх неё
