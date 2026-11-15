@@ -5,8 +5,12 @@ import { MODEL, FX } from './craftmodels.js';
 import { makeTraffic } from './traffic.js';
 import { makeNet, radiusOf, encNpc, followNpc } from './net.js';
 import { makeRiver } from './rivermode.js';
+import { RIVER } from './river.js';
+import { TRAILS, RIVERS } from './trails.js';
+import { MAP } from './world.js';
 import { makeWake } from './fx.js';
 import { makeMark } from './world.js';
+const MAP_M = MAP.M, MAP_N = MAP.N, MAP_OX = MAP.OX, MAP_OY = MAP.OY;
 import { clamp, wrapPi, KN, DEG, smooth, PRESETS } from './sim.js';
 import { makeHook } from './hook.js';
 
@@ -230,26 +234,73 @@ export function installExtra(A) {
       shareLink(u.toString(), `Поплыли отсюда: ${startAt.label} — «Парус Иссык-Куля»`); };
     journal(); refreshMenu(); }
   // карта котловины: клик задаёт место старта
-  // Карта собирается один раз в своём разрешении (клетка 600 м), а на экран рисуется окном: приближение и сдвиг.
-  // Телефон: два пальца -- приблизить к точке между ними, один палец -- сдвинуть, касание без сдвига -- выбрать место.
-  // Компьютер: колесо -- приблизить к курсору, перетаскивание -- сдвинуть, щелчок -- выбрать.
-  let mapBase = null; const mv = { z: 1, cx: 0, cy: 0 }, mptr = new Map(); let mPinch = 0, mMoved = false;
-  function mapImage() { if (mapBase) return mapBase; const g = G.far.userData.grid, cv = document.createElement('canvas'); cv.width = g.W; cv.height = g.H; const c = cv.getContext('2d'), im = c.createImageData(g.W, g.H);
-    for (let j = 0; j < g.H; j++) for (let i = 0; i < g.W; i++) { const h = g.hs[j * g.W + i], q = (j * g.W + i) * 4, sh = clamp(0.75 + (h - (g.hs[j * g.W + Math.min(i + 1, g.W - 1)])) / 400, 0.45, 1.15); let r, gg, bb;
-      if (h < 0) { r = 22; gg = 92; bb = 170; } else if (h > 2100) { r = gg = bb = 245 * sh; } else if (h > 1300) { r = 150 * sh; gg = 140 * sh; bb = 130 * sh; } else if (h > 500) { r = 110 * sh; gg = 140 * sh; bb = 80 * sh; } else { r = 205 * sh; gg = 185 * sh; bb = 130 * sh; }
-      im.data[q] = r; im.data[q + 1] = gg; im.data[q + 2] = bb; im.data[q + 3] = 255; }
-    c.putImageData(im, 0, 0); return (mapBase = cv); }
-  // окно карты в клетках: ширина W/z, центр (cx, cy), не выходит за края
+  // ---------- карта места старта: настоящая топокарта ----------
+  // Подложка -- квадраты, снятые сверху с самого 3D-мира (main.js, mapTile): тот же рельеф, посёлки и тушь хребтов, свет с
+  // северо-запада. Уровень квадратов подбирается под масштаб; пока точный не снят, видно растянутый грубый -- резкость
+  // нарастает, как на спутниковых картах. Поверх -- вектор, он чёткий при любом приближении: урез воды и горизонтали
+  // (по всей котловине через 500 м, у Чолпон-Аты -- через 100 м), вблизи -- тропы и реки из OpenStreetMap, подписи.
+  // Телефон: два пальца -- приблизить, один -- сдвинуть, касание -- выбрать. Компьютер: колесо, перетаскивание, щелчок.
+  const mv = { z: 1, cx: 0, cy: 0 }, mptr = new Map(); let mPinch = 0, mMoved = false, mapVec = null, mapRaf = 0;
+  // изолинии (марширующие квадраты), сшитые в линии; v -- высоты сетки W x H, lv -- уровень; точки -- через tr(i, j)
+  function isolines(v, W, H, lv, tr, out) { const pos = new Map(), adj = new Map(), HE = (i, j) => 2 * (j * W + i), VE = (i, j) => 2 * (j * W + i) + 1;
+    const cross = (id, v0, v1, i0, j0, i1, j1) => { if ((v0 < lv) === (v1 < lv)) return -1; if (!pos.has(id)) { const t = (lv - v0) / (v1 - v0); pos.set(id, tr(i0 + (i1 - i0) * t, j0 + (j1 - j0) * t)); } return id; };
+    const link = (p, q) => { for (const [x, y] of [[p, q], [q, p]]) { let l = adj.get(x); if (!l) adj.set(x, (l = [])); l.push(y); } };
+    for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) { const A = v[j * W + i], B = v[j * W + i + 1], C = v[(j + 1) * W + i + 1], D = v[(j + 1) * W + i];
+      if ((A < lv) === (B < lv) && (B < lv) === (C < lv) && (C < lv) === (D < lv)) continue;
+      const e = [cross(HE(i, j), A, B, i, j, i + 1, j), cross(VE(i + 1, j), B, C, i + 1, j, i + 1, j + 1), cross(HE(i, j + 1), D, C, i, j + 1, i + 1, j + 1), cross(VE(i, j), A, D, i, j, i, j + 1)].filter((x) => x >= 0);
+      if (e.length === 2) link(e[0], e[1]); else if (e.length === 4) { link(e[0], e[1]); link(e[2], e[3]); } }
+    const used = new Set(), walk = (st) => { const pts = [pos.get(st)]; used.add(st); let cur = st; for (;;) { const nx = adj.get(cur).find((q) => !used.has(q)); if (nx === undefined) break; used.add(nx); pts.push(pos.get(nx)); cur = nx; }
+      if (pts.length > 2) { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; const fl = new Float32Array(pts.length * 2); pts.forEach((p, k) => { fl[k * 2] = p[0]; fl[k * 2 + 1] = p[1]; x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); });
+        out.push({ lv, p: fl, bb: [x0, y0, x1, y1] }); } };
+    for (const [k, nb] of adj) if (!used.has(k) && nb.length === 1) walk(k); for (const k of adj.keys()) if (!used.has(k)) walk(k); }
+  // вектор карты: считается один раз при первом открытии. Координаты -- клетки грубой карты (как у квадратов)
+  function buildVec() { if (mapVec) return mapVec; const g = G.far.userData.grid, LK = 1601, far = [], near = [], M = MAP_M, S2 = 2;
+    for (let asl = 2000; asl <= 5000; asl += 500) isolines(g.hs, g.W, g.H, asl - LK, (i, j) => [i, j], far);
+    { const tmp = []; isolines(g.hs, g.W, g.H, 0, (i, j) => [i, j], tmp); const nearLake = (x, y) => { for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const i = Math.round(x) + di, j = Math.round(y) + dj; if (i >= 0 && j >= 0 && i < g.W && j < g.H && G.lake[j * g.W + i]) return true; } return false; };
+      for (const o of tmp) if (nearLake(o.p[0], o.p[1])) far.push(o); }
+    const N = Math.floor((MAP_N - 1) / S2) + 1, X0n = -MAP_OX * M, Y1n = MAP_OY * M, hs = new Float32Array(N * N), step = M * S2;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) hs[j * N + i] = G.h(X0n + i * step, Y1n - j * step);
+    const trN = (i, j) => [(X0n + i * step - g.X0) / g.STEP, (g.Y1 - (Y1n - j * step)) / g.STEP];
+    for (let asl = 1700; asl <= 4800; asl += 100) isolines(hs, N, N, asl - LK, trN, near); isolines(hs, N, N, 0, trN, near);
+    const lines = (str) => str.split(';').map((w) => { const q = w.split(','), fl = new Float32Array(q.length - (q.length % 2)); for (let k = 0; k + 1 < q.length; k += 2) { fl[k] = (+q[k] * 4 - g.X0) / g.STEP; fl[k + 1] = (g.Y1 - +q[k + 1] * 4) / g.STEP; } return fl; });
+    const nearBox = [(X0n - g.X0) / g.STEP, (g.Y1 - Y1n) / g.STEP, (X0n + (N - 1) * step - g.X0) / g.STEP, (g.Y1 - (Y1n - (N - 1) * step)) / g.STEP];
+    const P = (X, Y) => [(X - g.X0) / g.STEP, (g.Y1 - Y) / g.STEP], rv = RIVER.x.length >> 1;
+    const labels = [[0, 1500, 'Чолпон-Ата', 2], [-73700, -21000, 'Балыкчы', 2], [107300, -17800, 'Каракол', 2], [RIVER.x[rv], RIVER.y[rv], 'ущ. Чон-Ак-Суу', 1], [10000, -32000, 'озеро Иссык-Куль', 3], [-15000, 22000, 'хребет Кунгей Ала-Тоо', 3], [30000, -75000, 'хребет Терскей Ала-Тоо', 3]].map(([X, Y, t, k]) => [...P(X, Y), t, k]);
+    return (mapVec = { far, near, nearBox, trails: lines(TRAILS), rivers: lines(RIVERS), labels }); }
   const mapWin = () => { const g = G.far.userData.grid, sw = g.W / mv.z, sh = g.H / mv.z; mv.cx = clamp(mv.cx, sw / 2, g.W - sw / 2); mv.cy = clamp(mv.cy, sh / 2, g.H - sh / 2); return { sx: mv.cx - sw / 2, sy: mv.cy - sh / 2, sw, sh }; };
-  function drawMap() { const g = G.far.userData.grid, cv = $('mapcv'), r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.max(1, Math.round((r.width || g.W) * dpr)), h = Math.round(w * g.H / g.W);
+  function drawMap() { mapRaf = 0; const g = G.far.userData.grid, cv = $('mapcv'), r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.max(1, Math.round((r.width || g.W) * dpr)), h = Math.round(w * g.H / g.W);
     if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
-    const c = cv.getContext('2d'), v = mapWin(), k = w / v.sw; c.imageSmoothingEnabled = true; c.imageSmoothingQuality = "high"; c.drawImage(mapImage(), v.sx, v.sy, v.sw, v.sh, 0, 0, w, h);
-    const dot = (X, Y, col, rr) => { const x = ((X - g.X0) / g.STEP - v.sx) * k, y = ((g.Y1 - Y) / g.STEP - v.sy) * k; c.fillStyle = col; c.strokeStyle = '#fff'; c.lineWidth = 1.5 * dpr; c.beginPath(); c.arc(x, y, rr * dpr, 0, 7); c.fill(); c.stroke(); };
+    const c = cv.getContext('2d'), v = mapWin(), k = w / v.sw, vec = buildVec(); c.fillStyle = '#d9cfb2'; c.fillRect(0, 0, w, h); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    // квадраты: нужный уровень и под ним два грубее (подложка, пока точный снимается)
+    const L = clamp(Math.ceil(Math.log2((k * g.W) / 256)), 0, 8); A.mapTiles();
+    for (let l = Math.max(0, L - 2); l <= L; l++) { const n = 2 ** l, tc = g.W / n, i0 = Math.max(0, Math.floor(v.sx / tc)), i1 = Math.min(n - 1, Math.floor((v.sx + v.sw) / tc)), j0 = Math.max(0, Math.floor(v.sy / tc)), j1 = Math.floor((v.sy + v.sh) / tc);
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const t = A.mapTile(l, i, j); if (t) c.drawImage(t, (i * tc - v.sx) * k, (j * tc - v.sy) * k, tc * k + 0.6, tc * k + 0.6); } }
+    // вектор: горизонтали тонко, каждая 500-метровая и урез -- плотнее
+    const X = (x) => (x - v.sx) * k, Y = (y) => (y - v.sy) * k, vis = (bb) => bb[2] >= v.sx && bb[0] <= v.sx + v.sw && bb[3] >= v.sy && bb[1] <= v.sy + v.sh;
+    const poly = (p) => { c.beginPath(); c.moveTo(X(p[0]), Y(p[1])); for (let q = 2; q < p.length; q += 2) c.lineTo(X(p[q]), Y(p[q + 1])); c.stroke(); };
+    const nearOn = mv.z >= 6, nb = vec.nearBox; c.lineJoin = 'round'; c.lineCap = 'round';
+    c.save(); if (nearOn) { c.beginPath(); c.rect(0, 0, w, h); c.rect(X(nb[0]), Y(nb[1]), X(nb[2]) - X(nb[0]), Y(nb[3]) - Y(nb[1])); c.clip('evenodd'); }
+    for (const o of vec.far) if (vis(o.bb)) { const sh0 = o.lv === 0; if (!sh0 && mv.z < 3 && Math.round(o.lv + 1601) % 1000) continue; /* издалека -- через 1000 м */ c.strokeStyle = sh0 ? 'rgba(8,24,52,.85)' : 'rgba(70,40,20,.42)'; c.lineWidth = (sh0 ? 1.4 : 0.8) * dpr; poly(o.p); }
+    c.restore();
+    if (nearOn) for (const o of vec.near) if (vis(o.bb)) { const asl = Math.round(o.lv + 1601), sh0 = o.lv === 0, maj = asl % 500 === 0; c.strokeStyle = sh0 ? 'rgba(8,24,52,.85)' : maj ? 'rgba(70,40,20,.5)' : 'rgba(70,40,20,.26)'; c.lineWidth = (sh0 ? 1.4 : maj ? 0.9 : 0.6) * dpr; poly(o.p); }
+    if (mv.z >= 10) { c.setLineDash([5 * dpr, 3.5 * dpr]); c.strokeStyle = 'rgba(255,138,42,.9)'; c.lineWidth = 1.3 * dpr; for (const p of vec.trails) poly(p); c.setLineDash([]);
+      c.strokeStyle = 'rgba(120,200,255,.85)'; c.lineWidth = 1 * dpr; for (const p of vec.rivers) poly(p); }
+    // подписи: города -- всегда, ущелье -- ближе, озеро и хребты -- издалека
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (const [lx, ly, t, kind] of vec.labels) { if ((kind === 1 && mv.z < 4) || (kind === 3 && mv.z > 6)) continue; const x = X(lx), y = Y(ly) - (kind === 2 ? 12 * dpr : 0); if (x < -200 || x > w + 200 || y < -40 || y > h + 40) continue;
+      c.font = `${kind === 3 ? 'italic 600' : '700'} ${(kind === 3 ? 11 : 12) * dpr}px "Avenir Next","Segoe UI",Arial,sans-serif`; c.lineWidth = 3 * dpr; c.strokeStyle = kind === 3 ? 'rgba(8,24,52,.55)' : 'rgba(255,255,255,.9)'; c.strokeText(t, x, y); c.fillStyle = kind === 3 ? '#e8f1ff' : '#10233f'; c.fillText(t, x, y); }
+    const dot = (Xw, Yw, col, rr) => { const x = X((Xw - g.X0) / g.STEP), y = Y((g.Y1 - Yw) / g.STEP); c.fillStyle = col; c.strokeStyle = '#fff'; c.lineWidth = 1.5 * dpr; c.beginPath(); c.arc(x, y, rr * dpr, 0, 7); c.fill(); c.stroke(); };
     dot(0, 0, '#ff7a1a', 4); if (startAt) dot(startAt.X, startAt.Y, '#ffd21f', 5);
+    // масштабная линейка
+    const mpp = (g.STEP / k) * dpr, nice = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000].find((m) => m / mpp > 60) || 50000, bw = (nice / mpp) * dpr;
+    c.fillStyle = 'rgba(7,26,58,.7)'; c.fillRect(8 * dpr, h - 26 * dpr, bw + 16 * dpr, 18 * dpr); c.fillStyle = '#fff'; c.fillRect(16 * dpr, h - 13 * dpr, bw, 2 * dpr);
+    c.font = `600 ${10 * dpr}px sans-serif`; c.textAlign = 'left'; c.fillText(nice >= 1000 ? nice / 1000 + ' км' : nice + ' м', 16 * dpr, h - 19 * dpr);
     $('mzoom').hidden = mv.z <= 1.01; }
-  // приблизить в z раз, удерживая точку экрана (px, py -- доли ширины и высоты холста) на месте
-  function mapZoom(f, px, py) { const g = G.far.userData.grid, v = mapWin(), gx = v.sx + px * v.sw, gy = v.sy + py * v.sh; mv.z = clamp(mv.z * f, 1, 12);
-    const sw = g.W / mv.z, sh = g.H / mv.z; mv.cx = gx - (px - 0.5) * sw; mv.cy = gy - (py - 0.5) * sh; drawMap(); }
+  const redrawMap = () => { if (!mapRaf && !$('mapdlg').hidden) mapRaf = requestAnimationFrame(drawMap); };
+  G.onTiles = () => { if (!$('mapdlg').hidden) redrawMap(); };
+  // приблизить в f раз, удерживая точку экрана (px, py -- доли холста) на месте
+  function mapZoom(f, px, py) { const g = G.far.userData.grid, v = mapWin(), gx = v.sx + px * v.sw, gy = v.sy + py * v.sh; mv.z = clamp(mv.z * f, 1, 64);
+    const sw = g.W / mv.z, sh = g.H / mv.z; mv.cx = gx - (px - 0.5) * sw; mv.cy = gy - (py - 0.5) * sh; redrawMap(); }
   function pickMap(ev) { const g = G.far.userData.grid, r = $('mapcv').getBoundingClientRect(), v = mapWin(), gx = v.sx + ((ev.clientX - r.left) / r.width) * v.sw, gy = v.sy + ((ev.clientY - r.top) / r.height) * v.sh;
     const X = g.X0 + gx * g.STEP, Y = g.Y1 - gy * g.STEP, h = G.h(X, Y), d = Math.hypot(X, Y) / 1000;
     const az = (Math.atan2(X, Y) / DEG + 360) % 360, dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'][Math.round(az / 45) % 8];
@@ -264,12 +315,12 @@ export function installExtra(A) {
       if (mptr.size >= 2) { o.x = n.x; o.y = n.y; o.px = n.px; o.py = n.py; const [p, q] = [...mptr.values()], d = Math.hypot(p.x - q.x, p.y - q.y);
         if (mPinch > 0 && d > 0) mapZoom(d / mPinch, (p.px + q.px) / 2, (p.py + q.py) / 2); mPinch = d; return; }
       if (Math.hypot(n.x - o.x0, n.y - o.y0) > 6) mMoved = true;
-      if (mMoved && mv.z > 1) { const v = mapWin(); mv.cx -= (n.px - o.px) * v.sw; mv.cy -= (n.py - o.py) * v.sh; drawMap(); }
+      if (mMoved && mv.z > 1) { const v = mapWin(); mv.cx -= (n.px - o.px) * v.sw; mv.cy -= (n.py - o.py) * v.sh; redrawMap(); }
       o.x = n.x; o.y = n.y; o.px = n.px; o.py = n.py; });
     const up = (e) => { const o = mptr.get(e.pointerId); mptr.delete(e.pointerId); if (mptr.size < 2) mPinch = 0; if (o && e.type === 'pointerup' && !mMoved && mptr.size === 0) pickMap(e); };
     cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
     cv.addEventListener('wheel', (e) => { e.preventDefault(); const p = pt(e); mapZoom(Math.exp(-e.deltaY * 0.0015), p.px, p.py); }, { passive: false });
-    $('mzoom').onclick = () => { mv.z = 1; drawMap(); }; window.addEventListener('resize', () => { if (!$('mapdlg').hidden) drawMap(); }); }
+    $('mzoom').onclick = () => { mv.z = 1; redrawMap(); }; window.addEventListener('resize', () => { if (!$('mapdlg').hidden) drawMap(); }); }
 
   // ---------- лобби онлайн-заезда ----------
   const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);

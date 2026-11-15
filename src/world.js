@@ -36,6 +36,7 @@ export async function loadHeight() {
 export const ENV = {
   uSun: { value: SUN }, uHor: { value: new THREE.Vector3(0.56, 0.76, 0.97) }, uCover: { value: 0.4 }, uCirrus: { value: 0.3 },
   uStorm: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
+  uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() }, // съёмка карты сверху: дно плавно уходит в цвет озера на карте
 };
 export const GLSL_COMMON = /* glsl */`
 uniform vec3 uSun, uHor; uniform float uCover, uCirrus, uStorm, uCloudScale, uSunI, uDay, uDusk; uniform vec2 uCloud;
@@ -161,10 +162,13 @@ export function terrainMaterial(shore = true) {
     uniforms: { ...ENV }, extensions: { derivatives: true },
     vertexShader: CURVE + `attribute float aH; varying vec3 vP; varying vec3 vN; varying float vH; void main(){ vP=position; vN=normal; vH=aH; vec3 q=position; q.y-=curve(q); gl_Position=projectionMatrix*modelViewMatrix*vec4(q,1.); }`,
     fragmentShader: GLSL_COMMON + /* glsl */`
-varying vec3 vP; varying vec3 vN; varying float vH;
+varying vec3 vP; varying vec3 vN; varying float vH; uniform float uMap; uniform vec3 uMapDeep; uniform sampler2D uLakeM; uniform vec4 uLakeT;
 // гребневой шум: острые хребты и кулуары, которых нет в карте высот с её шагом в десятки метров
 float ridged(vec2 p){ float a=0.5, s=0., w=1.; for(int i=0;i<FBM_OCT;i++){ float r=1.-abs(2.*vnoise(p)-1.); r*=r*w; s+=a*r; w=clamp(r*1.6,0.,1.); p=mat2(1.6,1.2,-1.2,1.6)*p+7.; a*=0.5; } return s; }
-void main(){ vec3 N=normalize(vN); float h=vH, mt=smoothstep(70.,600.,h);
+void main(){ vec3 N=normalize(vN); float h=vH;
+  // на карте вода -- только сам Иссык-Куль: низины за хребтами ниже уровня озера (Чуйская долина) -- суша
+  if(uMap>0. && texture2D(uLakeM, vec2((vP.x-uLakeT.x)*uLakeT.z, (uLakeT.y+vP.z)*uLakeT.w)).r<0.5) h=max(h,3.);
+  float mt=smoothstep(70.,600.,h);
   // рельеф в нормали: склоны изрезаны рёбрами, свет ложится жёстко
   float rs=0.0016, e=30.; vec2 rp=vP.xz*rs; float r0=0.45, rx=0.45, rz=0.45;
   // Рябь вдали: когда деталь рисунка становится мельче пикселя, она мерцает при движении камеры. Поэтому каждая
@@ -223,6 +227,7 @@ void main(){ vec3 N=normalize(vN); float h=vH, mt=smoothstep(70.,600.,h);
   #ifdef FDEPTH
   gl_FragDepth = h < -0.25 ? 1.0 : gl_FragCoord.z;
   #endif
+  if(uMap>0.) col=mix(col, uMapDeep, smoothstep(1.5,8.5,-h)*uMap);
   gl_FragColor=vec4(col,1.); ${END} }`,
   });
   tm.userData.defs = defs; QMATS.push(tm); return tm;

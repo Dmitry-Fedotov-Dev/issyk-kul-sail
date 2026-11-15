@@ -70,16 +70,23 @@ async function init() {
   await loadStep(18, 'Читаем карту высот…');
   const { h, tex } = await loadHeight();
   const sky = makeSky(); scene.add(sky);
-  scene.add(makeTerrain(h));
+  const nearT = makeTerrain(h); scene.add(nearT);
   await loadStep(38, 'Строим берега и хребты…');
   const far = await makeFarTerrain(RIVER_HOLES); scene.add(far);
+  // маска озера для карты: заливка от середины Иссык-Куля по клеткам ниже уреза (низины за хребтами в неё не попадают)
+  const lake = (() => { const { hs, W, H, X0, Y1, STEP } = far.userData.grid, m = new Uint8Array(W * H), st = [Math.round((Y1 + 25000) / STEP) * W + Math.round((10000 - X0) / STEP)];
+    while (st.length) { const k = st.pop(); if (m[k] || hs[k] >= 0) continue; m[k] = 255; const i = k % W, j = (k / W) | 0; if (i > 0) st.push(k - 1); if (i < W - 1) st.push(k + 1); if (j > 0) st.push(k - W); if (j < H - 1) st.push(k + W); }
+    for (let r = 0; r < 2; r++) { const c = m.slice(); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (c[k]) continue; // расширяем на 2 клетки: береговая полоса целиком внутри
+        if ((i > 0 && c[k - 1]) || (i < W - 1 && c[k + 1]) || (j > 0 && c[k - W]) || (j < H - 1 && c[k + W])) m[k] = 255; } }
+    const t = new THREE.DataTexture(m, W, H, THREE.RedFormat); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
+    ENV.uLakeM.value = t; ENV.uLakeT.value.set(X0 - STEP / 2, Y1 + STEP / 2, 1 / (W * STEP), 1 / (H * STEP)); return m; })();
   const ridges = makeRidges(h, far.userData.grid, RIVER_HOLES); scene.add(ridges); // тушь по гребням гор
   // Высота в любой точке котловины: у Чолпон-Аты -- по подробной карте, дальше -- по грубой (шаг 600 м)
   const hNear = h, NX0 = -MAP.OX * MAP.M, NX1 = (MAP.N - 1 - MAP.OX) * MAP.M, NY0 = (MAP.OY - (MAP.N - 1)) * MAP.M, NY1 = MAP.OY * MAP.M;
   const hA = (x, y) => (x > NX0 && x < NX1 && y > NY0 && y < NY1 ? hNear(x, y) : far.userData.heightAt(x, y));
   await loadStep(56, 'Наливаем озеро…');
   const water = makeWater(tex, 1); scene.add(water.mesh);
-  const shore = makeShore(h, scene);
+  const before = new Set(scene.children), shore = makeShore(h, scene), shoreObjs = scene.children.filter((o) => !before.has(o));
   const hb = (x, y) => Math.max(hA(x, y), shore.pierH(x, y)); // дно + причал: то, обо что можно удариться
   const wind = new Wind(PRESETS.santash, hA), waves = new Waves();
   const spray = makeSpray(); scene.add(spray.mesh);
@@ -89,10 +96,10 @@ async function init() {
   const rivals = [], ensureRivals = () => { if (!rivals.length) rivals.push(mk({ hull: 0xf4f3ee, accent: '#1f6fd0', text: 'KGZ 21' }, 'Ала-Тоо', 0.95), mk({ hull: 0xe9c33c, accent: '#20242b', text: 'KGZ 4' }, 'Манас', 0.9), mk({ hull: 0x2f8f5a, accent: '#f4f3ee', text: 'KGZ 33' }, 'Чайка', 0.86)); };
   const marks = { W: makeMark(0xff7a1a), L: makeMark(0xffd21f), pin: makeMark(0xff3b30), com: makeMark(0x2f7de2) };
   for (const k in marks) { marks[k].visible = false; scene.add(marks[k]); }
-  G = { ts: TS, world: TS === 1 ? 'lake' : 'mini', ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
+  G = { lake, mapObjs: [nearT, far, ...shoreObjs], ts: TS, world: TS === 1 ? 'lake' : 'mini', ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
     cam: 0, camYaw: 0, orbit: 0, orbitP: 0, zoom: 1, orbitV: 0, shake: 0, hintT: 0, free: null, toastT: 0, frame: 0, slow: 0 };
   if (!PRESETS[G.preset]) G.preset = 'santash';
-  X = installExtra({ G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
+  X = installExtra({ mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
     setPreset: (id) => { if (PRESETS[id]) { G.preset = id; applyPreset(); } } });
   buildMenu(); applyPreset(); toMenu(); resize();
   // Шейдеры собираются при первом показе каждого объекта, и это подвешивало меню на несколько секунд. Собираем всё
@@ -428,6 +435,35 @@ function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; G.clock = (G.cl
   if (sinEl > 0.02) { LIGHT.copy(SUN); sunL.color.setRGB(1, 0.95 - 0.33 * dusk, 0.86 - 0.5 * dusk); sunL.intensity = 3.1 * sI; } else { LIGHT.set(-SUN.x, 0.55, -SUN.z).normalize(); sunL.color.setRGB(0.6, 0.72, 1); sunL.intensity = 0.32 * (1 - st); }
   hemi.intensity = 1.9 * (1 - 0.35 * st) * (0.1 + 0.9 * day); G.spray.uniforms.uLight.value = 0.12 + 0.88 * sI; WAKE_LIGHT.value = 0.1 + 0.9 * day;
   envT -= dt; if (dt > 0 && envT <= 0) { envT = 12; updateEnv(G.sky); } }
+// ---------- топографическая карта: квадраты, снятые сверху с настоящего 3D-мира ----------
+// Ортокамера над квадратом смотрит вниз (север -- вверх) и видит только рельеф, берег с посёлками и тушь хребтов (слои
+// 1 и 2): ни неба, ни лодок, ни воды -- озеро даёт цвет фона, мелководье -- цвет дна из шейдера рельефа. Свет единый
+// картографический: солнце с северо-запада, полдень, без облаков, -- как отмывка на топокарте, в любое время суток.
+// Квадрат 256 пикселей; на уровне l котловина -- 2^l квадратов в ширину (l=8 -- около 4 м на пиксель). Снимаются по
+// запросу карты, по нескольку за кадр, и хранятся последние 120.
+// подложка озера на карте: плоскость под дном (её видит только камера карты), того же цвета, что и уход дна
+let mapLake = null;
+function makeMapLake() { const { W, H, X0, Y1, STEP } = G.far.userData.grid, pos = []; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) if (G.lake[j * W + i]) { const x0 = X0 + (i - 0.5) * STEP, x1 = x0 + STEP, z0 = -(Y1 - (j - 0.5) * STEP), z1 = z0 + STEP; pos.push(x0, 0, z0, x0, 0, z1, x1, 0, z0, x1, 0, z0, x0, 0, z1, x1, 0, z1); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); mapLake = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: ENV.uMapDeep.value, fog: false, side: THREE.DoubleSide }));
+  mapLake.position.y = -16; mapLake.layers.set(1); mapLake.frustumCulled = false; scene.add(mapLake); }
+const TILE = 256, mapCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 12000), tileCache = new Map(), tileQueue = [], tileWant = new Set(); let mapReady = false;
+mapCam.up.set(0, 0, -1); mapCam.layers.set(1);
+function mapTile(l, i, j) { const k = l + '/' + i + '/' + j, t = tileCache.get(k); if (t) { tileCache.delete(k); tileCache.set(k, t); return t; } if (!tileWant.has(k)) { tileWant.add(k); tileQueue.push([k, l, i, j]); } return null; }
+function mapWork() { if (!G) return; if (!mapReady) { mapReady = true; makeMapLake(); const en = (o, l) => o.traverse((c) => c.layers.enable(l)); for (const o of G.mapObjs) en(o, 1); en(G.ridges, 2); for (const o of scene.children) if (o.isLight) o.layers.enable(1); }
+  const g = G.far.userData.grid, size = (g.W * g.STEP), pr = renderer.getPixelRatio(), buf = renderer.getDrawingBufferSize(new THREE.Vector2()), cc = new THREE.Color(), ca = renderer.getClearAlpha(); renderer.getClearColor(cc);
+  const keep = { sun: SUN.clone(), day: ENV.uDay.value, dusk: ENV.uDusk.value, si: ENV.uSunI.value, st: ENV.uStorm.value, cov: ENV.uCover.value, hor: ENV.uHor.value.clone() };
+  SUN.set(-0.55, 0.72, -0.42).normalize(); Object.assign(ENV.uDay, { value: 1 }); ENV.uDusk.value = 0; ENV.uSunI.value = 1; ENV.uStorm.value = 0; ENV.uCover.value = -1; ENV.uHor.value.set(0.56, 0.76, 0.97); ENV.uMap.value = 1;
+  renderer.shadowMap.autoUpdate = false; renderer.setClearColor(0xd9cfb2, 1); // дыры сетки -- низины за хребтами: суша renderer.setRenderTarget(null); renderer.setScissorTest(true);
+  const t0 = performance.now();
+  while (tileQueue.length && performance.now() - t0 < 10) { const [k, l, i, j] = tileQueue.pop(); tileWant.delete(k); const ts = size / 2 ** l, cx = g.X0 + (i + 0.5) * ts, cy = g.Y1 - (j + 0.5) * ts;
+    Object.assign(mapCam, { left: -ts / 2, right: ts / 2, top: ts / 2, bottom: -ts / 2 }); mapCam.position.set(cx, 5000, -cy); mapCam.lookAt(cx, 0, -cy); mapCam.updateProjectionMatrix();
+    if (l >= 4) mapCam.layers.enable(2); else mapCam.layers.disable(2); // тушь хребтов -- когда она различима
+    setRidgeRes(TILE, TILE); renderer.setViewport(0, 0, TILE / pr, TILE / pr); renderer.setScissor(0, 0, TILE / pr, TILE / pr); renderer.render(scene, mapCam);
+    const c = document.createElement('canvas'); c.width = c.height = TILE; c.getContext('2d').drawImage(renderer.domElement, 0, buf.y - TILE, TILE, TILE, 0, 0, TILE, TILE);
+    tileCache.set(k, c); if (tileCache.size > 120) tileCache.delete(tileCache.keys().next().value); }
+  SUN.copy(keep.sun); ENV.uDay.value = keep.day; ENV.uDusk.value = keep.dusk; ENV.uSunI.value = keep.si; ENV.uStorm.value = keep.st; ENV.uCover.value = keep.cov; ENV.uHor.value.copy(keep.hor); ENV.uMap.value = 0;
+  renderer.setScissorTest(false); renderer.setViewport(0, 0, buf.x / pr, buf.y / pr); renderer.setClearColor(cc, ca); renderer.shadowMap.autoUpdate = true; setRidgeRes(buf.x, buf.y);
+  if (G.onTiles) G.onTiles(); }
 // ---------- главный цикл ----------
 const WSa = { x: 0, y: 0, speed: 0, dir: 0 }, tmpV = new THREE.Vector3(), tmpS = { h: 0, sx: 0, sz: 0 };
 let last = performance.now(), acc = 0, fpsT = 0, fpsN = 0; const sunDir = new THREE.Vector3();
@@ -439,6 +475,7 @@ function loop(now) {
   if (TOUCH) { const iv = now - rafPrev; rafPrev = now; if (iv > 2 && iv < 40) rafIv += (iv - rafIv) * 0.05;
     if (rafIv < 10.5 && (rafOdd = !rafOdd)) return; }
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (tileQueue.length) mapWork(); // квадраты карты снимаем ДО кадра игры: он потом целиком перерисует холст
   if (!G.freeze) tick(dt * TS); // freeze -- только для тестов: мир стоит, картинка рисуется; TS -- ускорение «макета»
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
