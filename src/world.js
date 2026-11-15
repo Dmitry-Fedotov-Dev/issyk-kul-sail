@@ -67,7 +67,7 @@ vec3 applyFog(vec3 c, float dist, float y){ float f=min((1.-exp(-dist/mix(42000.
 // чем опускать разрешение: при низком разрешении «мылится» и идёт квадратами вообще всё -- тени, брызги, пена.
 const QUALITY_DEFS = [{ FBM_OCT: 3, RIP_OCT: 3, SHN: 6, LOW: 1 }, { FBM_OCT: 3, RIP_OCT: 4, SHN: 8, LOW: 1 }, { FBM_OCT: 4, RIP_OCT: 5, SHN: 14 }];
 const QMATS = [];
-export function applyQuality(q) { for (const m of QMATS) { m.defines = { ...QUALITY_DEFS[q] }; m.needsUpdate = true; } }
+export function applyQuality(q) { for (const m of QMATS) { m.defines = { ...QUALITY_DEFS[q], ...m.userData.defs }; m.needsUpdate = true; } }
 export const END = '\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n';
 
 export function makeSky() {
@@ -130,18 +130,22 @@ export function makeTerrain(h) {
   for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) {
     const a = j * N + i, b = a + 1, c = a + N, d = c + 1;
     if (Math.max(hs[a], hs[b], hs[c], hs[d]) < -9) continue; // глубокое дно не рисуем
-    chunkList(lists, ((j / CH) | 0) * 64 + ((i / CH) | 0)).push(a, b, d, a, d, c);
+    chunkList(lists, ((j / CH) | 0) * 64 + ((i / CH) | 0) + (Math.min(hs[a], hs[b], hs[c], hs[d]) < 0 ? SHORE : 0)).push(a, b, d, a, d, c);
   }
-  return chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, terrainMaterial());
+  return chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, terrainMaterial(false), terrainMaterial());
 }
 // Сетка рельефа режется на куски со своими границами: куски вне кадра (за спиной камеры, сбоку) видеокарта
 // не обрабатывает вовсе. Раньше обе сетки (~450 тыс. треугольников) целиком проходили через неё каждый кадр.
 // Буферы вершин общие, у каждого куска только свой список треугольников. Шейдер опускает дальние точки на кривизну
 // Земли -- на это границы куска расширены с запасом, иначе кусок у нижнего края кадра мог бы пропасть раньше времени.
-const chunkList = (lists, k) => { let l = lists.get(k); if (!l) lists.set(k, (l = [])); return l; };
-function chunked(attrs, lists, mat) {
+// Суша и урез -- разными материалами. Шейдер уреза сам пишет глубину (дно под водой уходит «в бесконечность»), а
+// это выключает у видеокарты раннюю проверку глубины: закрытый передним хребтом склон обсчитывался бы целиком.
+// Суше такая запись не нужна (там она всегда равна обычной глубине), поэтому у суши ранняя проверка работает, и
+// куски, отсортированные от ближних к дальним, отбрасывают закрытые склоны ещё до расчёта цвета.
+const SHORE = 100000, chunkList = (lists, k) => { let l = lists.get(k); if (!l) lists.set(k, (l = [])); return l; };
+function chunked(attrs, lists, matLand, matShore = matLand) {
   const g = new THREE.Group(), p = attrs.position.array, box = new THREE.Box3(), v = new THREE.Vector3(); let tris = 0;
-  for (const idx of lists.values()) { if (!idx.length) continue;
+  for (const [key, idx] of lists) { if (!idx.length) continue; const mat = key >= SHORE ? matShore : matLand;
     const geo = new THREE.BufferGeometry(); for (const k in attrs) geo.setAttribute(k, attrs[k]); geo.setIndex(idx);
     box.makeEmpty(); for (const i of idx) box.expandByPoint(v.fromArray(p, i * 3));
     const sp = box.getBoundingSphere(new THREE.Sphere()), dd = Math.hypot(sp.center.x, sp.center.z) + 30000; sp.radius += (dd * dd) / 14866000; geo.boundingSphere = sp;
@@ -151,8 +155,9 @@ function chunked(attrs, lists, mat) {
 
 // Геометрия гор -- строго по карте высот, без растяжения. Всё «монструозное» делает свет и фактура: рёбра и кулуары
 // в нормали, тёмные скальные стены, рваная граница снега, тени облаков, туман на хребтах.
-export function terrainMaterial() {
-  const tm = new THREE.ShaderMaterial({ defines: { ...QUALITY_DEFS[2] },
+export function terrainMaterial(shore = true) {
+  const defs = shore ? { FDEPTH: 1 } : {};
+  const tm = new THREE.ShaderMaterial({ defines: { ...QUALITY_DEFS[2], ...defs },
     uniforms: { ...ENV }, extensions: { derivatives: true },
     vertexShader: CURVE + `attribute float aH; varying vec3 vP; varying vec3 vN; varying float vH; void main(){ vP=position; vN=normal; vH=aH; vec3 q=position; q.y-=curve(q); gl_Position=projectionMatrix*modelViewMatrix*vec4(q,1.); }`,
     fragmentShader: GLSL_COMMON + /* glsl */`
@@ -215,10 +220,12 @@ void main(){ vec3 N=normalize(vN); float h=vH, mt=smoothstep(70.,600.,h);
   col=applyFog(col, dist, h);
   // дно под водой не должно давать контуров сквозь воду: пишем ему глубину «бесконечность». Заодно кромка берега
   // получает чистую линию ровно по урезу воды
+  #ifdef FDEPTH
   gl_FragDepth = h < -0.25 ? 1.0 : gl_FragCoord.z;
+  #endif
   gl_FragColor=vec4(col,1.); ${END} }`,
   });
-  QMATS.push(tm); return tm;
+  tm.userData.defs = defs; QMATS.push(tm); return tm;
 }
 
 // ---------- вся котловина: дальние берега и хребты из настоящей карты высот ----------
@@ -244,9 +251,9 @@ export async function makeFarTerrain(holes = []) {
     if (Math.max(hs[a], hs[b], hs[e], hs[f]) < -1) continue;
     if (inside(i, j) && inside(i + 1, j) && inside(i, j + 1) && inside(i + 1, j + 1)) continue;
     const qx = X0 + (i + 0.5) * STEP, qy = Y1 - (j + 0.5) * STEP; if (holes.some((o) => Math.hypot(qx - o.X, qy - o.Y) < o.r)) continue; // здесь стоит подробный рельеф ущелья
-    chunkList(lists, ((j / CHh) | 0) * 64 + ((i / CW) | 0)).push(a, e, b, b, e, f); }
-  const mat = terrainMaterial(); mat.side = THREE.DoubleSide;
-  const m = chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, mat);
+    chunkList(lists, ((j / CHh) | 0) * 64 + ((i / CW) | 0) + (Math.min(hs[a], hs[b], hs[e], hs[f]) < 0 ? SHORE : 0)).push(a, e, b, b, e, f); }
+  const mat = terrainMaterial(false), matS = terrainMaterial(); mat.side = matS.side = THREE.DoubleSide;
+  const m = chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, mat, matS);
   // высота по грубой карте всей котловины (шаг 600 м): для мест за пределами подробной карты у Чолпон-Аты
   m.userData.heightAt = (X, Y) => { const fx = clamp((X - X0) / STEP, 0, W - 1.001), fy = clamp((Y1 - Y) / STEP, 0, H - 1.001), i = fx | 0, j = fy | 0, u = fx - i, v = fy - j;
     const a = hs[j * W + i], b = hs[j * W + i + 1], c = hs[(j + 1) * W + i], d = hs[(j + 1) * W + i + 1], y = (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v; return y < 0 ? y * 5 : y; };

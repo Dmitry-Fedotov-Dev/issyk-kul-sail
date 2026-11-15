@@ -8,6 +8,7 @@ import { makeAudio } from './audio.js';
 import { installExtra } from './extra.js';
 import { makePost, postSupported } from './post.js';
 import { RIVER_HOLES } from './rivermode.js';
+import { makeRidges, setRidgeRes } from './ridges.js';
 
 const $ = (id) => document.getElementById(id);
 const store = { get(k) { try { return JSON.parse(localStorage.getItem('issyk.' + k)); } catch (e) { return null; /* хранилище недоступно -- играем без рекордов */ } },
@@ -40,7 +41,7 @@ const pmrem = new THREE.PMREMGenerator(renderer), envRT = new THREE.WebGLCubeRen
 let envTex = null;
 function updateEnv(sky) { const m = sky.material; envScene.add(sky); m.uniforms.uEnvW.value = 1; sky.position.set(0, 0, 0); envCam.update(renderer, envScene); m.uniforms.uEnvW.value = 0; scene.add(sky);
   const old = envTex; envTex = pmrem.fromCubemap(envRT.texture).texture; scene.environment = envTex; if (old) old.dispose(); }
-function resize() { const w = window.innerWidth, h = window.innerHeight; if (G) G.spray.uniforms.uScale.value = (h * pixelRatio) / (2 * Math.tan((camera.fov * Math.PI) / 360)); renderer.setPixelRatio(pixelRatio); if (post) setTimeout(() => post.resize(), 0); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+function resize() { const w = window.innerWidth, h = window.innerHeight; if (G) G.spray.uniforms.uScale.value = (h * pixelRatio) / (2 * Math.tan((camera.fov * Math.PI) / 360)); renderer.setPixelRatio(pixelRatio); if (post) setTimeout(() => post.resize(), 0); renderer.setSize(w, h, false); { const d = renderer.getDrawingBufferSize(new THREE.Vector2()); setRidgeRes(d.x, d.y); } camera.aspect = w / h; camera.updateProjectionMatrix(); }
 window.addEventListener('resize', resize);
 
 const audio = makeAudio();
@@ -56,6 +57,7 @@ async function init() {
   scene.add(makeTerrain(h));
   await loadStep(38, 'Строим берега и хребты…');
   const far = await makeFarTerrain(RIVER_HOLES); scene.add(far);
+  const ridges = makeRidges(h, far.userData.grid, RIVER_HOLES); scene.add(ridges); // тушь по гребням гор
   // Высота в любой точке котловины: у Чолпон-Аты -- по подробной карте, дальше -- по грубой (шаг 600 м)
   const hNear = h, NX0 = -MAP.OX * MAP.M, NX1 = (MAP.N - 1 - MAP.OX) * MAP.M, NY0 = (MAP.OY - (MAP.N - 1)) * MAP.M, NY1 = MAP.OY * MAP.M;
   const hA = (x, y) => (x > NX0 && x < NX1 && y > NY0 && y < NY1 ? hNear(x, y) : far.userData.heightAt(x, y));
@@ -71,7 +73,7 @@ async function init() {
   const rivals = [], ensureRivals = () => { if (!rivals.length) rivals.push(mk({ hull: 0xf4f3ee, accent: '#1f6fd0', text: 'KGZ 21' }, 'Ала-Тоо', 0.95), mk({ hull: 0xe9c33c, accent: '#20242b', text: 'KGZ 4' }, 'Манас', 0.9), mk({ hull: 0x2f8f5a, accent: '#f4f3ee', text: 'KGZ 33' }, 'Чайка', 0.86)); };
   const marks = { W: makeMark(0xff7a1a), L: makeMark(0xffd21f), pin: makeMark(0xff3b30), com: makeMark(0x2f7de2) };
   for (const k in marks) { marks[k].visible = false; scene.add(marks[k]); }
-  G = { ensureRivals, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
+  G = { ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
     cam: 0, camYaw: 0, orbit: 0, orbitP: 0, zoom: 1, orbitV: 0, shake: 0, hintT: 0, free: null, toastT: 0, frame: 0, slow: 0 };
   if (!PRESETS[G.preset]) G.preset = 'santash';
   X = installExtra({ G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace() });
