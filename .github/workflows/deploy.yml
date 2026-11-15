@@ -22,13 +22,54 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Проверки перед выкладкой: JUnit-тесты (физика, масштаб воды, протокол сервера, сборка) и синтаксис JS
+  # шагом inline-js из Dmitry-Fedotov-Dev/ci. Отчёт виден в сводке запуска и отдельной проверкой «Тесты».
+  test:
+    if: github.event_name == 'push' || inputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: JUnit-тесты
+        run: |
+          mkdir -p reports
+          node --test --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=junit --test-reporter-destination=reports/junit.xml test/unit/
+      - name: Синтаксис JS (Dmitry-Fedotov-Dev/ci)
+        uses: Dmitry-Fedotov-Dev/ci/actions/inline-js@v1
+        with:
+          paths: src
+      - name: Отчёт о тестах
+        if: always()
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: reports/junit.xml
+          check_name: Тесты
+          detailed_summary: true
+          include_passed: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit
+          path: reports/junit.xml
+
   deploy:
+    needs: test
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      # tests, lint, build checks go here — the server builds the release itself
+      # тесты -- в задании test выше; сервер собирает выпуск сам
       - uses: Dmitry-Fedotov-Dev/cd@v1
         with:
           server: ${{ vars.CD_SERVER }}
