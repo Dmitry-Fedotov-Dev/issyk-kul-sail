@@ -33,7 +33,7 @@ class Craft extends Boat {
   }
   // поза на волне; у моторных -- ещё и отрыв от гребня
   updatePose(waves, t, terrainH) {
-    const fx = Math.sin(this.th), fz = -Math.cos(this.th), rx = Math.cos(this.th), rz = Math.sin(this.th), a = this.hl * 0.85, c = this.hbm;
+    const fx = Math.sin(this.th), fz = -Math.cos(this.th), rx = Math.cos(this.th), rz = Math.sin(this.th), a = this.hl * 0.85 * (this.ps || 1), c = this.hbm * (this.ps || 1);
     this.wg = clamp((waves.Hs || 0.3) / 0.55, 0.35, 2.2); // сила волны: у ряби и у штормовой волны уклон похожий, а энергия разная
     if (flow.surf) { // река: уровень воды задаёт русло, а не волны озера
       const ty = flow.surf(this.X, this.Y), yb = flow.surf(this.X + fx * a, this.Y - fz * a), ys = flow.surf(this.X - fx * a, this.Y + fz * a);
@@ -63,7 +63,7 @@ class Craft extends Boat {
   }
   move(dt, terrainH) {
     this.X += this.vx * dt; this.Y += this.vy * dt; this.dist += Math.hypot(this.vx, this.vy) * dt;
-    if (terrainH && -terrainH(this.X, this.Y) < this.spec.draft && !this.air) { this.aground = true; this.agT = 0; this.events.push({ type: 'aground', speed: this.speed }); }
+    if (terrainH && -terrainH(this.X, this.Y) < this.spec.draft * (this.ps || 1) && !this.air) { this.aground = true; this.agT = 0; this.events.push({ type: 'aground', speed: this.speed }); }
   }
   stepCapsizedC(dt, inp) {
     const S = this.spec, k = Math.exp(-1.8 * dt); this.vx = this.cx + (this.vx - this.cx) * k; this.vy = this.cy + (this.vy - this.cy) * k; this.r *= k; this.powerN = 0; this.st = null; this.thr = 0;
@@ -80,7 +80,7 @@ class Craft extends Boat {
     if (this.agT < 0.8) return;
     const e = 5, gx = terrainH(this.X + e, this.Y) - terrainH(this.X - e, this.Y), gy = terrainH(this.X, this.Y + e) - terrainH(this.X, this.Y - e), n = Math.hypot(gx, gy) || 1, dx = -gx / n, dy = -gy / n;
     this.X += dx * 3 * dt; this.Y += dy * 3 * dt; this.th = wrapPi(this.th + clamp(wrapPi(Math.atan2(dx, dy) - this.th), -1.5 * dt, 1.5 * dt));
-    if (-terrainH(this.X, this.Y) > this.spec.draft + 0.6) { this.aground = false; this.events.push({ type: 'refloat' }); }
+    if (-terrainH(this.X, this.Y) > (this.spec.draft + 0.6) * (this.ps || 1)) { this.aground = false; this.events.push({ type: 'refloat' }); }
   }
 }
 

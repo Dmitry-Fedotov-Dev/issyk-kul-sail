@@ -220,7 +220,7 @@ export function makeBoat(opts = {}) {
   let ft = Math.random() * 10;
 
   function update(b, dt, t) {
-    root.position.set(b.X, b.y - 0.02 + (b.capsized ? -0.25 : 0), -b.Y);
+    root.position.set(b.X, b.y + (-0.02 + (b.capsized ? -0.25 : 0)) * root.scale.y, -b.Y); // осадка -- в масштабе модели (игрушечная лодка иначе тонула бы)
     root.rotation.set(b.pitch * 0.9, -b.th, -b.phi);
     rudder.rotation.y = b.rudder * 0.6;
     boomG.rotation.y = b.boom; // гик: + на правый борт

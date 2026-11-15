@@ -50,8 +50,8 @@ export function makeTraffic(scene, ctx) {
     for (const e of list) { const b = e.b; if (!e.model.root.visible) continue; e.T -= dt;
       const fs = fd && !e.police ? fd[civ.indexOf(e)] : null;
       if (fs) { followNpc(e, fs, dt); if (e.phys) b.updatePose(ctx.waves, t, ctx.h); else shipPose(e, dt, t); e.model.update(b, dt, t); if (e.wake) e.wake.update(b, dt, t, ctx.waves);
-        const dx = pb.X - b.X, dy = pb.Y - b.Y, d = Math.hypot(dx, dy), R = e.R + (pb.hl || 3.2) * 0.8;
-        if (d < R && d > 0.01) { const nx = dx / d, ny = dy / d, rel = (pb.vx - b.vx) * nx + (pb.vy - b.vy) * ny; pb.X += nx * (R - d); pb.Y += ny * (R - d); if (rel < 0) { pb.vx -= rel * nx * 1.4; pb.vy -= rel * ny * 1.4; }
+        const dx = pb.X - b.X, dy = pb.Y - b.Y, d = Math.hypot(dx, dy), R = e.R + (pb.hl || 3.2) * 0.8 * (pb.ps || 1);
+        if (d < R && d > 0.01) { const sv = pb.sv || 1, nx = dx / d, ny = dy / d, rel = (pb.vx * sv - b.vx) * nx + (pb.vy * sv - b.vy) * ny; pb.X += nx * (R - d); pb.Y += ny * (R - d); if (rel < 0) { pb.vx -= rel * nx * 1.4 / sv; pb.vy -= rel * ny * 1.4 / sv; }
           if (ctx.onBump) ctx.onBump(e, nx, ny, -rel); if (-rel > 1.2 && law.hitCool <= 0) { law.hitCool = 3; ctx.onHit(-rel); } }
         continue; }
       if (e.police && law.stars > 0) { // погоня: идём в упреждённую точку, вблизи уравниваем ход, чтобы подойти к борту
@@ -76,14 +76,14 @@ export function makeTraffic(scene, ctx) {
         b.vx = Math.sin(b.th) * e.v; b.vy = Math.cos(b.th) * e.v; b.X += b.vx * dt; b.Y += b.vy * dt; shipPose(e, dt, t); }
       e.model.update(b, dt, t); if (e.wake) e.wake.update(b, dt, t, ctx.waves);
       // столкновение с игроком
-      const dx = pb.X - b.X, dy = pb.Y - b.Y, d = Math.hypot(dx, dy), R = e.R + (pb.hl || 3.2) * 0.8;
-      if (d < R && d > 0.01) { const nx = dx / d, ny = dy / d, rel = (pb.vx - b.vx) * nx + (pb.vy - b.vy) * ny; pb.X += nx * (R - d); pb.Y += ny * (R - d);
-        if (rel < 0) { pb.vx -= rel * nx * 1.4; pb.vy -= rel * ny * 1.4; if (e.phys) { b.vx += rel * nx * 0.5; b.vy += rel * ny * 0.5; } }
+      const dx = pb.X - b.X, dy = pb.Y - b.Y, d = Math.hypot(dx, dy), R = e.R + (pb.hl || 3.2) * 0.8 * (pb.ps || 1);
+      if (d < R && d > 0.01) { const sv = pb.sv || 1, nx = dx / d, ny = dy / d, rel = (pb.vx * sv - b.vx) * nx + (pb.vy * sv - b.vy) * ny; pb.X += nx * (R - d); pb.Y += ny * (R - d);
+        if (rel < 0) { pb.vx -= rel * nx * 1.4 / sv; pb.vy -= rel * ny * 1.4 / sv; if (e.phys) { b.vx += rel * nx * 0.5 * (pb.ps || 1) ** 3; b.vy += rel * ny * 0.5 * (pb.ps || 1) ** 3; } }
         if (ctx.onBump) ctx.onBump(e, nx, ny, -rel);
         if (-rel > 1.2 && law.hitCool <= 0) { law.hitCool = 3; ctx.onHit(-rel);
           if (e.police) { ctx.ach('l_ram'); offence(2, 'Навал на катер милиции!'); } else offence(1, `Столкновение: ${NAMES[e.type]}. Нарушение правил плавания`); } }
       // онлайн-игроки: толкаем только своё NPC-судно (большие суда не сдвинуть -- у их владельца наших NPC нет)
-      if (e.phys) for (const p of peers) { const q = p.b, ex = b.X - q.X, ey = b.Y - q.Y, dd = Math.hypot(ex, ey), RR = e.R + (q.hl ? q.hl * 0.85 : 2.6); if (dd >= RR || dd < 0.01) continue;
+      if (e.phys) for (const p of peers) { const q = p.b, ex = b.X - q.X, ey = b.Y - q.Y, dd = Math.hypot(ex, ey), RR = e.R + (q.hl ? q.hl * 0.85 : 2.6) * (q.ps || 1); if (dd >= RR || dd < 0.01) continue;
         const nx = ex / dd, ny = ey / dd, rel = (b.vx - q.vx) * nx + (b.vy - q.vy) * ny; b.X += nx * (RR - dd); b.Y += ny * (RR - dd); if (rel < 0) { b.vx -= rel * nx * 1.3; b.vy -= rel * ny * 1.3; }
         if (e.type === 'sup' && -rel > 1.1 && ctx.knock) ctx.knock(e, nx, ny, -rel); } }
     // малый ход у причала: моторным не быстрее 5 узлов

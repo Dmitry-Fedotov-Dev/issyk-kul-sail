@@ -74,10 +74,10 @@ async function init() {
   const hNear = h, NX0 = -MAP.OX * MAP.M, NX1 = (MAP.N - 1 - MAP.OX) * MAP.M, NY0 = (MAP.OY - (MAP.N - 1)) * MAP.M, NY1 = MAP.OY * MAP.M;
   const hA = (x, y) => (x > NX0 && x < NX1 && y > NY0 && y < NY1 ? hNear(x, y) : far.userData.heightAt(x, y));
   await loadStep(56, 'Наливаем озеро…');
-  const water = makeWater(tex, 1); scene.add(water.mesh);
+  const water = makeWater(tex, 1, BOAT_SCALE); scene.add(water.mesh);
   const shore = makeShore(h, scene);
   const hb = (x, y) => Math.max(hA(x, y), shore.pierH(x, y)); // дно + причал: то, обо что можно удариться
-  const wind = new Wind(PRESETS.santash, hA), waves = new Waves();
+  const wind = new Wind(PRESETS.santash, hA), waves = new Waves(); waves.s = BOAT_SCALE; // вода -- в масштабе своей лодки
   const spray = makeSpray(); scene.add(spray.mesh);
   const mk = (opts, name, skill) => { const b = new Boat(); b.skill = skill; const model = makeBoat(opts), wake = makeWake(); scene.add(model.root, wake.mesh); return { b, model, wake, name, ai: {}, leg: 0, time: 0, prevA: 0 }; };
   const player = mk({ text: 'KGZ 7', hull: 0x143a6e, accent: '#ff7a1a' }, 'Вы', 1); // тёмно-синий лакированный борт, оранжевая ватерлиния
@@ -435,8 +435,8 @@ function loop(now) {
   if (TOUCH) { const iv = now - rafPrev; rafPrev = now; if (iv > 2 && iv < 40) rafIv += (iv - rafIv) * 0.05;
     if (rafIv < 10.5 && (rafOdd = !rafOdd)) return; }
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (BOAT_SCALE !== 1) { const P = G.player; P.model.root.scale.setScalar(BOAT_SCALE); P.b.ps = BOAT_SCALE; P.b.sv = Math.sqrt(BOAT_SCALE); P.wake.mesh.material.uniforms.uS.value = BOAT_SCALE; } // своя лодка, её волна и след -- в одном масштабе
   if (!G.freeze) tick(dt); // freeze -- только для тестов: мир стоит, картинка рисуется
-  if (BOAT_SCALE !== 1) { G.player.model.root.scale.setScalar(BOAT_SCALE); if (BOAT_SCALE < 0.5) G.player.wake.mesh.visible = false; } // след во всю ширину рядом с игрушкой смотрелся бы дорогой
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
   sunL.target.position.set(b.X, b.base || 0, -b.Y); sunL.position.set(b.X + LIGHT.x * 30, (b.base || 0) + LIGHT.y * 30, -b.Y + LIGHT.z * 30);
@@ -483,7 +483,13 @@ function tick(dt) {
   const TH = X.th(), PH = X.poseTh();
   for (const e of boats) e.b.updatePose(G.waves, G.t, PH);
   acc += dt; let n = 0;
-  while (acc >= 1 / 120 && n++ < 8) { acc -= 1 / 120; boats.forEach((e, i) => e.b.step(1 / 120, ctls[i], G.wind, TH)); }
+  // Своя лодка в масштабе S -- модель по подобию Фруда (как испытывают модели судов в бассейне): физика считается для
+  // настоящей лодки, но время для неё идёт в 1/sqrt(S) раз быстрее, а перемещения в мире -- в S раз меньше. Тогда
+  // скорость в мире -- в sqrt(S) раз меньше, ускорения и углы (крен, разворот) -- как у настоящей, волна той же доли.
+  // Скорости в теле лодки остаются «приведёнными» (как у настоящей); в мир они переводятся множителем b.sv = sqrt(S).
+  const S = BOAT_SCALE, MS = S === 1 ? 1 : Math.ceil(1 / Math.sqrt(S) - 1e-9), mdt = S === 1 ? 1 / 120 : 1 / 120 / Math.sqrt(S) / MS;
+  while (acc >= 1 / 120 && n++ < 8) { acc -= 1 / 120; boats.forEach((e, i) => { if (i || S === 1) { e.b.step(1 / 120, ctls[i], G.wind, TH); return; }
+    const b0 = e.b; for (let k = 0; k < MS; k++) { const X0 = b0.X, Y0 = b0.Y; b0.step(mdt, ctls[0], G.wind, TH); b0.X = X0 + (b0.X - X0) * S; b0.Y = Y0 + (b0.Y - Y0) * S; } }); }
   if (n >= 8) acc = 0;
   if (G.mode === 'race' && !R.over) stepRace(dt);
   playerEvents(P); for (const r of G.rivals) r.b.events.length = 0;
@@ -492,21 +498,23 @@ function tick(dt) {
   // модели, след, брызги
   for (const e of boats) { e.model.update(e.b, dt, G.t); e.wake.update(e.b, dt, G.t, G.waves); }
   const sp = b.speed, fx = Math.sin(b.th), fz = -Math.cos(b.th), rx = Math.cos(b.th), rz = Math.sin(b.th), HL = b.hl || 3.1;
+  const KS = BOAT_SCALE, KV = Math.sqrt(KS), sprayE = KS === 1 ? (...a) => G.spray.emit(...a)
+    : (x, y, z, vx, vy, vz, size, n, f) => G.spray.emit(b.X + (x - b.X) * KS, b.y + (y - b.y) * KS, -b.Y + (z + b.Y) * KS, vx * KV, vy * KV, vz * KV, size * KS, n, f);
   if (!b.capsized && sp > 2.1) { const k = (sp - 2.1) * 26 * dt + Math.max(0, -b.slopeF) * sp * 30 * dt, cnt = Math.floor(k + Math.random());
     const lee = b.phi > 0 ? 1 : -1; for (let i = 0; i < cnt; i++) { const s = Math.random() < 0.5 ? 1 : -1;
-      G.spray.emit(b.X + fx * HL + rx * s * 0.3, b.y + 0.25, -b.Y + fz * HL + rz * s * 0.3, b.vx * 0.55 + rx * s * (1.2 + sp * 0.35), 1.3 + sp * 0.42, -b.vy * 0.55 + rz * s * (1.2 + sp * 0.35), 1.2, 1); }
-    if (Math.abs(b.phi) > 0.42 && Math.random() < dt * 40) G.spray.emit(b.X + rx * lee * 1.1 + fx * (Math.random() * 4 - 2), b.y + 0.1, -b.Y + rz * lee * 1.1 + fz * (Math.random() * 4 - 2), b.vx * 0.6 + rx * lee * 2, 1.6, -b.vy * 0.6 + rz * lee * 2, 1, 1); }
+      sprayE(b.X + fx * HL + rx * s * 0.3, b.y + 0.25, -b.Y + fz * HL + rz * s * 0.3, b.vx * 0.55 + rx * s * (1.2 + sp * 0.35), 1.3 + sp * 0.42, -b.vy * 0.55 + rz * s * (1.2 + sp * 0.35), 1.2, 1); }
+    if (Math.abs(b.phi) > 0.42 && Math.random() < dt * 40) sprayE(b.X + rx * lee * 1.1 + fx * (Math.random() * 4 - 2), b.y + 0.1, -b.Y + rz * lee * 1.1 + fz * (Math.random() * 4 - 2), b.vx * 0.6 + rx * lee * 2, 1.6, -b.vy * 0.6 + rz * lee * 2, 1, 1); }
   // удар носа о волну: веер брызг летит через лодку в камеру
   const dp = (b.pitch - (G.lastPitch ?? b.pitch)) / Math.max(dt, 1e-3); G.lastPitch = b.pitch; G.slamT = (G.slamT || 0) - dt;
   if (!b.capsized && G.slamT <= 0 && dp < -0.16 && sp > 1.8) { const pw = clamp((-dp - 0.1) * 2.2 * (sp / 3), 0.25, 1.6); G.slamT = 0.55;
     for (let i = 0; i < 46 * pw; i++) { const s = Math.random() < 0.5 ? 1 : -1, a = Math.random();
-      G.spray.emit(b.X + fx * (3.2 - a) + rx * s * 0.5, b.y + 0.3, -b.Y + fz * (3.2 - a) + rz * s * 0.5, b.vx * 0.3 - fx * (1 + Math.random() * 3) + rx * s * (1 + Math.random() * 3.5), 2.6 + Math.random() * 3.4 * pw, -b.vy * 0.3 - fz * (1 + Math.random() * 3) + rz * s * (1 + Math.random() * 3.5), 1.5, 1); }
-    G.spray.emit(b.X + fx * 2.6, b.y + 0.5, -b.Y + fz * 2.6, b.vx * 0.5 - fx * 1.5, 2.2 * pw, -b.vy * 0.5 - fz * 1.5, 3.5, Math.round(10 * pw), 1);
+      sprayE(b.X + fx * (3.2 - a) + rx * s * 0.5, b.y + 0.3, -b.Y + fz * (3.2 - a) + rz * s * 0.5, b.vx * 0.3 - fx * (1 + Math.random() * 3) + rx * s * (1 + Math.random() * 3.5), 2.6 + Math.random() * 3.4 * pw, -b.vy * 0.3 - fz * (1 + Math.random() * 3) + rz * s * (1 + Math.random() * 3.5), 1.5, 1); }
+    sprayE(b.X + fx * 2.6, b.y + 0.5, -b.Y + fz * 2.6, b.vx * 0.5 - fx * 1.5, 2.2 * pw, -b.vy * 0.5 - fz * 1.5, 3.5, Math.round(10 * pw), 1);
     if (P.model.water) P.model.water.add(0.1, 0.5, 0.35 * pw, 3.2); // нос зарылся -- вода на баке
     audio.slap(pw); if (G.mode !== 'menu' && G.cam !== 2 && pw > 0.45) lens(pw * (b.kind ? 3 : 9)); if (pw > 0.9) G.shake = Math.max(G.shake, 0.3); }
   if (P.model.water) waveImpacts(P, dt, sp);
   // водяная пыль с носа на ходу и с подветренного борта в крен; палуба мокнет и сохнет
-  if (!b.capsized && sp > 3 && Math.random() < dt * (sp - 2.5) * 5) G.spray.emit(b.X + fx * 3, b.y + 0.3, -b.Y + fz * 3, b.vx * 0.6, 0.9, -b.vy * 0.6, 2.2, 1, 1);
+  if (!b.capsized && sp > 3 && Math.random() < dt * (sp - 2.5) * 5) sprayE(b.X + fx * 3, b.y + 0.3, -b.Y + fz * 3, b.vx * 0.6, 0.9, -b.vy * 0.6, 2.2, 1, 1);
   G.spray.update(dt);
 
   // свободное плавание: журнал и «школа рулевого»
@@ -545,8 +553,9 @@ function updateCamera(dt, b, sp) {
     const W = window.innerWidth, H = window.innerHeight, cm = 37.8, tan = Math.tan(27 * DEG);
     const need = MENU.phone ? Math.max(19, 8.5 * H / (2 * tan * Math.max(60, W - 2.4 * cm)), 13.5 * H / (2 * tan * Math.max(60, MENU.boatB - MENU.boatT - 0.6 * cm)))
       : Math.max(19, 8.5 * H / (2 * tan * Math.max(80, MENU.lakeW - 10 * cm)), 13.5 * H / (2 * tan * Math.max(80, H - 10 * cm)));
-    const d = Math.min(need, 90); camera.position.set(bx - fx * d, Math.max(4.2 + b.y * 0.5 + d * 0.05, G.h(bx - fx * d, -(bz - fz * d)) + 2.5), bz - fz * d);
-    camera.lookAt(bx, 5.2 + b.y * 0.5, bz); camera.fov += (54 - camera.fov) * Math.min(1, dt * 3);
+    const d0 = Math.min(need, 90), d = d0 * BOAT_SCALE; // игрушечная лодка -- камера во столько же раз ближе
+    camera.position.set(bx - fx * d, Math.max((4.2 + d0 * 0.05) * BOAT_SCALE + b.y * 0.5, G.h(bx - fx * d, -(bz - fz * d)) + 2.5 * BOAT_SCALE), bz - fz * d);
+    camera.lookAt(bx, 5.2 * BOAT_SCALE + b.y * 0.5, bz); camera.fov += (54 - camera.fov) * Math.min(1, dt * 3);
     if (MENU.phone) camera.setViewOffset(W, H, 0, H / 2 - (MENU.boatT + MENU.boatB) * 0.5, W, H); else camera.setViewOffset(W, H, W / 2 - MENU.lakeW / 2, 0, W, H);
   } else {
     // камера ходит по сфере вокруг лодки: orbit -- вокруг, orbitP -- вверх-вниз, zoom -- ближе-дальше
@@ -617,7 +626,7 @@ function updateHud(dt, b, sp) {
     if (G.frame % 6 === 0) setT($('markd'), `${off ? (cxm < w / 2 ? '◀ ' : '') : ''}${tg.label || ['старт', 'знак 1', 'знак 2', 'финиш'][G.player.leg]} · ${Math.hypot(tg.X - b.X, tg.Y - b.Y).toFixed(0)} м${off && cxm > w / 2 ? ' ▶' : ''}`);
   } else setP(mk, 'hidden', true);
   if (G.frame % 3) return;
-  setT($('kn'), (sp * KN).toFixed(1));
+  setT($('kn'), (sp * KN * (b.sv || 1)).toFixed(1)); // у игрушечной лодки -- её настоящая скорость в мире
   setT($('pos'), b.kind ? b.status() : (b.capsized ? 'оверкиль' : pointOfSail(Math.abs(b.twa)).toLowerCase()) + (heel > 12 ? ` · крен ${heel.toFixed(0)}°` : ''));
   setSt($('pos'), 'color', heel > 34 ? '#ff8a7a' : '');
   { const hh = Math.floor(G.clock), mm = Math.floor((G.clock % 1) * 60); setT($('windtxt'), `${(b.tws * KN).toFixed(0)} уз · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`); }

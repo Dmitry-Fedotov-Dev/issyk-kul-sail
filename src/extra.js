@@ -85,8 +85,8 @@ export function installExtra(A) {
   // игрок и чужие лодки: каждый клиент выталкивает только свою лодку, поэтому оба расходятся одинаково
   function bumpPeers(P, dt) { const b = P.b, rb = radiusOf(b); bumpCool -= dt;
     for (const p of peerList()) { const q = p.b, dx = b.X - q.X, dy = b.Y - q.Y, d = Math.hypot(dx, dy), R = rb + radiusOf(q); if (d >= R || d < 0.01) continue;
-      const nx = dx / d, ny = dy / d, rel = (b.vx - q.vx) * nx + (b.vy - q.vy) * ny; b.X += nx * (R - d); b.Y += ny * (R - d);
-      if (rel < 0) { b.vx -= rel * nx * 1.35; b.vy -= rel * ny * 1.35; } const imp = -rel;
+      const sv = b.sv || 1, nx = dx / d, ny = dy / d, rel = (b.vx * sv - q.vx) * nx + (b.vy * sv - q.vy) * ny; b.X += nx * (R - d); b.Y += ny * (R - d); // скорости -- в мире
+      if (rel < 0) { b.vx -= rel * nx * 1.35 / sv; b.vy -= rel * ny * 1.35 / sv; } const imp = -rel / sv;
       if (imp > FLING_V && p.k === 'sup' && p.model.fling && !p.model.flying() && !q.capsized) { knock(p, -nx, -ny, imp, false); net.hit(p.id, -nx * imp, -ny * imp, imp); }
       if (imp > FLING_V) knock(P, nx, ny, imp, true);
       if (imp > 0.8 && bumpCool <= 0) { bumpCool = 1.2; G.shake = Math.max(G.shake, Math.min(1, 0.3 + imp * 0.12)); audio.thump(Math.min(1, 0.35 + imp * 0.1)); toast(`Навал: ${p.name}!`); wear(b, 0, 0.01 * imp); } } }
