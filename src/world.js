@@ -240,7 +240,7 @@ export const FAR_EXAGGERATION = 1;
 // (до ~80 м над водой, посёлки, причал, тополя) не тронута: растяжение включается плавно выше неё. У ущелья Чон-Ак-Суу
 // горы плавно возвращаются к настоящей высоте -- там своя подробная модель русла и воды для сплава.
 // Цвет рельефа (снег, лес, скалы) считается по НАСТОЯЩЕЙ высоте, иначе горы стали бы сплошь белыми.
-export const MOUNT_K = 3; let EXH = [];
+export const MOUNT_K = 1; let EXH = [];
 export function setExagHoles(holes) { EXH = holes; }
 export function exag(h, X, Y) { if (h <= 80) return h; let k = MOUNT_K - 1;
   if (EXH.length && X !== undefined) { let d = 1e9; for (const o of EXH) d = Math.min(d, Math.hypot(X - o.X, Y - o.Y) - o.r); k *= smooth(0, 4000, d); }
