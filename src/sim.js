@@ -29,7 +29,8 @@ export const PRESETS = {
     sky: { cover: -0.62, cirrus: 0.12, storm: 0, scale: 1.7, hor: [0.56, 0.76, 0.97], sun: 1 } }, // почти чистое солнечное небо: редкие кучевые
   santash: { id: 'santash', name: 'Санташ', sub: 'с востока · 14 узлов · порывы', dir: 98, speed: 7.0, gust: 0.27, shift: 10, fetch: 24000,
     sky: { cover: -0.5, cirrus: 0.08, storm: 0, scale: 0.75, hor: [0.54, 0.73, 0.95], sun: 1 } }, // солнечно, отдельные кучевые
-  ulan: { id: 'ulan', name: 'Улан', sub: 'с запада · 20 узлов · шквалы и волна', dir: 262, speed: 10.2, gust: 0.33, shift: 12, fetch: 30000, waveK: 2, // волна вдвое выше и длиннее
+  // штормовой Улан: ветер вдвое сильнее прежнего -- и волна из него же (при ограниченном разгоне высота растёт как ветер)
+  ulan: { id: 'ulan', name: 'Улан', sub: 'с запада · 40 узлов · шторм и волна', dir: 262, speed: 20.4, gust: 0.33, shift: 12, fetch: 30000,
     sky: { cover: 0.86, cirrus: 0, storm: 0.78, scale: 0.62, hor: [0.36, 0.41, 0.47], sun: 0.32 } }, // штормовой фронт: слоисто-кучевые, свинец
 };
 
@@ -79,7 +80,7 @@ export class Waves {
   setFromWind(U, dirFrom, fetch, k = 1) {
     // эмпирика для ограниченного разгона (SMB / JONSWAP)
     // у берега волна короче и круче открытой: добавляем 25% высоты
-    const Hs = Math.min(0.0016 * U * Math.sqrt(fetch / G) * 1.25, 1.5) * k;
+    const Hs = Math.min(0.0016 * U * Math.sqrt(fetch / G) * 1.25, 3) * k;
     const Tp = 0.286 * (U / G) * Math.cbrt((G * fetch) / (U * U));
     const lp = (G * Tp * Tp) / (2 * Math.PI) * k;
     const ratio = [1.0, 0.71, 1.38, 0.47, 0.31, 0.2, 0.845, 0.577, 1.171, 0.383], off = [0, 15, -19, -34, 41, -58, 26, -8, -46, 63], wt = [1, 0.85, 0.6, 0.7, 0.5, 0.36, 0.78, 0.72, 0.5, 0.55];
@@ -126,7 +127,7 @@ export class Boat {
   reset(X, Y, th) {
     Object.assign(this, { X, Y, th, vx: 0, vy: 0, r: 0, phi: 0, p: 0, rudder: 0, ease: 0, boom: 0, trim: 30 * DEG, crew: 0,
       capsized: false, righting: 0, rightHold: 0, aground: false, y: 0, pitch: 0, slopeR: 0, slopeF: 0,
-      awa: 0, aws: 0, tws: 0, twd: 0, twa: 0, alpha: 0, luff: 0, u: 0, vs: 0, power: 0, lastAwaSign: 0, slam: 0, att: 1 });
+      awa: 0, aws: 0, tws: 0, twd: 0, twa: 0, alpha: 0, luff: 0, u: 0, vs: 0, power: 0, lastAwaSign: 0, slam: 0, att: 1, reef: undefined });
     this.events.length = 0;
   }
   get speed() { return Math.hypot(this.vx, this.vy); }
@@ -180,7 +181,10 @@ export class Boat {
     const alpha = Math.max(0, absA - Math.abs(this.boom)), aDeg = alpha / DEG;
     this.alpha = alpha; this.luff = 1 - smooth(3, 11, aDeg);
     const ce = Math.pow(Math.max(0, Math.cos(this.phi)), 1.2) * this.skill * (1 - 0.35 * (this.wearA || 0)) * (1 - 0.4 * (this.brkA || 0)); // растянутый парус тянет хуже, рваный -- совсем плохо
-    const q = 0.5 * B.rhoAir * aws * aws * B.sail * ce, hx = ax / aws, hy = ay / aws;
+    // риф: в шторм экипаж уменьшает парус -- выше 11.5 м/с вымпельного ветра площадь падает так, что тяга не растёт
+    // (но не меньше пятой части паруса); быстро, за доли секунды -- иначе шквал кладёт лодку раньше рифа
+    const reefT = Math.max(0.2, Math.min(1, (11.5 / Math.max(aws, 1e-3)) ** 2)); this.reef = this.reef === undefined ? reefT : this.reef + (reefT - this.reef) * Math.min(1, dt * 3); // на старте -- сразу под текущий ветер
+    const q = 0.5 * B.rhoAir * aws * aws * B.sail * this.reef * ce, hx = ax / aws, hy = ay / aws;
     // нормаль паруса (подветренная сторона) -- выбирает знак подъёмной силы
     const sb = this.boom >= 0 ? 1 : -1, cb = Math.cos(Math.abs(this.boom)), snb = Math.sin(Math.abs(this.boom));
     const bx = -fx * cb + sb * rx * snb, by = -fy * cb + sb * ry * snb;
