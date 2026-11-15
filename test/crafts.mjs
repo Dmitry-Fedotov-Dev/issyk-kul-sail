@@ -1,6 +1,8 @@
 // Физика новых снарядов без браузера: скорости, ритм, оверкиль, глиссирование, прыжок, автоматы.
 import { Wind, Waves, PRESETS, DEG, KN, wrapPi } from '../src/sim.js';
 import { makeCraftBody, aiPaddle, aiMotor, SPECS } from '../src/crafts.js';
+// случайности (ритм автомата, «краб») -- с постоянным зерном: замер скорости попадает в одну и ту же фазу гребка, тест воспроизводим
+let seed = 20261116; Math.random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
 let fail = 0; const ok = (c, m) => { console.log((c ? 'ok   ' : 'FAIL ') + m); if (!c) fail++; };
 function run(id, preset, secs, ctl, opts = {}) {
   const p = { ...PRESETS[preset], ...(opts.calm ? { speed: 0.5, gust: 0 } : {}) }, w = new Wind(p, null), wv = new Waves(); wv.setFromWind(Math.max(p.speed, 0.5), p.dir * DEG, opts.calm ? 500 : p.fetch);
