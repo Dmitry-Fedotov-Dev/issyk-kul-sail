@@ -79,7 +79,7 @@ async function init() {
     for (let r = 0; r < 2; r++) { const c = m.slice(); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (c[k]) continue; // расширяем на 2 клетки: береговая полоса целиком внутри
         if ((i > 0 && c[k - 1]) || (i < W - 1 && c[k + 1]) || (j > 0 && c[k - W]) || (j < H - 1 && c[k + W])) m[k] = 255; } }
     const t = new THREE.DataTexture(m, W, H, THREE.RedFormat); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
-    ENV.uLakeM.value = t; ENV.uLakeT.value.set((X0 - STEP / 2) * WS, (Y1 + STEP / 2) * WS, 1 / (W * STEP * WS), 1 / (H * STEP * WS)); return m; })();
+    ENV.uLakeM.value = t; ENV.uLakeT.value.set(X0 - STEP / 2, Y1 + STEP / 2, 1 / (W * STEP), 1 / (H * STEP)); /* шейдер рельефа считает в настоящих координатах */ return m; })();
   const ridges = makeRidges(h, far.userData.grid, RIVER_HOLES); ridges.scale.setScalar(WS); scene.add(ridges); // тушь по гребням гор
   // Высота в любой точке котловины: у Чолпон-Аты -- по подробной карте, дальше -- по грубой (шаг 600 м)
   const hNear = h, NX0 = -MAP.OX * MAP.M, NX1 = (MAP.N - 1 - MAP.OX) * MAP.M, NY0 = (MAP.OY - (MAP.N - 1)) * MAP.M, NY1 = MAP.OY * MAP.M;

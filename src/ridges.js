@@ -57,8 +57,8 @@ export function makeRidges(hNear, farGrid, holes = []) {
     vertexShader: CURVE + /* glsl */`
 uniform vec2 uRes; uniform float uK; attribute vec3 aQ; attribute vec3 aSE; varying float vSide, vW, vAl;
 void main(){ float aS=aSE.x, aE=aSE.y, aA=aSE.z; vec3 p=(modelMatrix*vec4(position,1.)).xyz, q=(modelMatrix*vec4(aQ,1.)).xyz; p.y-=curve(p); q.y-=curve(q); // мировые: группа масштабирована
-  float dist=length(p-cameraPosition);
-  p+=normalize(cameraPosition-p)*(2.+dist*0.004); q+=normalize(cameraPosition-q)*(2.+length(q-cameraPosition)*0.004);
+  float dist=length(p-cameraPosition)/${WS}.; // настоящие расстояния: тушь хребтов той же густоты
+  p+=normalize(cameraPosition-p)*(2.+dist*${WS}.*0.004); q+=normalize(cameraPosition-q)*(2.+length(q-cameraPosition)*0.004);
   vec4 cp=projectionMatrix*viewMatrix*vec4(p,1.), cq=projectionMatrix*viewMatrix*vec4(q,1.);
   if(cp.w<0.5 || cq.w<0.5){ gl_Position=vec4(2.,2.,2.,1.); vAl=0.; vW=1.; vSide=0.; return; }
   // вдали остаются только крупные хребты; отрог тает к началу (там на него «стекает» меньше склона)

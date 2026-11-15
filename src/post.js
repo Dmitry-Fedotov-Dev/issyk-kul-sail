@@ -8,6 +8,7 @@
 //   - тени слегка заштрихованы, цвет чуть плотнее.
 // Вода, брызги и небо глубину не пишут, поэтому остаются чистыми: волны не обводятся.
 import * as THREE from 'three';
+import { WS } from './world.js';
 
 // Проверочный контекст сразу освобождаем: браузер держит ограниченное число контекстов WebGL на все вкладки и при
 // превышении отбирает самый старый -- с несколькими открытыми вкладками игры это обрывало графику у соседней.
@@ -27,13 +28,14 @@ void main(){ vec3 col=texture2D(tC,vUv).rgb;
   // «тилт-шифт» для режима макета: резкая полоса посередине, выше и ниже кадр плавно размыт -- так снимают макеты
   if(uTilt>0.){ float bl=smoothstep(0.10,0.42,abs(vUv.y-0.47))*uTilt; if(bl>0.02){ vec3 acc=vec3(0.); for(int i=-2;i<=2;i++) for(int j=-2;j<=2;j++) acc+=texture2D(tC,vUv+vec2(float(i),float(j))*uPx*uK*bl*2.6).rgb; col=acc/25.; } } float zc=Z(vUv), solid=step(zc,uNF.y*0.9);
   // толщина линии: вблизи жирнее, вдали тоньше (иначе дальний берег и горы тонут в туши)
-  float nearK=1.-smoothstep(40.,2500.,zc); vec2 o=uPx*uK*mix(0.9,1.7,nearK);
+  // пороги по дальности -- в настоящих расстояниях (ландшафт увеличен в WS раз): обводка гор той же плотности
+  float nearK=1.-smoothstep(40.,2500.,zc/${WS}.); vec2 o=uPx*uK*mix(0.9,1.7,nearK);
   float zl=Z(vUv-vec2(o.x,0.)), zr=Z(vUv+vec2(o.x,0.)), zu=Z(vUv+vec2(0.,o.y)), zd=Z(vUv-vec2(0.,o.y));
   float zm=min(zc,min(min(zl,zr),min(zu,zd)));
   float lap=(abs(zl+zr-2.*zc)+abs(zu+zd-2.*zc))/zm;
   // порог растёт с расстоянием: вдали буфер глубины грубеет, и без этого появились бы ложные штрихи
-  float t0=0.03+zm/2.5e6, edge=smoothstep(t0,t0*2.6,lap);
-  float ink=edge*mix(0.55,0.95,1.-smoothstep(300.,8000.,zm));
+  float t0=0.03+zm/${WS}./2.5e6, edge=smoothstep(t0,t0*2.6,lap);
+  float ink=edge*mix(0.55,0.95,1.-smoothstep(300.,8000.,zm/${WS}.));
   if(solid>0.5){ // рисованные детали внутри объекта
     float a=L(vUv-vec2(o.x,0.)), b=L(vUv+vec2(o.x,0.)), c2=L(vUv+vec2(0.,o.y)), d=L(vUv-vec2(0.,o.y));
     float g=length(vec2(a-b,c2-d)); ink=max(ink, smoothstep(0.10,0.26,g)*0.5*nearK);

@@ -169,21 +169,22 @@ export function terrainMaterial(shore = true) {
 varying vec3 vP; varying vec3 vN; varying float vH; uniform float uMap; uniform vec3 uMapDeep; uniform sampler2D uLakeM; uniform vec4 uLakeT;
 // гребневой шум: острые хребты и кулуары, которых нет в карте высот с её шагом в десятки метров
 float ridged(vec2 p){ float a=0.5, s=0., w=1.; for(int i=0;i<FBM_OCT;i++){ float r=1.-abs(2.*vnoise(p)-1.); r*=r*w; s+=a*r; w=clamp(r*1.6,0.,1.); p=mat2(1.6,1.2,-1.2,1.6)*p+7.; a*=0.5; } return s; }
-void main(){ vec3 N=normalize(vN); float h=vH;
+void main(){ vec3 P=vP/${WS}., CP=cameraPosition/${WS}.; // детали и расстояния -- в настоящих координатах: горы той же чёткости, только крупнее
+  vec3 N=normalize(vN); float h=vH;
   // на карте вода -- только сам Иссык-Куль: низины за хребтами ниже уровня озера (Чуйская долина) -- суша
-  if(uMap>0. && texture2D(uLakeM, vec2((vP.x-uLakeT.x)*uLakeT.z, (uLakeT.y+vP.z)*uLakeT.w)).r<0.5) h=max(h,3.);
+  if(uMap>0. && texture2D(uLakeM, vec2((P.x-uLakeT.x)*uLakeT.z, (uLakeT.y+P.z)*uLakeT.w)).r<0.5) h=max(h,3.);
   float mt=smoothstep(70.,600.,h);
   // рельеф в нормали: склоны изрезаны рёбрами, свет ложится жёстко
-  float rs=0.0016, e=30.; vec2 rp=vP.xz*rs; float r0=0.45, rx=0.45, rz=0.45;
+  float rs=0.0016, e=30.; vec2 rp=P.xz*rs; float r0=0.45, rx=0.45, rz=0.45;
   // Рябь вдали: когда деталь рисунка становится мельче пикселя, она мерцает при движении камеры. Поэтому каждая
   // фактура плавно гаснет по мере того, как её шаг приближается к размеру пикселя на местности (px, метры).
-  float px=length(fwidth(vP.xz)), kR=1.-smoothstep(22.,95.,px), kF=1.-smoothstep(3.,13.,px), kT=1.-smoothstep(0.2,0.9,px);
+  float px=length(fwidth(P.xz)), kR=1.-smoothstep(22.,95.,px), kF=1.-smoothstep(3.,13.,px), kT=1.-smoothstep(0.2,0.9,px);
   // Дальше -- только то, что реально влияет на цвет: на низком берегу (mt=0) гребни, тени облаков и осыпи ни на что
   // не влияют, под водой цвет суши целиком заменяется цветом дна, вне посёлка не нужна застройка. Результат прежний
   if(mt*kR>0.){ r0=ridged(rp); rx=ridged(rp+vec2(e*rs,0.)); rz=ridged(rp+vec2(0.,e*rs)); }
   N=normalize(N+vec3(r0-rx,0.,r0-rz)*(7.5*mt*kR)); float sl=1.-N.y; r0=mix(0.45,r0,kR);
   float kN=1.-smoothstep(10.,45.,px), n=0.5, n2=0.5, n3=0.5;
-  if(h>=0.){ n=mix(mix(0.5,vnoise(vP.xz*0.0035),1.-smoothstep(90.,260.,px)), fbm(vP.xz*0.0035), kN); n2=mix(0.5,fbm(vP.xz*0.045),kF); n3=mix(0.5,vnoise(vP.xz*0.6),kT); }
+  if(h>=0.){ n=mix(mix(0.5,vnoise(P.xz*0.0035),1.-smoothstep(90.,260.,px)), fbm(P.xz*0.0035), kN); n2=mix(0.5,fbm(P.xz*0.045),kF); n3=mix(0.5,vnoise(P.xz*0.6),kT); }
   vec3 sand=vec3(0.93,0.80,0.52), green=vec3(0.24,0.62,0.13), steppe=vec3(0.88,0.62,0.27), forest=vec3(0.06,0.30,0.14),
        meadow=vec3(0.38,0.68,0.18), rock=vec3(0.56,0.42,0.42), snow=vec3(0.98,0.99,1.);
   vec3 c=sand*(0.92+0.12*n3);
@@ -201,13 +202,13 @@ void main(){ vec3 N=normalize(vN); float h=vH;
   if(h<0.) c=mix(sand*vec3(0.62,0.93,0.88), vec3(0.03,0.30,0.42), smoothstep(0.,7.,-h));
   else c=mix(c*0.72, c, smoothstep(0.,0.9,h));
   // застройка и сады читаются издалека как фактура: тёмные кроны и светлые пятна крыш
-  float dc=length(vP-cameraPosition), tw=smoothstep(2.5,6.,h)*smoothstep(150.,60.,h)*(1.-smoothstep(5000.,11000.,dc));
-  if(tw>0.){ float can=vnoise(vP.xz*0.075)*0.6+vnoise(vP.xz*0.21)*0.4; c=mix(c, vec3(0.07,0.20,0.07), tw*smoothstep(0.42,0.62,can)*0.85);
-    vec2 cell=floor(vP.xz/11.); float rf=step(0.90,hash(cell))*step(can,0.5)*tw*(1.-smoothstep(1500.,5000.,dc));
+  float dc=length(P-CP), tw=smoothstep(2.5,6.,h)*smoothstep(150.,60.,h)*(1.-smoothstep(5000.,11000.,dc));
+  if(tw>0.){ float can=vnoise(P.xz*0.075)*0.6+vnoise(P.xz*0.21)*0.4; c=mix(c, vec3(0.07,0.20,0.07), tw*smoothstep(0.42,0.62,can)*0.85);
+    vec2 cell=floor(P.xz/11.); float rf=step(0.90,hash(cell))*step(can,0.5)*tw*(1.-smoothstep(1500.,5000.,dc));
     c=mix(c, mix(vec3(0.80,0.78,0.74), vec3(0.55,0.22,0.16), step(0.5,hash(cell+7.))), rf*0.8); }
   // ущелья и подножия стен темнее -- рассеянный свет туда не добирается; по склонам ползут тени облаков
   float ao=mix(1., 0.72+0.28*smoothstep(0.15,0.75,r0), mt);
-  float cs=1.; if(mt>0.) cs-=0.55*cloudCov(cloudDens(vP.xz*0.00011*uCloudScale+uCloud))*mt;
+  float cs=1.; if(mt>0.) cs-=0.55*cloudCov(cloudDens(P.xz*0.00011*uCloudScale+uCloud))*mt;
   float l=max(dot(N,uSun),0.)*uSunI*cs; vec3 amb=vec3(0.22,0.29,0.44)*mix(1.,0.62,uStorm)*ao;
   // живопись светом: солнечные склоны тёплые, золотистые; тени холодные, сине-фиолетовые; цвета гуще
   // погодный фильтр: на солнце краски сочные, в шторм -- выцветшие и холодные, на заре -- тёплые
@@ -217,15 +218,15 @@ void main(){ vec3 N=normalize(vN); float h=vH;
   float sunny=uSunI*(1.-uStorm); // в ясный день горы залиты светом: солнечные склоны почти слепят, тени наполнены отражённым
   vec3 col=c*(sunC*l*(1.25+0.75*sunny)+shC*ao*(1.25+0.3*sunny)+snowM*vec3(0.36,0.42,0.60)*mix(1.,0.5,uStorm)*ao);
   // контровой свет по гребням: кромка, обращённая к солнцу, горит
-  vec3 Vd=normalize(cameraPosition-vP); col+=sunC*c*pow(1.-max(dot(N,Vd),0.),3.)*max(dot(N,uSun)+0.25,0.)*0.55*mt*uSunI;
-  float dist=length(vP-cameraPosition);
+  vec3 Vd=normalize(CP-P); col+=sunC*c*pow(1.-max(dot(N,Vd),0.),3.)*max(dot(N,uSun)+0.25,0.)*0.55*mt*uSunI;
+  float dist=length(P-CP);
   // облака цепляются за хребты: полоса тумана на высоте, рваная, плывёт по ветру
-  float band=exp(-pow((h-1500.-380.*n)/260.,2.))*smoothstep(6000.,16000.,dist); band=band>0.002 ? band*smoothstep(0.52,0.74,fbm(vP.xz*0.00045+uCloud*0.6+3.)) : 0.; // вне полосы шум не считаем
+  float band=exp(-pow((h-1500.-380.*n)/260.,2.))*smoothstep(6000.,16000.,dist); band=band>0.002 ? band*smoothstep(0.52,0.74,fbm(P.xz*0.00045+uCloud*0.6+3.)) : 0.; // вне полосы шум не считаем
   col=mix(col, mix(vec3(0.93,0.95,0.99),vec3(0.30,0.33,0.37),uStorm), band*(0.42+0.45*uStorm));
   // в шторм вершины уходят в тучу
   col=mix(col, vec3(0.24,0.27,0.31), uStorm*smoothstep(1300.,2600.,h)*0.8);
   col*=mix(vec3(0.045,0.06,0.11), vec3(1.), uDay); // ночью -- синий полумрак
-  col=applyFog(col, dist, h);
+  col=applyFog(col, dist*${WS}., h);
   // дно под водой не должно давать контуров сквозь воду: пишем ему глубину «бесконечность». Заодно кромка берега
   // получает чистую линию ровно по урезу воды
   #ifdef FDEPTH
