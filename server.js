@@ -60,7 +60,8 @@ server.on('upgrade', (req, sock) => {
       else if (m.t === 'leave') leave(c);
       else if (m.t === 'hit') { const o = clients.get(+m.to); // удар по чужой лодке: пересылаем адресату, он сам решит, вылетел ли
         if (o && o !== c && c.s && o.s && Math.hypot(o.s.X - c.s.X, o.s.Y - c.s.Y) < 30) send(o, { t: 'hit', from: c.id, n: c.name || '', vx: +m.vx || 0, vy: +m.vy || 0, i: +m.i || 0 }); } } });
-  sock.on('close', () => { leave(c); drop(); }); sock.on('error', () => { leave(c); drop(); });
+  // сокет после апгрейда полуоткрытый (так его создаёт http): обрыв без кадра закрытия приходит только как 'end'
+  sock.on('end', () => { leave(c); drop(); }); sock.on('close', () => { leave(c); drop(); }); sock.on('error', () => { leave(c); drop(); });
 });
 const byFid = (fid) => { for (const o of clients.values()) if (o.fid === fid) return o; return null; };
 const send = (c, o) => { try { c.sock.write(frame(JSON.stringify(o))); } catch (e) { /* сокет уже закрыт -- уберёт рассылка */ } };
