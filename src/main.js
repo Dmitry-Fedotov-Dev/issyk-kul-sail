@@ -591,14 +591,17 @@ function updateCamera(dt, b, sp) {
     if (MENU.phone) camera.setViewOffset(W, H, 0, H / 2 - (MENU.boatT + MENU.boatB) * 0.5, W, H); else camera.setViewOffset(W, H, W / 2 - MENU.lakeW / 2, 0, W, H);
   } else {
     // камера ходит по сфере вокруг лодки: orbit -- вокруг, orbitP -- вверх-вниз, zoom -- ближе-дальше
-    const top = G.cam === 2, d = (top ? 40 : (b.camD || 13) + sp * (b.kind ? 0.22 : 0.55) + G.flyCam) * G.zoom, el = clamp((top ? 1.2 : 0.14) + G.orbitP, -0.06, 1.45), ce = Math.cos(el), se = Math.sin(el);
+    // «Длинный объектив» (долли-зум): камера за кормой в TELE раз дальше и во столько же раз уже угол обзора. Лодка в кадре
+    // того же размера, а хребты на горизонте -- в TELE раз крупнее, как на съёмке гор длиннофокусным объективом.
+    // Рельеф и расстояния не тронуты -- меняется только оптика.
+    const TELE = 3, top = G.cam === 2, tele = top ? 1 : TELE, d = (top ? 40 : (b.camD || 13) + sp * (b.kind ? 0.22 : 0.55) + G.flyCam) * G.zoom * tele, el = clamp((top ? 1.2 : 0.14 / tele) + G.orbitP, -0.06, 1.45), ce = Math.cos(el), se = Math.sin(el);
     const by = b.base || 0, ty = by + (top ? 1 : (b.kind ? 1.3 : 2.2) + (b.y - by) * 0.5), ahead = top ? 0 : 4.5 * Math.cos(G.orbit) * ce; // за кормой смотрим чуть вперёд лодки, сбоку -- на неё
     const hx = Math.sin(b.th), hz = -Math.cos(b.th), tx = bx + hx * ahead, tz = bz + hz * ahead;
     camera.position.set(tx - fx * d * ce - hx * ahead * 1.0 + jx, ty + d * se + 1.4 + jy, tz - fz * d * ce - hz * ahead * 1.0);
     const gy = Math.max(G.waves.sample(camera.position.x, camera.position.z, G.t, 1, tmpS).h + 0.9, G.h(camera.position.x, -camera.position.z) + 2); if (G.mode !== 'river' && camera.position.y < gy) camera.position.y = gy;
     camera.lookAt(tx, ty, tz);
     if (!top) camera.rotateZ(-b.phi * 0.2 * Math.cos(wrapPi(b.th - yaw)) * ce + jx * 0.06);
-    camera.fov += ((top ? 50 : 54 + Math.min(14, sp * 1.7)) - camera.fov) * Math.min(1, dt * 3);
+    const f0 = top ? 50 : 54 + Math.min(14, sp * 1.7), fT = (2 * Math.atan(Math.tan((f0 * DEG) / 2) / tele)) / DEG; camera.fov += (fT - camera.fov) * Math.min(1, dt * 3);
   }
   if (G.dbgCam) { const c = G.dbgCam, hx = Math.sin(b.th), hz = -Math.cos(b.th); // крупный план для автотестов
     camera.position.set(bx - hx * c.back + hz * -c.side, c.up, bz - hz * c.back + hx * c.side); camera.lookAt(bx, 1.2, bz); camera.fov = 45; }
