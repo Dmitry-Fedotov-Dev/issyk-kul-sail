@@ -46,13 +46,16 @@ export function makeNet(scene, ctx) {
   const can = typeof WebSocket !== 'undefined' && /^https?:$/.test(location.protocol);
   const sendJ = (o) => { if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify(o)); return true; } catch (e) { /* соединение рвётся -- переподключимся */ } } return false; };
   function connect() { if (!can) return; try { ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'); } catch (e) { ws = null; return; } // соединения запрещены средой -- остаёмся в одиночной игре
-    ws.onopen = () => { st.up = true; retry = 2; sendJ({ t: 'hello', pid: ctx.pid() }); }; ws.onclose = () => { st.up = false; ws = null; wait = retry; retry = Math.min(retry * 2, 60); for (const p of pups.values()) p.model.root.visible = false; st.online = 0; if (ctx.onDown) ctx.onDown(); };
+    ws.onopen = () => { st.up = true; retry = 2; sendJ({ t: 'hello', pid: ctx.pid(), fid: ctx.fid() }); if (ctx.onUp) ctx.onUp(); }; ws.onclose = () => { st.up = false; ws = null; wait = retry; retry = Math.min(retry * 2, 60); for (const p of pups.values()) p.model.root.visible = false; st.online = 0; if (ctx.onDown) ctx.onDown(); };
     ws.onerror = () => {}; // причина придёт в onclose, там и переподключение
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
       if (m.t === 'hi') st.id = m.id;
       else if (m.t === 'w') { st.online = m.on; if (m.now) { const o = m.now - Date.now(); st.off = st.sync ? st.off + (o - st.off) * 0.1 : o; st.sync = true; } world(m.p); }
       else if (m.t === 'lobby' && ctx.onLobby) ctx.onLobby(m);
-      else if (m.t === 'hit' && ctx.onHit) ctx.onHit(m); }; }
+      else if (m.t === 'hit' && ctx.onHit) ctx.onHit(m);
+      else if (m.t === 'found' && ctx.onFound) ctx.onFound(m.list || []);
+      else if (m.t === 'friend' && ctx.onFriend) ctx.onFriend(m);
+      else if (m.t === 'hook' && ctx.onHook) ctx.onHook(m); }; }
   function make(k) { const yacht = k === 'yacht' || !SPECS[k], b = yacht ? new Boat() : makeCraftBody(k), model = yacht ? makeBoat({ hull: 0x7a2f5a, accent: '#f4f3ee', text: 'ONLINE' }) : MODEL[k]({ hull: 0x7a2f5a, deck: 0xf4f3ee });
     scene.add(model.root); const tag = nameTag(''); scene.add(tag); return { k, b, model, tag, tagText: null, tx: 0, ty: 0, tth: 0, tphi: 0, seen: 0, fresh: true, fseq: null }; }
   const drop = (id, p) => { scene.remove(p.model.root); scene.remove(p.tag); p.tag.material.map.dispose(); p.tag.material.dispose(); if (p.model.dispose) p.model.dispose(); pups.delete(id); };
@@ -73,13 +76,16 @@ export function makeNet(scene, ctx) {
     join: (k, preset) => sendJ({ t: 'join', k, p: preset, n: ctx.name() }),
     go: () => sendJ({ t: 'go' }),
     leave: () => sendJ({ t: 'leave' }),
+    find: (fids) => sendJ({ t: 'find', fids }),
+    friend: (to) => sendJ({ t: 'friend', to, n: ctx.name() }),
+    hook: (to, on, L, j) => sendJ({ t: 'hook', to, on, L: +(+L).toFixed(1), j: +(+(j || 0)).toFixed(2) }), // on: 1 -- зацепил, 0 -- отдал, 2 -- рывок
     hit: (to, vx, vy, i) => sendJ({ t: 'hit', to, vx: +vx.toFixed(2), vy: +vy.toFixed(2), i: +i.toFixed(2) }),
     tick(dt, P, world_, t, rr) {
       if (!can) return; if (!ws) { wait -= dt; if (wait <= 0) { wait = 1e9; connect(); } }
       acc += dt; const b = P.b;
       if (st.up && acc >= 0.1 && ws.readyState === 1 && ctx.active()) { acc = 0; const r = r2;
         const fl = ctx.fling(), npc = ctx.npc ? ctx.npc() : null; // [номер полёта, vx, vy, vz] своего сапбордиста; NPC, если ведём их за всех
-        sendJ({ t: 's', k: b.kind || 'yacht', X: r(b.X, 1), Y: r(b.Y, 1), th: r(b.th, 3), phi: r(b.phi, 3), vx: r(b.vx), vy: r(b.vy), w: world_, a: encA(b), r: rr || [0, 0], n: ctx.name(), f: fl.map((v) => r(v)), npc: npc || undefined }); }
+        sendJ({ t: 's', k: b.kind || 'yacht', X: r(b.X, 1), Y: r(b.Y, 1), th: r(b.th, 3), phi: r(b.phi, 3), vx: r(b.vx), vy: r(b.vy), w: world_, a: encA(b), r: rr || [0, 0], n: ctx.name(), pr: ctx.preset ? ctx.preset() : '', f: fl.map((v) => r(v)), npc: npc || undefined }); }
       const now = performance.now();
       for (const [id, p] of pups) { const q = p.b, age = now - p.seen; if (age > 4000 || !ctx.active()) { drop(id, p); continue; }
         p.model.root.visible = age < 1500; p.tx += q.vx * dt; p.ty += q.vy * dt; const k = Math.min(1, dt * 7);

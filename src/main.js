@@ -76,7 +76,8 @@ async function init() {
   G = { ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
     cam: 0, camYaw: 0, orbit: 0, orbitP: 0, zoom: 1, orbitV: 0, shake: 0, hintT: 0, free: null, toastT: 0, frame: 0, slow: 0 };
   if (!PRESETS[G.preset]) G.preset = 'santash';
-  X = installExtra({ G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace() });
+  X = installExtra({ G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
+    setPreset: (id) => { if (PRESETS[id]) { G.preset = id; applyPreset(); } } });
   buildMenu(); applyPreset(); toMenu(); resize();
   // Шейдеры собираются при первом показе каждого объекта, и это подвешивало меню на несколько секунд. Собираем всё
   // заранее, пока ещё виден экран загрузки, включая соперников и знаки, которые в меню скрыты (иначе фриз был бы
@@ -89,6 +90,7 @@ async function init() {
   // снимок растворяется в живой сцене; меню появляется уже поверх неё
   clearInterval(window.__tipTimer); $('load').classList.add('done'); setTimeout(() => { $('load').hidden = true; }, 1500);
   requestAnimationFrame(loop);
+  X.openLink(); // открыли ссылку друга -- сразу на воду, к нему
 }
 
 function applyPreset() {
@@ -282,12 +284,12 @@ function stepRace(dt) {
 function finishRace() {
   X.ach('regatta');
   const R = G.race; R.over = true; audio.horn();
-  const key = 'best.' + G.preset, best = store.get(key), rec = !best || G.player.time < best; if (rec) store.set(key, G.player.time);
+  const key = 'best.' + G.preset, best = store.get(key), rec = !best || G.player.time < best; if (rec) store.set(key, G.player.time); R.fix = X.raceRepair(R.online);
   const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   // в протоколе -- все участники онлайн-заезда; пока остальные финишируют, он перерисовывается
   R.redraw = () => { const all = [G.player, ...G.rivals.filter((r) => !r.out), ...X.onlineRows(R, true)].sort((a, b) => progress(R, b) - progress(R, a)), place = all.indexOf(G.player) + 1;
     $('rh').textContent = place === 1 ? 'Победа!' : place + '-е место';
-    $('rs').textContent = `${PRESETS[G.preset].name}${R.online ? ' · онлайн' : ''} · ваше время ${fmt(G.player.time)}` + (rec ? ' · личный рекорд' : best ? ` · рекорд ${fmt(best)}` : '');
+    $('rs').textContent = `${PRESETS[G.preset].name}${R.online ? ' · онлайн' : ''} · ваше время ${fmt(G.player.time)}` + (rec ? ' · личный рекорд' : best ? ` · рекорд ${fmt(best)}` : '') + R.fix;
     $('rt').innerHTML = all.map((e, i) => `<tr class="${e === G.player ? 'me' : ''}"><td>${i + 1}</td><td>${esc(e.name)}</td><td>${e.leg >= 4 ? fmt(e.time) : e.off ? 'вышел' : 'в пути'}</td></tr>`).join(''); };
   R.redraw();
   setTimeout(() => { if (G.race === R) $('result').hidden = false; }, 1600);
@@ -302,6 +304,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyC') { G.cam = (G.cam + 1) % 3; resetView(); }
   else if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Звук выключен' : 'Звук включён');
   else if (e.code === 'Escape' && G.mode !== 'menu') toMenu();
+  else if (e.code === 'KeyF' && G.mode !== 'menu') X.hookPress();
   else if (e.code === 'KeyR' && G.mode === 'race') startRace(); else if (e.code === 'KeyR' && G.mode === 'free') startFree();
 });
 window.addEventListener('keyup', (e) => { if (KEY[e.code]) { input[KEY[e.code]] = false; e.preventDefault(); } });

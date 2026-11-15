@@ -124,6 +124,15 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
 .ja{display:flex;gap:10px;align-items:baseline;padding:4px 0 4px 22px;position:relative;font-size:13px;color:var(--dim)}.ja b{flex:0 0 190px;font-weight:600}.ja::before{content:"";position:absolute;left:3px;top:9px;width:9px;height:9px;border:1.5px solid var(--dim);border-radius:50%}
 .ja.ok{color:var(--ink)}.ja.ok::before{background:var(--buoy);border-color:var(--buoy)}
 #mapcv{width:100%;display:block;border-radius:8px;cursor:crosshair;margin:8px 0}#mapinfo{margin:0;font-size:14px}.note{font-size:12px;color:var(--dim);margin:0 0 12px}
+#bhook{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(150px + env(safe-area-inset-bottom,0px));width:72px;height:72px;border-radius:50%;border:2px solid var(--buoy);background:rgba(7,26,58,.45);color:var(--ink);font:700 13px var(--ui);letter-spacing:.06em;text-transform:uppercase;cursor:pointer;pointer-events:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;z-index:2;padding:0;box-shadow:0 2px 12px rgba(0,10,30,.4)}
+#bhook[hidden],#brepair[hidden]{display:none}#bhook small{font-size:10px;opacity:.7;letter-spacing:0}body.touchdev #bhook small{display:none}#bhook.on{background:rgba(255,138,42,.6)}
+/* ресурс на нуле: кнопка у края экрана плавно разгорается и гаснет */
+#brepair{position:fixed;left:max(16px,env(safe-area-inset-left,0px));top:46%;transform:translateY(-50%);max-width:210px;padding:12px 14px;border-radius:14px;border:1px solid rgba(255,200,140,.75);color:#fff;font:600 15px var(--ui);text-align:left;cursor:pointer;pointer-events:auto;display:flex;flex-direction:column;gap:3px;z-index:2;animation:glow 2.4s ease-in-out infinite}
+#brepair b{font-size:11px;letter-spacing:.1em;text-transform:uppercase;opacity:.9}#brepair small{font-size:11px;font-weight:500;opacity:.85}
+@keyframes glow{0%,100%{background:#b33a0c;box-shadow:0 0 0 0 rgba(255,138,42,0),0 4px 14px rgba(0,10,30,.45)}50%{background:#e45a1b;box-shadow:0 0 24px 7px rgba(255,138,42,.6),0 4px 14px rgba(0,10,30,.45)}}
+.btn.pulse{animation:glow 2.4s ease-in-out infinite;color:#fff}.btn.pulse small{color:#ffe1c8}
+.fr{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}.fr b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fr span{font-size:12px;color:var(--dim)}.fr span.on{color:var(--ok)}.fr .chip{flex:none;padding:8px 14px}.fr .chip[disabled]{opacity:.4;cursor:default}
+#flink{display:block;width:100%;box-sizing:border-box;margin-top:8px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#11306a;color:var(--ink);font:13px var(--ui);user-select:text;-webkit-user-select:text}
 #online{right:max(16px,env(safe-area-inset-right,0px));top:168px;font-size:11px;letter-spacing:.06em;opacity:.85}
 #lobby{position:fixed;left:50%;top:74px;transform:translateX(-50%);padding:12px 16px;text-align:center;width:min(380px,calc(100vw - 32px));box-sizing:border-box;z-index:2}
 #lbt{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}#lbn{font-size:13px;color:var(--dim);margin:4px 0 10px;line-height:1.4;overflow-wrap:anywhere}#lbn b{color:var(--buoy)}
@@ -165,7 +174,7 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
 <div id="lens"></div>
 <div id="game" hidden>
   <div id="speed" class="hud"><b id="kn">0.0</b><small>уз</small><div id="pos"></div><div id="wear"></div>
-    <div id="tools"><button id="bmenu" aria-label="Меню">☰</button><button id="bcam" aria-label="Сменить камеру">◉</button></div></div>
+    <div id="tools"><button id="bmenu" aria-label="Меню">☰</button><button id="bcam" aria-label="Сменить камеру">◉</button><button id="bfriends" aria-label="Друзья и приглашение">👥</button></div></div>
   <div id="race" class="hud" hidden><b id="rtime">0:00</b><div id="rinfo"></div></div>
   <div id="dialwrap" class="hud"><canvas id="dial" width="352" height="352"></canvas><div id="windtxt"></div></div>
   <div id="mark" class="hud" hidden><span id="markd"></span><i></i></div>
@@ -178,6 +187,8 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
   <svg id="ring" class="hud" viewBox="0 0 120 120" hidden><circle cx="60" cy="60" r="50" fill="rgba(7,26,58,.45)" stroke="rgba(255,255,255,.25)" stroke-width="6"/><circle id="ringarc" cx="60" cy="60" r="50" fill="none" stroke="#ff8a2a" stroke-width="6" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="314" transform="rotate(-90 60 60)"/></svg>
   <button id="ts" aria-label="Травить шкот">шкот</button>
   <div id="joy" aria-label="Джойстик: руль и газ"><i></i></div>
+  <button id="bhook" hidden aria-label="Абордажный крюк"><b id="bhookt">крюк</b><small>F</small></button>
+  <button id="brepair" hidden><b>Ресурс 0%</b>Восстановить в гонке<small id="brepairs"></small></button>
 </div>
 <div id="menu" hidden>
   <svg id="coast" aria-hidden="true"><path class="f"/><path class="c1"/><path class="c2"/><path class="w"/><path class="tr"/><path class="l"/></svg>
@@ -200,13 +211,16 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
         <button class="btn" id="brace">Регата<small>три соперника, старт по сигналу</small></button>
         <button class="btn" id="briver" hidden>Сплав: Чон-Ак-Суу<small>горная река, 2 км порогов</small></button>
       </div>
-      <div class="links"><button id="bmap">Место: Чолпон-Ата</button><button id="bjournal">Журнал</button><span class="src">карта: рельеф Terrain Tiles · тропы © OpenStreetMap</span></div>
+      <div class="links"><button id="bmap">Место: Чолпон-Ата</button><button id="bjournal">Журнал</button><button id="mfriends">Друзья</button><span class="src">карта: рельеф Terrain Tiles · тропы © OpenStreetMap</span></div>
       <div id="how"><b>← →</b> руль. <b>Пробел</b> — потравить шкот: сбросить ветер из паруса, когда кренит. Паруса экипаж подбирает сам.<br>Против ветра лодка не идёт: держите угол и лавируйте. Тёмная рябь на воде — идёт порыв.</div>
     </div>
   </div>
 </div>
 <div id="journal" class="dlg" hidden><div class="panel"><h2>Журнал достижений</h2><div id="jlist"></div><div class="modes"><button class="btn" id="jclose">Закрыть</button></div></div></div>
-<div id="mapdlg" class="dlg" hidden><div class="panel"><h2>Место старта</h2><p id="mapinfo"></p><canvas id="mapcv"></canvas><p class="note">Можно выбрать любую точку озера. Или гору: посмотрим, что получится.</p><div class="modes"><button class="btn go" id="mclose">Готово</button><button class="btn" id="mreset">Вернуть Чолпон-Ату</button></div></div></div>
+<div id="mapdlg" class="dlg" hidden><div class="panel"><h2>Место старта</h2><p id="mapinfo"></p><canvas id="mapcv"></canvas><p class="note">Можно выбрать любую точку озера. Или гору: посмотрим, что получится.</p><div class="modes"><button class="btn go" id="mclose">Готово</button><button class="btn" id="mreset">Вернуть Чолпон-Ату</button><button class="btn" id="mshare" hidden>Поделиться точкой<small>ссылка в мессенджер</small></button></div></div></div>
+<div id="fdlg" class="dlg" hidden><div class="panel"><h2>Друзья</h2><p class="note" id="fnote"></p>
+  <div class="modes"><button class="btn go" id="fshare">Позвать друга<small>ссылка: откроет — и окажется рядом с вами</small></button></div>
+  <div id="flist"></div><div class="modes"><button class="btn" id="fclose">Закрыть</button></div></div></div>
 <div id="result" hidden><div class="panel"><h2 id="rh"></h2><div id="rs" style="color:var(--dim)"></div><table id="rt"></table><div class="modes"><button class="btn go" id="ragain">Ещё гонка</button><button class="btn" id="rmenu">В меню</button></div></div></div>
 <div id="load"><div id="loadimg"></div><div id="loadsrc">фото: pastvu.com/1397881</div>
   <div id="loadbox"><p id="loadcap">Берег Иссык-Куля · архивный снимок</p><h2>Парус <em>Иссык-Куля</em></h2>

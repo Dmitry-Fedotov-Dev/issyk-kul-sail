@@ -178,7 +178,7 @@ export class Boat {
 
     const alpha = Math.max(0, absA - Math.abs(this.boom)), aDeg = alpha / DEG;
     this.alpha = alpha; this.luff = 1 - smooth(3, 11, aDeg);
-    const ce = Math.pow(Math.max(0, Math.cos(this.phi)), 1.2) * this.skill * (1 - 0.35 * (this.wearA || 0)); // растянутый парус тянет хуже
+    const ce = Math.pow(Math.max(0, Math.cos(this.phi)), 1.2) * this.skill * (1 - 0.35 * (this.wearA || 0)) * (1 - 0.4 * (this.brkA || 0)); // растянутый парус тянет хуже, рваный -- совсем плохо
     const q = 0.5 * B.rhoAir * aws * aws * B.sail * ce, hx = ax / aws, hy = ay / aws;
     // нормаль паруса (подветренная сторона) -- выбирает знак подъёмной силы
     const sb = this.boom >= 0 ? 1 : -1, cb = Math.cos(Math.abs(this.boom)), snb = Math.sin(Math.abs(this.boom));
@@ -196,14 +196,14 @@ export class Boat {
     const Fr = sR - 500 * (0.95 * V2 * clk * kEff + 2.2 * vs * Math.abs(vs)) - 300 * vs;
     const au = Math.abs(u), xs = au / B.hullSpeed, wave = xs < 1 ? 250 * xs ** 6 : 250 * (1 + 2.0 * (xs - 1));
     const sp2 = Math.sin(this.phi) ** 2;
-    const res = (20 * au * au * (1 + 1.3 * sp2) * (1 + 0.7 * (this.wearH || 0)) + wave + 500 * 0.95 * V2 * clk * clk * 0.11 + 42 * au * au * this.rudder * this.rudder) * Math.sign(u) + 25 * u;
+    const res = (20 * au * au * (1 + 1.3 * sp2) * (1 + 0.7 * (this.wearH || 0) + 0.8 * (this.brkH || 0)) + wave + 500 * 0.95 * V2 * clk * clk * 0.11 + 42 * au * au * this.rudder * this.rudder) * Math.sign(u) + 25 * u;
     const Ff = sF - res - B.mass * G * 0.25 * this.slopeF * this.att;
     this.vx += (fx * Ff / B.mass + rx * Fr / B.massSide) * dt;
     this.vy += (fy * Ff / B.mass + ry * Fr / B.massSide) * dt;
 
     // --- рыскание: руль работает только в потоке; крен приводит лодку к ветру ---
     const ue = (u < -0.4 ? -1 : 1) * Math.max(au, 0.75);
-    const rT = this.rudder * 0.215 * ue * Math.max(0.2, Math.cos(this.phi)) ** 2;
+    const rT = this.rudder * 0.215 * ue * Math.max(0.2, Math.cos(this.phi)) ** 2 * (1 - 0.45 * (this.brkH || 0)); // корпус с водой слушается руля хуже
     const sph = Math.sin(Math.abs(this.phi));
     let rd = (rT - this.r) / 0.42;
     rd += sg * 0.5 * (Math.abs(sR) / 1500) * sph * sph * 4; // приводится в порыве
@@ -216,7 +216,7 @@ export class Boat {
     const mh = sR * B.ceH + wk;
     this.crew += clamp(clamp(-mh / B.crewM, -1, 1) - this.crew, -1.3 * dt, 1.3 * dt);
     const pr = this.phi + Math.atan(this.slopeR) * 0.8 * this.att;
-    const rm = B.K * Math.sin(Math.PI * clamp(pr, -1.9, 1.9) / B.phiV);
+    const rm = B.K * Math.sin(Math.PI * clamp(pr, -1.9, 1.9) / B.phiV) * (1 - 0.3 * (this.brkH || 0)); // вода в корпусе -- остойчивость ниже, ветер кренит сильнее
     const pd = (mh + this.crew * B.crewM * Math.cos(this.phi) - rm - B.rollDamp * this.p - B.mass * u * this.r * 0.45) / B.Ix;
     this.p += pd * dt; this.phi += this.p * dt;
     // за 60° вода идёт в кокпит -- лодку уже не удержать
