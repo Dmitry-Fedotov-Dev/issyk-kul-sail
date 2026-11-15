@@ -6,7 +6,7 @@
 // Закрытые передним склоном гребни не видны: работает обычная проверка глубины, а лента чуть выдвинута к камере
 // вдоль луча зрения (на экране она от этого не сдвигается), чтобы не тонуть в собственном склоне.
 import * as THREE from 'three';
-import { CURVE, END, MAP } from './world.js';
+import { CURVE, END, MAP, exag } from './world.js';
 
 const U = { uRes: { value: new THREE.Vector2(1280, 720) }, uK: { value: 1 } };
 export function setRidgeRes(w, h) { U.uRes.value.set(w, h); U.uK.value = Math.max(0.75, h / 720); }
@@ -37,16 +37,16 @@ export function makeRidges(hNear, farGrid, holes = []) {
   { const S = 2, M = MAP.M * S, W = Math.floor((MAP.N - 1) / S) + 1, X0 = -MAP.OX * MAP.M, Y1 = MAP.OY * MAP.M, hs = new Float32Array(W * W);
     for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) hs[j * W + i] = hNear(X0 + i * M, Y1 - j * M);
     const near = []; extract(hs, W, W, M, (i, j, h) => h > 25, 30, (i, j) => [X0 + i * M, Y1 - j * M], near);
-    for (const l of near) lines.push({ pts: chaikin(chaikin(l)), h: hNear }); }
+    for (const l of near) lines.push({ pts: chaikin(chaikin(l)), h: (X, Y) => exag(hNear(X, Y), X, Y) }); }
   // вся котловина: грубая карта (шаг 600 м) за пределами подробной и не там, где стоит рельеф ущелья
   { const { hs, W, H, X0, Y1, STEP } = farGrid, M = MAP.M, pad = 2 * STEP;
     const nx0 = -MAP.OX * M + pad, nx1 = (MAP.N - 1 - MAP.OX) * M - pad, ny0 = (MAP.OY - (MAP.N - 1)) * M + pad, ny1 = MAP.OY * M - pad;
     const mask = (i, j, h) => { if (h < 40) return false; const X = X0 + i * STEP, Y = Y1 - j * STEP; if (X > nx0 && X < nx1 && Y > ny0 && Y < ny1) return false;
       return !holes.some((o) => Math.hypot(X - o.X, Y - o.Y) < o.r + STEP); };
     const at = (X, Y) => { const fx = Math.min(Math.max((X - X0) / STEP, 0), W - 1.001), fy = Math.min(Math.max((Y1 - Y) / STEP, 0), H - 1.001), i = fx | 0, j = fy | 0, u = fx - i, v = fy - j;
-      return (hs[j * W + i] * (1 - u) + hs[j * W + i + 1] * u) * (1 - v) + (hs[(j + 1) * W + i] * (1 - u) + hs[(j + 1) * W + i + 1] * u) * v - 12; }; // дальняя сетка лежит на 12 м ниже
+      return (hs[j * W + i] * (1 - u) + hs[j * W + i + 1] * u) * (1 - v) + (hs[(j + 1) * W + i] * (1 - u) + hs[(j + 1) * W + i + 1] * u) * v; }, atE = (X, Y) => exag(at(X, Y), X, Y) - 12; // дальняя сетка лежит на 12 м ниже
     const far = []; extract(hs, W, H, STEP, mask, 400, (i, j) => [X0 + i * STEP, Y1 - j * STEP], far);
-    for (const l of far) lines.push({ pts: chaikin(l), h: at }); } // вдали хватает одного сглаживания: вдвое меньше вершин
+    for (const l of far) lines.push({ pts: chaikin(l), h: atE }); } // вдали хватает одного сглаживания: вдвое меньше вершин
 
   // каждый отрезок -- четыре вершины ленты; отрезки раскладываются по клеткам 8 км, чтобы невидимые отсекались
   const tiles = new Map();

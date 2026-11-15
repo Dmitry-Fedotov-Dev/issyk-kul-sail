@@ -203,7 +203,7 @@ export function installExtra(A) {
 
   // ---------- старт в произвольном месте, в том числе на горе ----------
   function nearestWater(X, Y) { for (let r = 300; r < 90000; r += 300) for (let a = 0; a < 6.283; a += 0.2) { const x = X + Math.sin(a) * r, y = Y + Math.cos(a) * r; if (G.h(x, y) < -4) return { X: x, Y: y }; } return { X: 0, Y: -600 }; }
-  function stepGag(dt, b) { const ht = G.h(b.X, b.Y); if (!G.gag) { if (ht < 8) return; G.gag = { t: 0, stuck: 0, top: ht }; toast(`Судно на высоте ${Math.round(ht + 1601)} м над морем. Спускаем на воду…`); }
+  function stepGag(dt, b) { const ht = G.h(b.X, b.Y); if (!G.gag) { if (ht < 8) return; G.gag = { t: 0, stuck: 0, top: ht }; toast(`Судно на высоте ${Math.round(G.hRaw(b.X, b.Y) + 1601)} м над морем. Спускаем на воду…`); }
     const g = G.gag; g.t += dt; if (ht < -1.2) { G.gag = null; b.aground = false; b.base = 0; b.phi = 0; ach('m_peak'); toast('На воде!'); audio.splash(1); return; }
     const e = 40, gx = G.h(b.X + e, b.Y) - G.h(b.X - e, b.Y), gy = G.h(b.X, b.Y + e) - G.h(b.X, b.Y - e), n = Math.hypot(gx, gy), sl = n / (2 * e);
     if (sl < 0.004) g.stuck += dt; else g.stuck = 0;
@@ -259,7 +259,7 @@ export function installExtra(A) {
     { const tmp = []; isolines(g.hs, g.W, g.H, 0, (i, j) => [i, j], tmp); const nearLake = (x, y) => { for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const i = Math.round(x) + di, j = Math.round(y) + dj; if (i >= 0 && j >= 0 && i < g.W && j < g.H && G.lake[j * g.W + i]) return true; } return false; };
       for (const o of tmp) if (nearLake(o.p[0], o.p[1])) far.push(o); }
     const N = Math.floor((MAP_N - 1) / S2) + 1, X0n = -MAP_OX * M, Y1n = MAP_OY * M, hs = new Float32Array(N * N), step = M * S2;
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) hs[j * N + i] = G.h(X0n + i * step, Y1n - j * step);
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) hs[j * N + i] = G.hRaw(X0n + i * step, Y1n - j * step); // горизонтали -- по настоящим высотам
     const trN = (i, j) => [(X0n + i * step - g.X0) / g.STEP, (g.Y1 - (Y1n - j * step)) / g.STEP];
     for (let asl = 1700; asl <= 4800; asl += 100) isolines(hs, N, N, asl - LK, trN, near); isolines(hs, N, N, 0, trN, near);
     const lines = (str) => str.split(';').map((w) => { const q = w.split(','), fl = new Float32Array(q.length - (q.length % 2)); for (let k = 0; k + 1 < q.length; k += 2) { fl[k] = (+q[k] * 4 - g.X0) / g.STEP; fl[k + 1] = (g.Y1 - +q[k + 1] * 4) / g.STEP; } return fl; });
@@ -302,7 +302,7 @@ export function installExtra(A) {
   function mapZoom(f, px, py) { const g = G.far.userData.grid, v = mapWin(), gx = v.sx + px * v.sw, gy = v.sy + py * v.sh; mv.z = clamp(mv.z * f, 1, 64);
     const sw = g.W / mv.z, sh = g.H / mv.z; mv.cx = gx - (px - 0.5) * sw; mv.cy = gy - (py - 0.5) * sh; redrawMap(); }
   function pickMap(ev) { const g = G.far.userData.grid, r = $('mapcv').getBoundingClientRect(), v = mapWin(), gx = v.sx + ((ev.clientX - r.left) / r.width) * v.sw, gy = v.sy + ((ev.clientY - r.top) / r.height) * v.sh;
-    const X = g.X0 + gx * g.STEP, Y = g.Y1 - gy * g.STEP, h = G.h(X, Y), d = Math.hypot(X, Y) / 1000;
+    const X = g.X0 + gx * g.STEP, Y = g.Y1 - gy * g.STEP, h = G.hRaw(X, Y), d = Math.hypot(X, Y) / 1000; // подпись -- настоящая высота
     const az = (Math.atan2(X, Y) / DEG + 360) % 360, dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'][Math.round(az / 45) % 8];
     startAt = { X, Y, land: h > -2, label: `${d.toFixed(0)} км к ${dirs} · ${h > -2 ? `суша, ${Math.round(h + 1601)} м` : 'озеро'}` }; refreshMenu(); mapInfo(); drawMap(); }
   const mapInfo = () => { $('mshare').hidden = !startAt; $('mapinfo').textContent = startAt ? `Выбрано: ${startAt.label}` : 'Нажмите на карту. Оранжевая точка — Чолпон-Ата. Два пальца или колесо — приблизить.'; };

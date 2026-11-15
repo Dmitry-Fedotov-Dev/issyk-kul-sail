@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TRAILS, RIVERS } from './trails.js';
 import { Boat, Wind, Waves, PRESETS, DEG, KN, clamp, wrapPi, smooth, pointOfSail, aiControl } from './sim.js';
-import { applyQuality, loadHeight, makeSky, makeTerrain, makeFarTerrain, makeWater, makeShore, makeMark, SUN, HAZE, ENV, MAP } from './world.js';
+import { setExagHoles, exag, applyQuality, loadHeight, makeSky, makeTerrain, makeFarTerrain, makeWater, makeShore, makeMark, SUN, HAZE, ENV, MAP } from './world.js';
 import { makeBoat } from './boatmodel.js';
 import { makeSpray, makeWake, WAKE_LIGHT } from './fx.js';
 import { makeAudio } from './audio.js';
@@ -68,7 +68,7 @@ let G = null, X = null; // G -- всё состояние игры после з
 const loadStep = async (pct, msg) => { $('loadfill').style.width = pct + '%'; $('loadmsg').textContent = msg; await new Promise((r) => setTimeout(r, 40)); };
 async function init() {
   await loadStep(18, 'Читаем карту высот…');
-  const { h, tex } = await loadHeight();
+  const { h, tex } = await loadHeight(); setExagHoles(RIVER_HOLES); // горы выше (world.js, exag), у ущелья сплава -- настоящие
   const sky = makeSky(); scene.add(sky);
   const nearT = makeTerrain(h); scene.add(nearT);
   await loadStep(38, 'Строим берега и хребты…');
@@ -83,7 +83,8 @@ async function init() {
   const ridges = makeRidges(h, far.userData.grid, RIVER_HOLES); scene.add(ridges); // тушь по гребням гор
   // Высота в любой точке котловины: у Чолпон-Аты -- по подробной карте, дальше -- по грубой (шаг 600 м)
   const hNear = h, NX0 = -MAP.OX * MAP.M, NX1 = (MAP.N - 1 - MAP.OX) * MAP.M, NY0 = (MAP.OY - (MAP.N - 1)) * MAP.M, NY1 = MAP.OY * MAP.M;
-  const hA = (x, y) => (x > NX0 && x < NX1 && y > NY0 && y < NY1 ? hNear(x, y) : far.userData.heightAt(x, y));
+  const hRaw = (x, y) => (x > NX0 && x < NX1 && y > NY0 && y < NY1 ? hNear(x, y) : far.userData.heightAt(x, y));
+  const hA = (x, y) => exag(hRaw(x, y), x, y); // рельеф, как его видно: по нему ездят камера и съезжающая с горы лодка
   await loadStep(56, 'Наливаем озеро…');
   const water = makeWater(tex, 1); scene.add(water.mesh);
   const before = new Set(scene.children), shore = makeShore(h, scene), shoreObjs = scene.children.filter((o) => !before.has(o));
@@ -96,7 +97,7 @@ async function init() {
   const rivals = [], ensureRivals = () => { if (!rivals.length) rivals.push(mk({ hull: 0xf4f3ee, accent: '#1f6fd0', text: 'KGZ 21' }, 'Ала-Тоо', 0.95), mk({ hull: 0xe9c33c, accent: '#20242b', text: 'KGZ 4' }, 'Манас', 0.9), mk({ hull: 0x2f8f5a, accent: '#f4f3ee', text: 'KGZ 33' }, 'Чайка', 0.86)); };
   const marks = { W: makeMark(0xff7a1a), L: makeMark(0xffd21f), pin: makeMark(0xff3b30), com: makeMark(0x2f7de2) };
   for (const k in marks) { marks[k].visible = false; scene.add(marks[k]); }
-  G = { lake, mapObjs: [nearT, far, ...shoreObjs], ts: TS, world: TS === 1 ? 'lake' : 'mini', ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
+  G = { hRaw, lake, mapObjs: [nearT, far, ...shoreObjs], ts: TS, world: TS === 1 ? 'lake' : 'mini', ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
     cam: 0, camYaw: 0, orbit: 0, orbitP: 0, zoom: 1, orbitV: 0, shake: 0, hintT: 0, free: null, toastT: 0, frame: 0, slow: 0 };
   if (!PRESETS[G.preset]) G.preset = 'santash';
   X = installExtra({ mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
@@ -118,7 +119,7 @@ async function init() {
 }
 
 function applyPreset() {
-  const p = PRESETS[G.preset]; G.wind.set(p); G.waves.setFromWind(p.speed, p.dir * DEG, p.fetch); G.water.setWaves(G.waves);
+  const p = PRESETS[G.preset]; G.wind.set(p); G.waves.setFromWind(p.speed, p.dir * DEG, p.fetch, p.waveK || 1); G.water.setWaves(G.waves);
   // небо и свет под погоду
   const k = p.sky; ENV.uCover.value = k.cover; ENV.uCirrus.value = k.cirrus; ENV.uStorm.value = k.storm; ENV.uCloudScale.value = k.scale; ENV.uSunI.value = k.sun;
   ENV.uHor.value.set(...k.hor); scene.fog.color.setRGB(...k.hor); sunL.intensity = 3.1 * k.sun; hemi.intensity = 1.9 * (1 - 0.35 * k.storm);

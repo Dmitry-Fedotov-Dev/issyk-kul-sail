@@ -29,7 +29,7 @@ export const PRESETS = {
     sky: { cover: -0.62, cirrus: 0.12, storm: 0, scale: 1.7, hor: [0.56, 0.76, 0.97], sun: 1 } }, // почти чистое солнечное небо: редкие кучевые
   santash: { id: 'santash', name: 'Санташ', sub: 'с востока · 14 узлов · порывы', dir: 98, speed: 7.0, gust: 0.27, shift: 10, fetch: 24000,
     sky: { cover: -0.5, cirrus: 0.08, storm: 0, scale: 0.75, hor: [0.54, 0.73, 0.95], sun: 1 } }, // солнечно, отдельные кучевые
-  ulan: { id: 'ulan', name: 'Улан', sub: 'с запада · 20 узлов · шквалы и волна', dir: 262, speed: 10.2, gust: 0.33, shift: 12, fetch: 30000,
+  ulan: { id: 'ulan', name: 'Улан', sub: 'с запада · 20 узлов · шквалы и волна', dir: 262, speed: 10.2, gust: 0.33, shift: 12, fetch: 30000, waveK: 2, // волна вдвое выше и длиннее
     sky: { cover: 0.86, cirrus: 0, storm: 0.78, scale: 0.62, hor: [0.36, 0.41, 0.47], sun: 0.32 } }, // штормовой фронт: слоисто-кучевые, свинец
 };
 
@@ -75,12 +75,13 @@ export class Wind {
 export const NWAVES = 10;
 export class Waves {
   constructor() { this.w = []; this.Hs = 0; this.qf = 0.7; }
-  setFromWind(U, dirFrom, fetch) {
+  // k -- множитель волны: высота и длина вместе, крутизна прежняя (период -- в sqrt(k) раз дольше)
+  setFromWind(U, dirFrom, fetch, k = 1) {
     // эмпирика для ограниченного разгона (SMB / JONSWAP)
     // у берега волна короче и круче открытой: добавляем 25% высоты
-    const Hs = Math.min(0.0016 * U * Math.sqrt(fetch / G) * 1.25, 1.5);
+    const Hs = Math.min(0.0016 * U * Math.sqrt(fetch / G) * 1.25, 1.5) * k;
     const Tp = 0.286 * (U / G) * Math.cbrt((G * fetch) / (U * U));
-    const lp = (G * Tp * Tp) / (2 * Math.PI);
+    const lp = (G * Tp * Tp) / (2 * Math.PI) * k;
     const ratio = [1.0, 0.71, 1.38, 0.47, 0.31, 0.2, 0.845, 0.577, 1.171, 0.383], off = [0, 15, -19, -34, 41, -58, 26, -8, -46, 63], wt = [1, 0.85, 0.6, 0.7, 0.5, 0.36, 0.78, 0.72, 0.5, 0.55];
     let sum = 0; for (const x of wt) sum += x * x;
     const A = Math.sqrt((Hs * Hs) / 8 / sum);
@@ -92,7 +93,7 @@ export class Waves {
       this.w.push({ dx: -Math.sin(d), dz: Math.cos(d), k, a, om: Math.sqrt(G * k) });
       ak += a * k;
     }
-    this.Hs = Hs; this.Tp = Tp; this.lp = lp; this.qf = Math.min(0.75, 0.85 / Math.max(ak, 1e-6));
+    this.Hs = Hs; this.Tp = Tp * Math.sqrt(k); this.lp = lp; this.qf = Math.min(0.75, 0.85 / Math.max(ak, 1e-6));
   }
   // высота и уклон в точке (x,z); att -- ослабление на мелководье
   sample(x, z, t, att, out) {

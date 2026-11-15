@@ -122,9 +122,9 @@ export function makeTerrain(h) {
   const warp = (i, lo, hi) => { const s = (i / (N - 1)) * 2 - 1; return s < 0 ? lo * Math.pow(-s, P) : hi * Math.pow(s, P); };
   for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
     const X = warp(i, xw, xe), Y = warp(j, ys, yn), k = j * N + i, e = 20;
-    const y = h(X, Y); hs[k] = y;
-    pos[k * 3] = X; pos[k * 3 + 1] = y; pos[k * 3 + 2] = -Y;
-    const nx = h(X - e, Y) - h(X + e, Y), nz = h(X, Y + e) - h(X, Y - e), l = Math.hypot(nx, 2 * e, nz);
+    const y = h(X, Y); hs[k] = y; const ey = exag(y, X, Y);
+    pos[k * 3] = X; pos[k * 3 + 1] = ey; pos[k * 3 + 2] = -Y;
+    const hx = (x, y2) => exag(h(x, y2), x, y2), nx = hx(X - e, Y) - hx(X + e, Y), nz = hx(X, Y + e) - hx(X, Y - e), l = Math.hypot(nx, 2 * e, nz);
     nor[k * 3] = nx / l; nor[k * 3 + 1] = (2 * e) / l; nor[k * 3 + 2] = nz / l;
   }
   const lists = new Map(), CH = Math.ceil((N - 1) / 8);
@@ -236,6 +236,15 @@ void main(){ vec3 N=normalize(vN); float h=vH;
 // ---------- вся котловина: дальние берега и хребты из настоящей карты высот ----------
 // Масштаб высот дальних хребтов. 1 -- как на карте; геометрию гор не искажаем.
 export const FAR_EXAGGERATION = 1;
+// Горы выше в MOUNT_K раз: высота над озером растягивается, форма и соотношение высот сохраняются. Береговая полоса
+// (до ~80 м над водой, посёлки, причал, тополя) не тронута: растяжение включается плавно выше неё. У ущелья Чон-Ак-Суу
+// горы плавно возвращаются к настоящей высоте -- там своя подробная модель русла и воды для сплава.
+// Цвет рельефа (снег, лес, скалы) считается по НАСТОЯЩЕЙ высоте, иначе горы стали бы сплошь белыми.
+export const MOUNT_K = 3; let EXH = [];
+export function setExagHoles(holes) { EXH = holes; }
+export function exag(h, X, Y) { if (h <= 80) return h; let k = MOUNT_K - 1;
+  if (EXH.length && X !== undefined) { let d = 1e9; for (const o of EXH) d = Math.min(d, Math.hypot(X - o.X, Y - o.Y) - o.r); k *= smooth(0, 4000, d); }
+  return h + k * (h - 80) * smooth(80, 380, h); }
 export async function makeFarTerrain(holes = []) {
   const img = new Image(); img.src = FARMAP_PNG; await img.decode();
   const { W, H, X0, Y1, STEP } = FAR, c = document.createElement('canvas'); c.width = W; c.height = H;
@@ -245,8 +254,8 @@ export async function makeFarTerrain(holes = []) {
   const at = (i, j) => hs[Math.min(H - 1, Math.max(0, j)) * W + Math.min(W - 1, Math.max(0, i))];
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, X = X0 + i * STEP, Y = Y1 - j * STEP;
     const dd = Math.hypot(X, Y), ex = 1 + (FAR_EXAGGERATION - 1) * smooth(20000, 50000, dd);
-    pos[k * 3] = X; pos[k * 3 + 1] = hs[k] * ex - 12; pos[k * 3 + 2] = -Y; // чуть ниже ближней сетки, чтобы не спорили на стыке
-    const nx = at(i - 1, j) - at(i + 1, j), nz = at(i, j - 1) - at(i, j + 1), l = Math.hypot(nx, 2 * STEP, nz);
+    pos[k * 3] = X; pos[k * 3 + 1] = exag(hs[k], X, Y) * ex - 12; pos[k * 3 + 2] = -Y; // чуть ниже ближней сетки, чтобы не спорили на стыке
+    const ae = (a, b) => exag(at(a, b), X0 + a * STEP, Y1 - b * STEP), nx = ae(i - 1, j) - ae(i + 1, j), nz = ae(i, j - 1) - ae(i, j + 1), l = Math.hypot(nx, 2 * STEP, nz);
     nor[k * 3] = nx / l; nor[k * 3 + 1] = (2 * STEP) / l; nor[k * 3 + 2] = nz / l; } // выше к северу -> нормаль к югу (+z), как в ближней сетке
   // ближний участок уже нарисован подробной сеткой -- его и открытую воду пропускаем
   const M = MAP.M, pad = 2 * STEP, nx0 = -MAP.OX * M + pad, nx1 = (MAP.N - 1 - MAP.OX) * M - pad, ny0 = (MAP.OY - (MAP.N - 1)) * M + pad, ny1 = MAP.OY * M - pad;
