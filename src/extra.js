@@ -230,16 +230,46 @@ export function installExtra(A) {
       shareLink(u.toString(), `Поплыли отсюда: ${startAt.label} — «Парус Иссык-Куля»`); };
     journal(); refreshMenu(); }
   // карта котловины: клик задаёт место старта
-  function openMap() { const g = G.far.userData.grid, cv = $('mapcv'), c = cv.getContext('2d'); cv.width = g.W; cv.height = g.H; const im = c.createImageData(g.W, g.H);
-    for (let j = 0; j < g.H; j++) for (let i = 0; i < g.W; i++) { const h = g.hs[j * g.W + i], q = (j * g.W + i) * 4, sh = clamp(0.75 + (h - (g.hs[j * g.W + Math.min(i + 1, g.W - 1)])) / 400, 0.45, 1.15); let r, gg, b;
-      if (h < 0) { r = 22; gg = 92; b = 170; } else if (h > 2100) { r = gg = b = 245 * sh; } else if (h > 1300) { r = 150 * sh; gg = 140 * sh; b = 130 * sh; } else if (h > 500) { r = 110 * sh; gg = 140 * sh; b = 80 * sh; } else { r = 205 * sh; gg = 185 * sh; b = 130 * sh; }
-      im.data[q] = r; im.data[q + 1] = gg; im.data[q + 2] = b; im.data[q + 3] = 255; }
-    c.putImageData(im, 0, 0); const px = (X, Y) => [(X - g.X0) / g.STEP, (g.Y1 - Y) / g.STEP], dot = (X, Y, col, r = 4) => { const [x, y] = px(X, Y); c.fillStyle = col; c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); c.stroke(); };
-    dot(0, 0, '#ff7a1a'); if (startAt) dot(startAt.X, startAt.Y, '#ffd21f', 5);
-    $('mshare').hidden = !startAt; $('mapinfo').textContent = startAt ? `Выбрано: ${startAt.label}` : 'Нажмите на карту. Оранжевая точка — Чолпон-Ата.'; $('mapdlg').hidden = false;
-    cv.onclick = (ev) => { const r = cv.getBoundingClientRect(), X = g.X0 + ((ev.clientX - r.left) / r.width) * g.W * g.STEP, Y = g.Y1 - ((ev.clientY - r.top) / r.height) * g.H * g.STEP, h = G.h(X, Y), d = Math.hypot(X, Y) / 1000;
-      const az = (Math.atan2(X, Y) / DEG + 360) % 360, dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'][Math.round(az / 45) % 8];
-      startAt = { X, Y, land: h > -2, label: `${d.toFixed(0)} км к ${dirs} · ${h > -2 ? `суша, ${Math.round(h + 1601)} м` : 'озеро'}` }; refreshMenu(); openMap(); }; }
+  // Карта собирается один раз в своём разрешении (клетка 600 м), а на экран рисуется окном: приближение и сдвиг.
+  // Телефон: два пальца -- приблизить к точке между ними, один палец -- сдвинуть, касание без сдвига -- выбрать место.
+  // Компьютер: колесо -- приблизить к курсору, перетаскивание -- сдвинуть, щелчок -- выбрать.
+  let mapBase = null; const mv = { z: 1, cx: 0, cy: 0 }, mptr = new Map(); let mPinch = 0, mMoved = false;
+  function mapImage() { if (mapBase) return mapBase; const g = G.far.userData.grid, cv = document.createElement('canvas'); cv.width = g.W; cv.height = g.H; const c = cv.getContext('2d'), im = c.createImageData(g.W, g.H);
+    for (let j = 0; j < g.H; j++) for (let i = 0; i < g.W; i++) { const h = g.hs[j * g.W + i], q = (j * g.W + i) * 4, sh = clamp(0.75 + (h - (g.hs[j * g.W + Math.min(i + 1, g.W - 1)])) / 400, 0.45, 1.15); let r, gg, bb;
+      if (h < 0) { r = 22; gg = 92; bb = 170; } else if (h > 2100) { r = gg = bb = 245 * sh; } else if (h > 1300) { r = 150 * sh; gg = 140 * sh; bb = 130 * sh; } else if (h > 500) { r = 110 * sh; gg = 140 * sh; bb = 80 * sh; } else { r = 205 * sh; gg = 185 * sh; bb = 130 * sh; }
+      im.data[q] = r; im.data[q + 1] = gg; im.data[q + 2] = bb; im.data[q + 3] = 255; }
+    c.putImageData(im, 0, 0); return (mapBase = cv); }
+  // окно карты в клетках: ширина W/z, центр (cx, cy), не выходит за края
+  const mapWin = () => { const g = G.far.userData.grid, sw = g.W / mv.z, sh = g.H / mv.z; mv.cx = clamp(mv.cx, sw / 2, g.W - sw / 2); mv.cy = clamp(mv.cy, sh / 2, g.H - sh / 2); return { sx: mv.cx - sw / 2, sy: mv.cy - sh / 2, sw, sh }; };
+  function drawMap() { const g = G.far.userData.grid, cv = $('mapcv'), r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.max(1, Math.round((r.width || g.W) * dpr)), h = Math.round(w * g.H / g.W);
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    const c = cv.getContext('2d'), v = mapWin(), k = w / v.sw; c.imageSmoothingEnabled = true; c.imageSmoothingQuality = "high"; c.drawImage(mapImage(), v.sx, v.sy, v.sw, v.sh, 0, 0, w, h);
+    const dot = (X, Y, col, rr) => { const x = ((X - g.X0) / g.STEP - v.sx) * k, y = ((g.Y1 - Y) / g.STEP - v.sy) * k; c.fillStyle = col; c.strokeStyle = '#fff'; c.lineWidth = 1.5 * dpr; c.beginPath(); c.arc(x, y, rr * dpr, 0, 7); c.fill(); c.stroke(); };
+    dot(0, 0, '#ff7a1a', 4); if (startAt) dot(startAt.X, startAt.Y, '#ffd21f', 5);
+    $('mzoom').hidden = mv.z <= 1.01; }
+  // приблизить в z раз, удерживая точку экрана (px, py -- доли ширины и высоты холста) на месте
+  function mapZoom(f, px, py) { const g = G.far.userData.grid, v = mapWin(), gx = v.sx + px * v.sw, gy = v.sy + py * v.sh; mv.z = clamp(mv.z * f, 1, 12);
+    const sw = g.W / mv.z, sh = g.H / mv.z; mv.cx = gx - (px - 0.5) * sw; mv.cy = gy - (py - 0.5) * sh; drawMap(); }
+  function pickMap(ev) { const g = G.far.userData.grid, r = $('mapcv').getBoundingClientRect(), v = mapWin(), gx = v.sx + ((ev.clientX - r.left) / r.width) * v.sw, gy = v.sy + ((ev.clientY - r.top) / r.height) * v.sh;
+    const X = g.X0 + gx * g.STEP, Y = g.Y1 - gy * g.STEP, h = G.h(X, Y), d = Math.hypot(X, Y) / 1000;
+    const az = (Math.atan2(X, Y) / DEG + 360) % 360, dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'][Math.round(az / 45) % 8];
+    startAt = { X, Y, land: h > -2, label: `${d.toFixed(0)} км к ${dirs} · ${h > -2 ? `суша, ${Math.round(h + 1601)} м` : 'озеро'}` }; refreshMenu(); mapInfo(); drawMap(); }
+  const mapInfo = () => { $('mshare').hidden = !startAt; $('mapinfo').textContent = startAt ? `Выбрано: ${startAt.label}` : 'Нажмите на карту. Оранжевая точка — Чолпон-Ата. Два пальца или колесо — приблизить.'; };
+  function openMap() { const g = G.far.userData.grid; $('mapdlg').hidden = false; if (!mv.cx) { mv.cx = g.W / 2; mv.cy = g.H / 2; } mapInfo(); drawMap();
+    const cv = $('mapcv'); if (cv.dataset.wired) return; cv.dataset.wired = '1';
+    const pt = (e) => { const r = cv.getBoundingClientRect(); return { x: e.clientX, y: e.clientY, px: (e.clientX - r.left) / r.width, py: (e.clientY - r.top) / r.height }; };
+    cv.addEventListener('pointerdown', (e) => { e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (err) { /* без захвата -- жест закончится, когда палец уйдёт */ }
+      mptr.set(e.pointerId, { ...pt(e), x0: e.clientX, y0: e.clientY }); if (mptr.size === 1) mMoved = false; else { mMoved = true; const [p, q] = [...mptr.values()]; mPinch = Math.hypot(p.x - q.x, p.y - q.y); } });
+    cv.addEventListener('pointermove', (e) => { const o = mptr.get(e.pointerId); if (!o) return; const n = pt(e);
+      if (mptr.size >= 2) { o.x = n.x; o.y = n.y; o.px = n.px; o.py = n.py; const [p, q] = [...mptr.values()], d = Math.hypot(p.x - q.x, p.y - q.y);
+        if (mPinch > 0 && d > 0) mapZoom(d / mPinch, (p.px + q.px) / 2, (p.py + q.py) / 2); mPinch = d; return; }
+      if (Math.hypot(n.x - o.x0, n.y - o.y0) > 6) mMoved = true;
+      if (mMoved && mv.z > 1) { const v = mapWin(); mv.cx -= (n.px - o.px) * v.sw; mv.cy -= (n.py - o.py) * v.sh; drawMap(); }
+      o.x = n.x; o.y = n.y; o.px = n.px; o.py = n.py; });
+    const up = (e) => { const o = mptr.get(e.pointerId); mptr.delete(e.pointerId); if (mptr.size < 2) mPinch = 0; if (o && e.type === 'pointerup' && !mMoved && mptr.size === 0) pickMap(e); };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', (e) => { e.preventDefault(); const p = pt(e); mapZoom(Math.exp(-e.deltaY * 0.0015), p.px, p.py); }, { passive: false });
+    $('mzoom').onclick = () => { mv.z = 1; drawMap(); }; window.addEventListener('resize', () => { if (!$('mapdlg').hidden) drawMap(); }); }
 
   // ---------- лобби онлайн-заезда ----------
   const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
