@@ -44,13 +44,13 @@ server.on('upgrade', (req, sock) => {
       if (m.t === 's' && Number.isFinite(m.X) && Number.isFinite(m.Y)) { // храним только ожидаемые поля
         c.name = String(m.n || '').slice(0, 16);
         c.s = { k: String(m.k || 'yacht').slice(0, 8), X: m.X, Y: m.Y, th: +m.th || 0, phi: +m.phi || 0, vx: +m.vx || 0, vy: +m.vy || 0, w: String(m.w || 'lake').slice(0, 40), r: Array.isArray(m.r) ? m.r.slice(0, 2).map((v) => +v || 0) : [0, 0],
-          a: Array.isArray(m.a) ? m.a.slice(0, 6).map((v) => +v || 0) : [], n: c.name, pr: String(m.pr || '').slice(0, 12), sc: Math.min(10, Math.max(0.01, +m.sc || 1)), f: Array.isArray(m.f) ? m.f.slice(0, 4).map((v) => +v || 0) : [0, 0, 0, 0] };
+          a: Array.isArray(m.a) ? m.a.slice(0, 6).map((v) => +v || 0) : [], n: c.name, pr: String(m.pr || '').slice(0, 12), f: Array.isArray(m.f) ? m.f.slice(0, 4).map((v) => +v || 0) : [0, 0, 0, 0] };
         // суда-NPC, которые этот клиент ведёт за всех рядом (он -- «хозяин» акватории или заезда)
         if (Array.isArray(m.npc)) c.s.npc = m.npc.slice(0, 16).map((e) => (Array.isArray(e) ? e.slice(0, 18).map((v) => +v || 0) : [])); }
       else if (m.t === 'hello') { c.fid = String(m.fid || '').slice(0, 16); hello(c, String(m.pid || '').slice(0, 24)); }
       // друзья: где сейчас игроки с этими номерами (номер друга -- из ссылки-приглашения, это не pid)
       else if (m.t === 'find' && Array.isArray(m.fids)) send(c, { t: 'found', list: m.fids.slice(0, 20).map((fid) => { fid = String(fid).slice(0, 16); const o = fid && byFid(fid);
-        return o && o.s ? { fid, on: 1, n: o.name || '', w: o.s.w === 'lake' ? 'lake' : o.s.w.startsWith('r:') ? 'race' : 'other', X: o.s.X, Y: o.s.Y, th: o.s.th, pr: o.s.pr || '' } : { fid, on: 0 }; }) });
+        return o && o.s ? { fid, on: 1, n: o.name || '', w: o.s.w === 'lake' || o.s.w === 'mini' ? o.s.w : o.s.w.startsWith('r:') ? 'race' : 'other', X: o.s.X, Y: o.s.Y, th: o.s.th, pr: o.s.pr || '' } : { fid, on: 0 }; }) });
       // пришёл по ссылке друга: сообщаем ему, чтобы он тоже записал нас в друзья
       else if (m.t === 'friend') { const o = byFid(String(m.to || '').slice(0, 16)); if (o && o !== c && c.fid) send(o, { t: 'friend', fid: c.fid, n: String(m.n || c.name || '').slice(0, 16) }); }
       // абордажный крюк: зацепить можно только того, кто рядом; отдать трос -- всегда

@@ -10,14 +10,12 @@ import * as THREE from 'three';
 import { BOAT, clamp } from './sim.js';
 
 export const HOOK_RANGE = 30;
-const massOf = (b) => (b.kind ? b.spec.mass : BOAT.mass) * (b.ps || 1) ** 3; // масса -- как куб размера
-const bowOf = (b) => (b.kind ? b.hl * 0.9 : 3.6) * (b.ps || 1);
-// скорость тела в мире: у игрушечной лодки в теле хранится «приведённая» скорость (подобие Фруда), множитель -- sv
-const wv = (b) => b.sv || 1;
+const massOf = (b) => (b.kind ? b.spec.mass : BOAT.mass);
+const bowOf = (b) => (b.kind ? b.hl * 0.9 : 3.6);
 
 export function makeHook(scene, ctx) {
   // трос -- трубка толщиной 10 см (линия в пиксель на телефоне не видна); точки оси считает draw(), трубку -- tube()
-  let RAD = 0.05; const N = 20, RS = 6, pos = new Float32Array(N * 3), tp = new Float32Array(N * RS * 3), idx = [];
+  const N = 20, RS = 6, RAD = 0.05, pos = new Float32Array(N * 3), tp = new Float32Array(N * RS * 3), idx = [];
   for (let i = 0; i < N - 1; i++) for (let k = 0; k < RS; k++) { const a = i * RS + k, b2 = i * RS + ((k + 1) % RS), c = a + RS, d = b2 + RS; idx.push(a, c, b2, b2, c, d); }
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(tp, 3)); geo.setIndex(idx);
   const line = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x8a6a3e })); line.frustumCulled = false; line.visible = false; scene.add(line);
@@ -31,20 +29,20 @@ export function makeHook(scene, ctx) {
   let H = null, cool = 0, jerkCool = 0;
   const say = (t) => ctx.toast(t);
   // ближайшая цель в пределах броска (из списка, который даёт игра)
-  function aim(P) { const b = P.b; let best = null, bd = HOOK_RANGE * (b.ps || 1);
+  function aim(P) { const b = P.b; let best = null, bd = HOOK_RANGE;
     for (const c of ctx.targets()) { const q = c.body(); if (!q || q === b) continue; const d = Math.hypot(q.X - b.X, q.Y - b.Y); if (d < bd) { bd = d; best = c; } }
     return best; }
   function release(msg, tell = true) { if (!H) return; if (tell && H.tgt.peerId && (H.on || H.mine === false)) ctx.net.hook(H.tgt.peerId, 0, 0); H = null; line.visible = false; cool = 1.5; if (msg) say(msg); }
   // кнопка: бросить, отдать свой трос или перерубить чужой
   function press(P) { if (H) { release(H.mine ? 'Трос отдан' : 'Трос перерублен'); return; } if (cool > 0 || !ctx.allowed()) return;
-    const R = HOOK_RANGE * (P.b.ps || 1), c = aim(P); if (!c) { say(R < 2 ? `Некого цеплять: ближе ${Math.round(R * 100)} см никого` : `Некого цеплять: ближе ${Math.round(R)} м никого`); return; }
-    const b = P.b, q = c.body(), d = Math.hypot(q.X - b.X, q.Y - b.Y), rel = Math.hypot((q.vx || 0) - b.vx * wv(b), (q.vy || 0) - b.vy * wv(b)) / wv(b);
-    const p = clamp(1.05 - (d / R) * 0.6 - rel / 12, 0.25, 0.95);
-    H = { mine: true, tgt: c, on: false, fly: 0, flyT: (0.3 + d / R * 0.94) * Math.sqrt(b.ps || 1), hit: Math.random() < p, L: d, taut: false, t: 0 }; ctx.audio.slap(0.25); }
+    const c = aim(P); if (!c) { say(`Некого цеплять: ближе ${HOOK_RANGE} м никого`); return; }
+    const b = P.b, q = c.body(), d = Math.hypot(q.X - b.X, q.Y - b.Y), rel = Math.hypot((q.vx || 0) - b.vx, (q.vy || 0) - b.vy);
+    const p = clamp(1.05 - (d / HOOK_RANGE) * 0.6 - rel / 12, 0.25, 0.95);
+    H = { mine: true, tgt: c, on: false, fly: 0, flyT: 0.3 + d / 32, hit: Math.random() < p, L: d, taut: false, t: 0 }; ctx.audio.slap(0.25); }
   // чужой крюк: m = { from, n, on, L }
   function remote(m, peer) { if (m.on === 2) { if (!H || H.tgt.peerId !== m.from || !H.on || !ctx.player) return; const b = ctx.player().b, q = H.tgt.body(); if (!q) return;
-      let dx = q.X - b.X, dy = q.Y - b.Y; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d; const mA = massOf(b), mB = massOf(q); jerk(b, q, dx, dy, Math.min(9, (+m.j || 0) * Math.sqrt((q.ps || 1)) / wv(b)), mB / (mA + mB)); return; }
-    if (m.on) { if (!peer) return; if (H) release(null); H = { mine: false, tgt: peer, on: true, fly: 1, L: Math.max(0.05, +m.L || 10), taut: false, t: 0 };
+      let dx = q.X - b.X, dy = q.Y - b.Y; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d; const mA = massOf(b), mB = massOf(q); jerk(b, q, dx, dy, Math.min(9, +m.j || 0), mB / (mA + mB)); return; }
+    if (m.on) { if (!peer) return; if (H) release(null); H = { mine: false, tgt: peer, on: true, fly: 1, L: Math.max(6, +m.L || 10), taut: false, t: 0 };
       ctx.audio.thump(0.5); ctx.shake(0.4); say(`${m.n || 'Игрок'} зацепил вас крюком! Перерубить — кнопка «крюк»`); }
     else if (H && H.tgt.peerId === m.from) { H = null; line.visible = false; say('Трос отдан'); } }
 
@@ -58,30 +56,30 @@ export function makeHook(scene, ctx) {
     const b = P.b, q = H.tgt.body(); if (!q || !ctx.allowed()) { release(q ? null : 'Цель ушла — трос отдан'); return; }
     // точки крепления: у бросившего -- нос, у цели -- середина корпуса
     const mb = H.mine ? bowOf(b) : 0, tb = H.mine ? 0 : bowOf(q);
-    A.x = b.X + Math.sin(b.th) * mb; A.y = b.Y + Math.cos(b.th) * mb; A.z = (b.y || 0) + (b.kind ? 0.45 : 1.1) * (b.ps || 1);
-    B.x = q.X + Math.sin(q.th || 0) * tb; B.y = q.Y + Math.cos(q.th || 0) * tb; B.z = (q.y || 0) + (q.kind ? 0.45 : 1.0) * (q.ps || 1); RAD = 0.05 * Math.min(b.ps || 1, q.ps || 1);
+    A.x = b.X + Math.sin(b.th) * mb; A.y = b.Y + Math.cos(b.th) * mb; A.z = (b.y || 0) + (b.kind ? 0.45 : 1.1);
+    B.x = q.X + Math.sin(q.th || 0) * tb; B.y = q.Y + Math.cos(q.th || 0) * tb; B.z = (q.y || 0) + (q.kind ? 0.45 : 1.0);
     let dx = B.x - A.x, dy = B.y - A.y; const d = Math.hypot(dx, dy) || 1e-3; dx /= d; dy /= d;
     if (!H.on) { // крюк летит
       H.fly += dt / H.flyT; draw(H.fly, d);
       if (H.fly >= 1) { if (!H.hit) { H = null; line.visible = false; cool = 2; say('Мимо!'); return; }
-        H.on = true; H.L = Math.max(6 * (b.ps || 1), d); ctx.audio.thump(0.6); say(`Крюк зацепил: ${H.tgt.name}`); if (H.tgt.peerId) ctx.net.hook(H.tgt.peerId, 1, H.L); }
+        H.on = true; H.L = Math.max(6, d); ctx.audio.thump(0.6); say(`Крюк зацепил: ${H.tgt.name}`); if (H.tgt.peerId) ctx.net.hook(H.tgt.peerId, 1, H.L); }
       return; }
-    H.t += dt; H.jt = (H.jt || 0) - dt; const ks = b.ps || 1; if (H.mine && H.L > 9 * ks) H.L = Math.max(9 * ks, H.L - 0.7 * Math.sqrt(ks) * dt); // выбираем трос: подтягиваем цель
+    H.t += dt; H.jt = (H.jt || 0) - dt; if (H.mine && H.L > 9) H.L = Math.max(9, H.L - 0.7 * dt); // выбираем трос: подтягиваем цель
     if (d > H.L) { const mA = massOf(b), mB = H.tgt.inf ? Infinity : massOf(q), share = Number.isFinite(mB) ? mB / (mA + mB) : 1, mu = mA * share;
-      const vrW = ((q.vx || 0) - b.vx * wv(b)) * dx + ((q.vy || 0) - b.vy * wv(b)) * dy, vr = vrW / wv(b); // > 0 -- расходятся; vr -- в масштабе своей лодки
+      const vr = ((q.vx || 0) - b.vx) * dx + ((q.vy || 0) - b.vy) * dy; // > 0 -- расходятся
       // Рывок: лодки расходятся быстрее, чем трос успевает тянуться (выбрал слабину или кто-то рванул прочь). Неупругий
       // удар через трос: расхождение почти гасится, скорость делится по массам, корпус бьёт. Очень резкий рывок трос рвёт
       if ((H.taut ? vr > 1.2 : vr > 0.6) && H.jt <= 0) {
         if (vr > 9) { release('Трос лопнул от рывка!'); ctx.audio.thump(1); ctx.shake(1); ctx.wear(b, 0, 0.12); return; }
-        jerk(b, q, dx, dy, vr, share, mB); if (H.tgt.peerId) ctx.net.hook(H.tgt.peerId, 2, H.L, vr); // vr -- в «приведённых» единицах отправителя // второй игрок видит нас с запаздыванием -- рывок сообщаем сами
-        if (H.tgt.local && Number.isFinite(mB)) { q.vx -= dx * vrW * 0.85 * (1 - share); q.vy -= dy * vrW * 0.85 * (1 - share); } }
+        jerk(b, q, dx, dy, vr, share, mB); if (H.tgt.peerId) ctx.net.hook(H.tgt.peerId, 2, H.L, vr); // второй игрок видит нас с запаздыванием -- рывок сообщаем сами
+        if (H.tgt.local && Number.isFinite(mB)) { q.vx -= dx * vr * 0.85 * (1 - share); q.vy -= dy * vr * 0.85 * (1 - share); } }
       H.taut = true;
-      const F = Math.max(0, mu * (4 * (d - H.L) + 2.5 * vrW)); // пружина и затухание троса (в мире)
-      b.vx += dx * F / mA * dt / wv(b); b.vy += dy * F / mA * dt / wv(b);
+      const F = Math.max(0, mu * (4 * (d - H.L) + 2.5 * vr)); // пружина и затухание троса
+      b.vx += dx * F / mA * dt; b.vy += dy * F / mA * dt;
       if (H.tgt.local && Number.isFinite(mB)) { q.vx -= dx * F / mB * dt; q.vy -= dy * F / mB * dt; }
       if (H.mine) b.r = (b.r || 0) + clamp(-(Math.sin(b.th) * dy - Math.cos(b.th) * dx) * F / mA * dt * 0.25, -0.2, 0.2);
-      ctx.wear(b, 0, dt * 0.003 * clamp((d - H.L) / (b.ps || 1), 0, 3)); // трос, натянутый втугую, мнёт борт
-      if (d - H.L > 10 * (b.ps || 1)) { release('Трос лопнул!'); ctx.audio.thump(0.9); return; }
+      ctx.wear(b, 0, dt * 0.003 * clamp(d - H.L, 0, 3)); // трос, натянутый втугую, мнёт борт
+      if (d - H.L > 10) { release('Трос лопнул!'); ctx.audio.thump(0.9); return; }
     } else H.taut = false;
     if (H.t > 45) { release('Крюк сорвался'); return; }
     draw(1, d); }

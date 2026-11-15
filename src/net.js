@@ -21,7 +21,7 @@ function nameTag(text) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, transparent: true, sizeAttenuation: false }));
   s.scale.set(0.16, 0.04, 1); s.renderOrder = 10; return s;
 }
-export const radiusOf = (b) => (b.kind ? b.hl * 0.85 : 2.6) * (b.ps || 1);
+export const radiusOf = (b) => (b.kind ? b.hl * 0.85 : 2.6);
 const r2 = (v, n = 2) => +v.toFixed(n);
 // состояние рук и снастей одной строкой чисел -- одинаково для игрока и для NPC, которых хозяин ведёт за всех
 export function encA(b) { return b.kind ? (b.spec.cls === 'motor' ? [b.capsized ? 1 : 0, r2(b.rudder), r2(b.thr)] : [b.capsized ? 1 : 0, 0, b.strokes, r2(b.brace), b.st ? (b.st.side === 'L' ? 1 : b.st.side === 'B' ? 2 : 0) : b.lastSide === 'L' ? 1 : 0])
@@ -68,7 +68,7 @@ export function makeNet(scene, ctx) {
       if (p.fresh) { b.X = s.X; b.Y = s.Y; b.th = s.th; p.fresh = false; }
       // полёт сапбордиста: новый номер -- запускаем кувырок с той же скоростью вылета, что у него самого
       const f = s.f || [0, 0, 0, 0]; if (p.fseq === null) p.fseq = f[0]; else if (f[0] !== p.fseq) { p.fseq = f[0]; if (p.model.fling && !p.model.flying()) p.model.fling(f[1], f[2], f[3]); }
-      applyA(b, a, p); const sc = +s.sc || 1; if (sc !== (b.ps || 1)) { b.ps = sc; p.model.root.scale.setScalar(sc); } } } // чужая игрушечная лодка -- тоже маленькая
+      applyA(b, a, p); } }
   connect();
   return { st, pups,
     now: () => Date.now() + st.off,
@@ -82,10 +82,10 @@ export function makeNet(scene, ctx) {
     hit: (to, vx, vy, i) => sendJ({ t: 'hit', to, vx: +vx.toFixed(2), vy: +vy.toFixed(2), i: +i.toFixed(2) }),
     tick(dt, P, world_, t, rr) {
       if (!can) return; if (!ws) { wait -= dt; if (wait <= 0) { wait = 1e9; connect(); } }
-      acc += dt; const b = P.b;
+      acc += dt / (ctx.ts ? ctx.ts() : 1); const b = P.b; // пакеты -- 10 раз в настоящую секунду, даже в ускоренном «макете»
       if (st.up && acc >= 0.1 && ws.readyState === 1 && ctx.active()) { acc = 0; const r = r2;
         const fl = ctx.fling(), npc = ctx.npc ? ctx.npc() : null; // [номер полёта, vx, vy, vz] своего сапбордиста; NPC, если ведём их за всех
-        sendJ({ t: 's', k: b.kind || 'yacht', X: r(b.X, 1), Y: r(b.Y, 1), th: r(b.th, 3), phi: r(b.phi, 3), vx: r(b.vx * (b.sv || 1)), vy: r(b.vy * (b.sv || 1)), w: world_, sc: b.ps && b.ps !== 1 ? b.ps : undefined, a: encA(b), r: rr || [0, 0], n: ctx.name(), pr: ctx.preset ? ctx.preset() : '', f: fl.map((v) => r(v)), npc: npc || undefined }); }
+        sendJ({ t: 's', k: b.kind || 'yacht', X: r(b.X, 1), Y: r(b.Y, 1), th: r(b.th, 3), phi: r(b.phi, 3), vx: r(b.vx), vy: r(b.vy), w: world_, a: encA(b), r: rr || [0, 0], n: ctx.name(), pr: ctx.preset ? ctx.preset() : '', f: fl.map((v) => r(v)), npc: npc || undefined }); }
       const now = performance.now();
       for (const [id, p] of pups) { const q = p.b, age = now - p.seen; if (age > 4000 || !ctx.active()) { drop(id, p); continue; }
         p.model.root.visible = age < 1500; p.tx += q.vx * dt; p.ty += q.vy * dt; const k = Math.min(1, dt * 7);

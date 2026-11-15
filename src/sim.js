@@ -74,7 +74,7 @@ export class Wind {
 // Десять волн с несоизмеримыми длинами и направлениями: у шести сумма складывалась в правильный клетчатый узор
 export const NWAVES = 10;
 export class Waves {
-  constructor() { this.w = []; this.Hs = 0; this.qf = 0.7; this.s = 1; } // s -- масштаб воды (игрушечная лодка: волны той же доли её длины)
+  constructor() { this.w = []; this.Hs = 0; this.qf = 0.7; }
   setFromWind(U, dirFrom, fetch) {
     // эмпирика для ограниченного разгона (SMB / JONSWAP)
     // у берега волна короче и круче открытой: добавляем 25% высоты
@@ -86,8 +86,8 @@ export class Waves {
     const A = Math.sqrt((Hs * Hs) / 8 / sum);
     this.w = []; let ak = 0;
     for (let i = 0; i < NWAVES; i++) {
-      const L = lp * ratio[i] * this.s, k = (2 * Math.PI) / L, d = dirFrom + off[i] * DEG;
-      const a = Math.min(A * wt[i] * this.s, 0.2 / k);
+      const L = lp * ratio[i], k = (2 * Math.PI) / L, d = dirFrom + off[i] * DEG;
+      const a = Math.min(A * wt[i], 0.2 / k);
       // волна бежит ТУДА, куда дует ветер
       this.w.push({ dx: -Math.sin(d), dz: Math.cos(d), k, a, om: Math.sqrt(G * k) });
       ak += a * k;
@@ -135,12 +135,11 @@ export class Boat {
     const fx = Math.sin(this.th), fz = -Math.cos(this.th), rx = Math.cos(this.th), rz = Math.sin(this.th);
     const x = this.X, z = -this.Y, depth = terrainH ? -terrainH(this.X, this.Y) : 50;
     const att = this.att = smooth(0.2, 5, depth);
-    const ps = this.ps || 1; // масштаб корпуса: волну меряем по его длине и ширине
-    const hb = waves.sample(x + fx * 2.6 * ps, z + fz * 2.6 * ps, t, att, WS).h, hs = waves.sample(x - fx * 2.6 * ps, z - fz * 2.6 * ps, t, att, WS).h;
-    const hr = waves.sample(x + rx * 1.1 * ps, z + rz * 1.1 * ps, t, att, WS).h, hl = waves.sample(x - rx * 1.1 * ps, z - rz * 1.1 * ps, t, att, WS).h;
-    const ty = (hb + hs + hr + hl) / 4, tp = Math.atan2(hb - hs, 5.2 * ps);
+    const hb = waves.sample(x + fx * 2.6, z + fz * 2.6, t, att, WS).h, hs = waves.sample(x - fx * 2.6, z - fz * 2.6, t, att, WS).h;
+    const hr = waves.sample(x + rx * 1.1, z + rz * 1.1, t, att, WS).h, hl = waves.sample(x - rx * 1.1, z - rz * 1.1, t, att, WS).h;
+    const ty = (hb + hs + hr + hl) / 4, tp = Math.atan2(hb - hs, 5.2);
     this.y += (ty - this.y) * 0.35; this.pitch += (tp - this.pitch) * 0.3;
-    this.slopeF = (hb - hs) / (5.2 * ps); this.slopeR = (hr - hl) / (2.2 * ps); this.depth = depth; this.wg = clamp((waves.Hs || 0.3) / 0.55, 0.35, 2.2);
+    this.slopeF = (hb - hs) / 5.2; this.slopeR = (hr - hl) / 2.2; this.depth = depth; this.wg = clamp((waves.Hs || 0.3) / 0.55, 0.35, 2.2);
   }
 
   step(dt, inp, wind, terrainH) {
@@ -224,7 +223,7 @@ export class Boat {
     if (Math.abs(this.phi) > 60 * DEG) { this.capsized = true; this.rightHold = 0; this.righting = 0; ev.push({ type: 'capsize' }); }
 
     this.X += this.vx * dt; this.Y += this.vy * dt; this.u = u; this.vs = vs;
-    if (terrainH && -terrainH(this.X, this.Y) < B.draft * (this.ps || 1)) { this.aground = true; this.agT = 0; ev.push({ type: 'aground', speed: this.speed }); }
+    if (terrainH && -terrainH(this.X, this.Y) < B.draft) { this.aground = true; this.agT = 0; ev.push({ type: 'aground', speed: this.speed }); }
   }
 
   stepCapsized(dt, inp, u, vs, fx, fy, rx, ry) {
@@ -251,7 +250,7 @@ export class Boat {
     const n = Math.hypot(gx, gy) || 1, dx = -gx / n, dy = -gy / n;
     this.X += dx * 5 * dt; this.Y += dy * 5 * dt;
     this.th = wrapPi(this.th + clamp(wrapPi(Math.atan2(dx, dy) - this.th), -1.2 * dt, 1.2 * dt));
-    if (-terrainH(this.X, this.Y) > (BOAT.draft + 1.4) * (this.ps || 1)) { this.aground = false; this.phi = 0; this.events.push({ type: 'refloat' }); }
+    if (-terrainH(this.X, this.Y) > BOAT.draft + 1.4) { this.aground = false; this.phi = 0; this.events.push({ type: 'refloat' }); }
   }
 }
 

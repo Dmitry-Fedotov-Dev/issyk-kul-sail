@@ -85,8 +85,8 @@ export function installExtra(A) {
   // игрок и чужие лодки: каждый клиент выталкивает только свою лодку, поэтому оба расходятся одинаково
   function bumpPeers(P, dt) { const b = P.b, rb = radiusOf(b); bumpCool -= dt;
     for (const p of peerList()) { const q = p.b, dx = b.X - q.X, dy = b.Y - q.Y, d = Math.hypot(dx, dy), R = rb + radiusOf(q); if (d >= R || d < 0.01) continue;
-      const sv = b.sv || 1, nx = dx / d, ny = dy / d, rel = (b.vx * sv - q.vx) * nx + (b.vy * sv - q.vy) * ny; b.X += nx * (R - d); b.Y += ny * (R - d); // скорости -- в мире
-      if (rel < 0) { b.vx -= rel * nx * 1.35 / sv; b.vy -= rel * ny * 1.35 / sv; } const imp = -rel / sv;
+      const nx = dx / d, ny = dy / d, rel = (b.vx - q.vx) * nx + (b.vy - q.vy) * ny; b.X += nx * (R - d); b.Y += ny * (R - d);
+      if (rel < 0) { b.vx -= rel * nx * 1.35; b.vy -= rel * ny * 1.35; } const imp = -rel;
       if (imp > FLING_V && p.k === 'sup' && p.model.fling && !p.model.flying() && !q.capsized) { knock(p, -nx, -ny, imp, false); net.hit(p.id, -nx * imp, -ny * imp, imp); }
       if (imp > FLING_V) knock(P, nx, ny, imp, true);
       if (imp > 0.8 && bumpCool <= 0) { bumpCool = 1.2; G.shake = Math.max(G.shake, Math.min(1, 0.3 + imp * 0.12)); audio.thump(Math.min(1, 0.35 + imp * 0.1)); toast(`Навал: ${p.name}!`); wear(b, 0, 0.01 * imp); } } }
@@ -246,7 +246,7 @@ export function installExtra(A) {
   const curOnline = () => (G.race2 && G.race2.online ? G.race2 : G.race && G.race.online ? G.race : null);
   // начать онлайн-заезд: true -- лобби запрошено, заезд ждёт игроков; place(slot) ставит игрока на его место у старта
   function lobbyStart(R, k, place) { if (!net.ready()) return false; R.online = true; R.room = null; R.lobby = null; R.slot = -1; R.T0 = net.now() + WAIT[k] * 1000; R.t = -WAIT[k]; R.place = place;
-    net.join(k, G.preset); lobbyUI(R); return true; }
+    net.join(k, G.preset + (G.ts === 1 ? '' : ':mini')); lobbyUI(R); return true; } // макеты гоняются только с макетами
   function onLobby(m) { const R = curOnline(); if (!R) return; if (R.t >= 0) { if (m.room === R.room) { R.lobby = m; if (R.over && R.redraw) R.redraw(); } return; }
     const t0 = R.T0; R.room = m.room; R.T0 = m.T0; R.lobby = m; // R.t пересчитает шаг заезда: так он сам заметит переход через ноль
     const me = m.list.find((x) => x.id === net.st.id); if (me && me.slot !== R.slot) { R.slot = me.slot; if (R.place) R.place(me.slot); }
@@ -266,7 +266,7 @@ export function installExtra(A) {
   function npcRole() { const me = net.st.id, P = G.player.b; npcFollow = null;
     if (!net.st.up) { npcHost = 0; return; }
     const on = curOnline();
-    if (G.mode === 'free' && traffic) { let h = npcHost ? net.pups.get(npcHost) : null; const ok = (p, R) => p && p.npc && p.w === 'lake' && p.model.root.visible && p.id < me && Math.hypot(p.b.X - P.X, p.b.Y - P.Y) < R;
+    if (G.mode === 'free' && traffic) { let h = npcHost ? net.pups.get(npcHost) : null; const ok = (p, R) => p && p.npc && p.w === G.world && p.model.root.visible && p.id < me && Math.hypot(p.b.X - P.X, p.b.Y - P.Y) < R;
       if (!ok(h, 2000)) { h = null; for (const p of net.pups.values()) if (ok(p, 1200) && (!h || p.id < h.id)) h = p; }
       npcHost = h ? h.id : 0; if (h) npcFollow = h.npc; return; }
     if (on && on.lobby) { let id = me; for (const x of on.lobby.list) if (!x.off && x.id < id) id = x.id; const h = id !== me ? net.pups.get(id) : null;
@@ -308,13 +308,13 @@ export function installExtra(A) {
   function openFriends() { $('fdlg').hidden = false; $('fnote').textContent = 'Отправьте ссылку другу в мессенджер: откроет её — и его лодка появится рядом с вашей.'; drawFriends(); if (friends.length && net.ready()) net.find(friends.map((x) => x.fid)); }
   function drawFriends() { const el = $('flist');
     if (!friends.length) { el.innerHTML = '<p class="note">Друзей пока нет. Кто откроет вашу ссылку, появится здесь — и вы сможете к нему телепортироваться.</p>'; return; }
-    el.innerHTML = friends.map((x) => { const st = fstat.get(x.fid), can = st && st.on && st.w === 'lake';
-      const t = !net.st.up ? 'нет связи с сервером' : !st ? 'ищем…' : !st.on ? 'не в сети' : st.w === 'lake' ? 'на озере' : st.w === 'race' ? 'в гонке' : 'на реке';
+    el.innerHTML = friends.map((x) => { const st = fstat.get(x.fid), can = st && st.on && st.w === G.world;
+      const t = !net.st.up ? 'нет связи с сервером' : !st ? 'ищем…' : !st.on ? 'не в сети' : st.w === G.world ? 'на озере' : st.w === 'lake' || st.w === 'mini' ? (st.w === 'mini' ? 'в макете (?scale)' : 'в обычном мире') : st.w === 'race' ? 'в гонке' : 'на реке';
       return `<div class="fr"><b>${esc(st && st.n ? st.n : x.n)}</b><span class="${can ? 'on' : ''}">${t}</span><button class="chip" data-fid="${esc(x.fid)}" ${can ? '' : 'disabled'}>Телепорт</button></div>`; }).join('');
-    for (const bt of el.querySelectorAll('button[data-fid]')) bt.onclick = () => { const st = fstat.get(bt.dataset.fid); if (st && st.on && st.w === 'lake') { audio.start(); teleportTo(st.X, st.Y, st.th, st.pr, st.n); } }; }
+    for (const bt of el.querySelectorAll('button[data-fid]')) bt.onclick = () => { const st = fstat.get(bt.dataset.fid); if (st && st.on && st.w === G.world) { audio.start(); teleportTo(st.X, st.Y, st.th, st.pr, st.n); } }; }
   function onFound(list) { for (const x of list) { fstat.set(x.fid, x); if (x.on && x.n) addFriend(x.fid, x.n); }
     if (pendingTp) { const x = list.find((y) => y.fid === pendingTp.fid); if (x) { const n = x.n || pendingTp.n || 'другом'; pendingTp = null;
-      if (x.on && x.w === 'lake') { if (Math.hypot(x.X - G.player.b.X, x.Y - G.player.b.Y) > 120) teleportTo(x.X, x.Y, x.th, x.pr, n); else toast(`Вы рядом с ${n}`); }
+      if (x.on && x.w === G.world) { if (Math.hypot(x.X - G.player.b.X, x.Y - G.player.b.Y) > 120) teleportTo(x.X, x.Y, x.th, x.pr, n); else toast(`Вы рядом с ${n}`); }
       else toast(x.on ? `${n} сейчас в гонке — вы на его месте старта` : `${n} сейчас не в сети — вы там, где он был`); } }
     if (!$('fdlg').hidden) drawFriends(); }
   function onFriend(m) { if (addFriend(m.fid, m.n)) { toast(`${m.n || 'Друг'} пришёл по вашей ссылке — теперь вы друзья`); audio.chime(); } }
@@ -341,7 +341,7 @@ export function installExtra(A) {
   const hookOk = () => G.mode !== 'menu' && G.mode !== 'river' && !G.gag && !(G.race2 && G.race2.t < 0) && !(G.race && G.race.t < 0) && !G.player.b.capsized;
   function onHook(m) { hook.remote(m, peerTarget(m.from)); }
 
-  const net = makeNet(scene, { waves: G.waves, h: G.h, active: () => G.mode !== 'menu', name: () => name, pid: () => pid, fid: () => fid, preset: () => G.preset, fling: () => [flSeq, ...flVel], npc: npcOut, onLobby, onHit, onDown, onUp, onFound, onFriend, onHook });
+  const net = makeNet(scene, { ts: () => G.ts, waves: G.waves, h: G.h, active: () => G.mode !== 'menu', name: () => name, pid: () => pid, fid: () => fid, preset: () => G.preset, fling: () => [flSeq, ...flVel], npc: npcOut, onLobby, onHit, onDown, onUp, onFound, onFriend, onHook });
   const hook = makeHook(scene, { toast, audio, net, wear, targets: hookTargets, player: () => G.player, allowed: hookOk, shake: (v) => { G.shake = Math.max(G.shake, v); },
     splash: (b, v) => { for (let i = 0; i < 12 * Math.min(v, 4); i++) G.spray.emit(b.X + (Math.random() - 0.5) * 2, (b.y || 0) + 0.3, -b.Y + (Math.random() - 0.5) * 2, b.vx * 0.4 + (Math.random() - 0.5) * 4, 1.5 + Math.random() * 2.5, -b.vy * 0.4 + (Math.random() - 0.5) * 4, 1.5, 1); } });
   buildMenu();
@@ -394,7 +394,7 @@ export function installExtra(A) {
     // раз в кадр после физики
     after(P, dt, boats) { const b = P.b, sp = b.speed; const on = curOnline(); npcRole(); followRivals(dt);
       if (on) { if (net.st.up) on.lostAt = 0; else if (!on.lostAt) on.lostAt = G.t; else if (on.t < 0 && G.t - on.lostAt > 60) goOffline(on); }
-      net.tick(dt, P, on ? on.room || 'lobby' : G.mode === 'river' ? 'river' : 'lake', G.t, G.race2 || G.race ? [P.leg, P.time || 0] : null);
+      net.tick(dt, P, on ? on.room || 'lobby' : G.mode === 'river' ? (G.ts === 1 ? 'river' : 'mini-river') : G.world, G.t, G.race2 || G.race ? [P.leg, P.time || 0] : null);
       if (G.mode !== 'menu') bumpPeers(P, dt); if (on && G.frame % 6 === 0) lobbyUI(on);
       if (G.mode !== 'menu') { stepWear(dt, b, sp); hook.step(dt, P); }
       if ((pendingTp || pendingFriend) && net.st.up && G.t - askT > 2) onUp();

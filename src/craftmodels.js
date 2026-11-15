@@ -95,7 +95,7 @@ function person(parent, { x = 0, y = 0, z = 0, suit = 0x26486e, pfd = 0xf2591b, 
   return { g, body, reach };
 }
 function finish(root, tilt, yoff = 0) { root.add(tilt); root.rotation.order = 'YXZ'; root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  return (b) => { root.position.set(b.X, b.y + yoff * root.scale.y, -b.Y); root.rotation.set(b.pitch * 0.9, -b.th, -b.phi); }; }
+  return (b) => { root.position.set(b.X, b.y + yoff, -b.Y); root.rotation.set(b.pitch * 0.9, -b.th, -b.phi); }; }
 const E = new THREE.Euler();
 // Плавная поза: каждая величина анимации идёт к цели через критически демпфированную пружину. Цель может скакать
 // (начало гребка с другой стороны, конец гребка), а поза -- нет: она догоняет плавно и без перелёта. Без гребка цель --

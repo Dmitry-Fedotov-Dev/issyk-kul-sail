@@ -262,10 +262,9 @@ export async function makeFarTerrain(holes = []) {
 }
 
 const GN = 128, GS = 20; // карта порывов: 128x128 клеток по 20 м. При 40 м клетки проступали на воде сеткой до горизонта
-export function makeWater(heightTex, quality, S = 1) {
-  // полярная сетка вокруг камеры: у лодки ячейки по 0.4 м, к горизонту растут экспоненциально.
-  // S -- масштаб воды (игрушечная лодка): сетка у камеры мельче во столько же раз, радиус до горизонта прежний
-  const NR = quality > 0 ? 150 : 100, NS = quality > 0 ? 192 : 128, A = 6 * Math.min(1, S), Bk = Math.log(34000 / A + 1) / NR;
+export function makeWater(heightTex, quality) {
+  // полярная сетка вокруг камеры: у лодки ячейки по 0.4 м, к горизонту растут экспоненциально
+  const NR = quality > 0 ? 150 : 100, NS = quality > 0 ? 192 : 128, A = 6, Bk = Math.log(34000 / A + 1) / NR;
   const pos = new Float32Array((NR + 1) * NS * 3), idx = [];
   for (let i = 0; i <= NR; i++) for (let s = 0; s < NS; s++) {
     const r = A * (Math.exp(Bk * i) - 1), a = ((s + (i % 2) * 0.5) / NS) * Math.PI * 2, k = (i * NS + s) * 3;
@@ -279,7 +278,7 @@ export function makeWater(heightTex, quality, S = 1) {
   const gustTex = new THREE.DataTexture(new Uint8Array(GN * GN), GN, GN, THREE.RedFormat);
   gustTex.minFilter = gustTex.magFilter = THREE.LinearFilter; gustTex.needsUpdate = true;
   const uniforms = {
-    ...ENV, uTime: { value: 0 }, uQ: { value: 0.7 }, uS: { value: S }, uCenter: { value: new THREE.Vector3() },
+    ...ENV, uTime: { value: 0 }, uQ: { value: 0.7 }, uCenter: { value: new THREE.Vector3() },
     uBoat: { value: new THREE.Vector4(0, 0, 0, 1) }, uBoatV: { value: 0 }, uHull: { value: new THREE.Vector3(3.9, 1.5, 10.6) },
     uTrail: { value: Array.from({ length: 22 }, () => new THREE.Vector4()) }, uTrailN: { value: 0 }, uKelvin: { value: 0 },
     uWave: { value: Array.from({ length: NWAVES }, () => new THREE.Vector4(1, 0, 1, 0)) },
@@ -295,14 +294,14 @@ float terrH(vec2 xz){ vec2 uv=(vec2(xz.x,xz.y)/${MAP.M}+vec2(${MAP.OX}.5,${MAP.O
     vertexShader: CURVE + TERR + /* glsl */`
 uniform vec4 uWave[${NWAVES}]; uniform float uTime,uQ,uSpacing; uniform vec3 uCenter;
 varying vec3 vW; varying vec2 vO;
-void main(){ vec2 o=position.xz+uCenter.xz; float r=length(position.xz), sp=max(uSpacing*(r+${A.toFixed(4)}), r*0.05);
+void main(){ vec2 o=position.xz+uCenter.xz; float r=length(position.xz), sp=max(uSpacing*(r+6.), r*0.05);
   float att=smoothstep(0.2,5.,-terrH(o)); vec3 p=vec3(o.x,0.,o.y);
   for(int i=0;i<${NWAVES};i++){ vec4 w=uWave[i]; float ph=w.z*dot(w.xy,o)-sqrt(9.81*w.z)*uTime;
     float a=w.w*att*smoothstep(2.2,5.5,6.2832/w.z/sp);
     p.xz+=w.xy*(uQ*a*cos(ph)); p.y+=a*sin(ph); }
   vW=p; vO=o; p.y-=curve(p); gl_Position=projectionMatrix*viewMatrix*vec4(p,1.); }`,
     fragmentShader: GLSL_COMMON + TERR + FOAM_GLSL + /* glsl */`
-uniform vec4 uWave[${NWAVES}]; uniform float uTime,uQ,uWind,uGustSize,uBoatV,uS; uniform vec2 uGustO,uWindDir; uniform sampler2D uGust; uniform vec4 uBoat; uniform vec3 uHull;
+uniform vec4 uWave[${NWAVES}]; uniform float uTime,uQ,uWind,uGustSize,uBoatV; uniform vec2 uGustO,uWindDir; uniform sampler2D uGust; uniform vec4 uBoat; uniform vec3 uHull;
 varying vec3 vW; varying vec2 vO;
 // шум с аналитической производной: одна выборка даёт и высоту, и уклон
 vec3 noised(vec2 p){ vec2 i=floor(p), f=fract(p), u=f*f*(3.-2.*f), du=6.*f*(1.-f);
@@ -330,7 +329,7 @@ vec3 kelvin(vec2 o){ if(uKelvin<0.7 || uTrailN<2.) return vec3(0.);
   { float s=sqrt(1.+T1*T1), k=k0*s*s, ps=k0*s*(x+y*T1), A=amp*1.15*exp(-k*k/90.); r+=A*vec3(cos(ps), -sin(ps)*k*vec2(1.,T1)/s); }      // поперечные
   { float s=sqrt(1.+T2*T2), k=k0*s*s, ps=k0*s*(x+y*T2)+0.785, A=amp*1.2*exp(-k*k/9.); r+=A*vec3(cos(ps), -sin(ps)*k*vec2(1.,T2)/s); } // расходящиеся; сверхкороткие у оси гасит размер корпуса
   return vec3(r.x, bt*r.y+vec2(-bt.y,bt.x)*sign(bl)*r.z); }
-void main(){ vec2 o=vO, oS=vO/uS; float dist=length(vW-cameraPosition); // oS -- координаты в масштабе воды: рябь и пена мельче вместе с волнами
+void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
   float th=terrH(o), depth=-th, thick=vW.y-th; if(thick<0.01) discard;
   float att=smoothstep(0.2,5.,depth);
   float g=gustS((o-uGustO)/uGustSize+0.5)*2.; vec2 gu=abs((o-uGustO)/uGustSize); g=mix(g,1.,smoothstep(0.42,0.5,max(gu.x,gu.y)));
@@ -343,7 +342,7 @@ void main(){ vec2 o=vO, oS=vO/uS; float dist=length(vW-cameraPosition); // oS --
     sl+=w.xy*(w.w*w.z*c*f); crest+=w.w*w.z*s*f; hh+=w.w*s*f; }
   // фактура: пять октав ряби, гребни вытянуты поперёк ветра и бегут по нему; в порыве рябь грубее
   float rip=clamp((uWind*g-0.6)/8.,0.08,1.25)*att; vec2 wd=uWindDir, wp=vec2(-wd.y,wd.x);
-  vec2 ow=vec2(dot(o,wd), dot(o,wp)); vec2 ds=vec2(0.); float fq=0.23/uS, am=1., nh=0.;
+  vec2 ow=vec2(dot(o,wd), dot(o,wp)); vec2 ds=vec2(0.); float fq=0.23, am=1., nh=0.;
   for(int i=0;i<RIP_OCT;i++){ float fi=float(i), cph=sqrt(9.81/(6.2832*fq))*0.75;
     float ra=fi*2.399+0.6, cr=cos(ra), sr=sin(ra); vec2 bq=vec2((ow.x-cph*uTime)*fq, ow.y*fq*0.42);
     vec3 nd=noised(vec2(cr*bq.x-sr*bq.y, sr*bq.x+cr*bq.y)+fi*19.7+vec2(sin(fi*3.1),cos(fi*2.3))*uTime*0.05);
@@ -377,15 +376,15 @@ void main(){ vec2 o=vO, oS=vO/uS; float dist=length(vW-cameraPosition); // oS --
   body=mix(body, mix(vec3(0.16,0.60,0.66),vec3(0.10,0.24,0.26),uStorm), clamp(hullF*0.85,0.,1.)*0.6*uDay);
   // тень лодки и парусов на воде: одна сплошная сужающаяся полоса вдоль луча солнца (расстояние до отрезка
   // «подножие мачты -- тень топа» с радиусом, убывающим к концу). Цепочка отдельных пятен читалась как кружки.
-  vec2 sdir=-uSun.xz/max(uSun.y,0.25), sa=bf*0.2, sb=sdir*uHull.z+bf*0.9, sab=sb-sa; float st=clamp(dot(rel-sa,sab)/dot(sab,sab),0.,1.), sr=mix(min(2.4,uHull.y*1.6),0.3*min(uS,1.),pow(st,0.8));
+  vec2 sdir=-uSun.xz/max(uSun.y,0.25), sa=bf*0.2, sb=sdir*uHull.z+bf*0.9, sab=sb-sa; float st=clamp(dot(rel-sa,sab)/dot(sab,sab),0.,1.), sr=mix(min(2.4,uHull.y*1.6),0.3,pow(st,0.8));
   float shd=1.-smoothstep(sr*0.45,sr*1.15,length(rel-(sa+sab*st)));
   shd*=uSunI*step(0.02,uBoat.z*uBoat.z+uBoat.w*uBoat.w);
   float sunSide=max(dot(V.xz,-normalize(uSun.xz))*0.5+0.6,0.);
   // волны идут группами: плавная огибающая ломает остатки правильного узора
   #ifdef LOW
-  float grp=0.35+1.3*vnoise(oS*0.03+uTime*0.012*uWindDir);
+  float grp=0.35+1.3*vnoise(o*0.03+uTime*0.012*uWindDir);
   #else
-  float grp=0.35+1.3*fbm(oS*0.021+uTime*0.012*uWindDir);
+  float grp=0.35+1.3*fbm(o*0.021+uTime*0.012*uWindDir);
   #endif
   body+=mix(vec3(0.,0.22,0.24), vec3(0.03,0.10,0.09), uStorm)*pow(smoothstep(-0.35,1.05,crest*uQ/0.85),2.2)*grp*0.55*sunSide; // просвет гребня: плавно нарастает к вершине. Жёсткий порог давал пятна с резким краем
   // ложбины темнее; мелкая фактура -- через уклон ряби к солнцу. Сам решётчатый шум в цвет не идёт: он давал клетчатые пятна
@@ -393,17 +392,17 @@ void main(){ vec2 o=vO, oS=vO/uS; float dist=length(vW-cameraPosition); // oS --
   body*=mix(1.10,0.74,smoothstep(0.80,1.60,g));
   body*=mix(0.07,1.,uDay); body*=1.-0.42*shd;
   vec3 col=mix(body,sky,F*(1.-0.25*shd))+spec*(1.-shd);
-  float fn=fvn(oS*0.9+uTime*0.05)*0.65+fvn(oS*2.6-uTime*0.04)*0.35, lc=0.;
+  float fn=fvn(o*0.9+uTime*0.05)*0.65+fvn(o*2.6-uTime*0.04)*0.35, lc=0.;
   float wf=clamp((uWind*g-4.)/8.,0.,1.), cth=mix(1.0,0.30,wf);
-  float cap=smoothstep(cth,cth+0.22, crest*uQ/0.85+(fn-0.5)*0.35)*(1.-smoothstep(900.*uS,2600.*uS,dist));
+  float cap=smoothstep(cth,cth+0.22, crest*uQ/0.85+(fn-0.5)*0.35)*(1.-smoothstep(900.,2600.,dist));
   // след от барашка: за гребнем остаётся тающая пенная сетка
-  float trail=smoothstep(cth-0.38,cth+0.05, crest*uQ/0.85+(fn-0.5)*0.5)*0.55*(1.-smoothstep(400.*uS,1500.*uS,dist));
+  float trail=smoothstep(cth-0.38,cth+0.05, crest*uQ/0.85+(fn-0.5)*0.5)*0.55*(1.-smoothstep(400.,1500.,dist));
   float sh=smoothstep(1.1,0.,thick)*(0.55+0.45*sin(depth*5.-uTime*1.6+fn*4.))*smoothstep(0.02,0.15,thick);
   // пена там, где расчётная волна крутая или высокая: гребень носовой волны, всплеск у борта
   float bm=clamp(hullF*0.62,0.,1.); // пена -- только у самого корпуса
   float m=clamp(cap+trail*(1.-cap)+sh*0.9+bm,0.,1.);
   // рисунок считаем только там, где пена вообще есть; порог размывается на ширину пикселя -- край без «лесенки»
-  float foam=0.; if(m>0.02){ lc=foamTex(oS,uTime); float v=lc*0.80+fn*0.34, th=1.10-m*1.02, aa=0.10+fwidth(v)*1.2; foam=smoothstep(th-aa, th+aa, v)*smoothstep(0.02,0.2,m); }
+  float foam=0.; if(m>0.02){ lc=foamTex(o,uTime); float v=lc*0.80+fn*0.34, th=1.10-m*1.02, aa=0.10+fwidth(v)*1.2; foam=smoothstep(th-aa, th+aa, v)*smoothstep(0.02,0.2,m); }
   vec3 fcol=mix(vec3(0.97,0.99,1.), vec3(0.70,0.74,0.76), uStorm*0.7)*(0.62+0.42*max(dot(N,uSun),0.)*uSunI+0.12*lc);
   col=mix(col, fcol*mix(0.14,1.,uDay), foam*0.94);
   col=applyFog(col,dist,0.);
@@ -433,8 +432,8 @@ void main(){ vec2 o=vO, oS=vO/uS; float dist=length(vW-cameraPosition); // oS --
       // Без этого на стыках отрезков клин ломался и давал прямые полосы
       let pa = 0; for (let i = 0; i < n; i++) { const a = T[Math.max(i - 1, 0)], c = T[Math.min(i + 1, n - 1)]; let an = Math.atan2(c.y - a.y, c.x - a.x);
         if (i) { while (an - pa > Math.PI) an -= 2 * Math.PI; while (an - pa < -Math.PI) an += 2 * Math.PI; } T[i].w = an; pa = an; }
-      uniforms.uTrailN.value = n; const sp = b.capsized ? 0 : Math.hypot(b.vx, b.vy); uniforms.uKelvin.value += (sp - uniforms.uKelvin.value) * 0.04; if ((b.ps || 1) < 0.5) uniforms.uKelvin.value = 0; }, // клин Кельвина считан для настоящих скоростей -- у игрушки его нет // скорость сглажена: длина волн не должна дёргаться
-    setBoat(b) { if (b.hl) uniforms.uHull.value.set(b.hl * 1.15 + 0.3, b.hbm * 1.35 + 0.25, b.kind === 'sup' ? 1.9 : 1.1); else uniforms.uHull.value.set(3.9, 1.5, 10.6); uniforms.uHull.value.multiplyScalar(b.ps || 1);
+      uniforms.uTrailN.value = n; const sp = b.capsized ? 0 : Math.hypot(b.vx, b.vy); uniforms.uKelvin.value += (sp - uniforms.uKelvin.value) * 0.04; }, // скорость сглажена: длина волн не должна дёргаться
+    setBoat(b) { if (b.hl) uniforms.uHull.value.set(b.hl * 1.15 + 0.3, b.hbm * 1.35 + 0.25, b.kind === 'sup' ? 1.9 : 1.1); else uniforms.uHull.value.set(3.9, 1.5, 10.6);
       uniforms.uBoat.value.set(b.X, -b.Y, Math.sin(b.th), -Math.cos(b.th)); uniforms.uBoatV.value = b.capsized ? 0 : Math.min(1, b.speed / 3.6); },
     setWaves(waves) { waves.w.forEach((w, i) => uniforms.uWave.value[i].set(w.dx, w.dz, w.k, w.a)); uniforms.uQ.value = waves.qf; },
     // карта порывов вокруг лодки -- тот же расчёт, что двигает лодку

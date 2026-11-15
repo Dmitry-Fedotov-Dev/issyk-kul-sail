@@ -17,13 +17,15 @@ export function postSupported() { try { const c = document.createElement('canvas
 export function makePost(renderer) {
   const depth = new THREE.DepthTexture(4, 4); depth.type = THREE.UnsignedIntType;
   const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthTexture: depth, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, stencilBuffer: false });
-  const u = { tC: { value: rt.texture }, tD: { value: depth }, uPx: { value: new THREE.Vector2(1, 1) }, uNF: { value: new THREE.Vector2(0.5, 3e5) }, uK: { value: 1 }, uInk: { value: 1 }, uSunP: { value: new THREE.Vector3(0.5, 0.5, 0) } };
+  const u = { tC: { value: rt.texture }, tD: { value: depth }, uPx: { value: new THREE.Vector2(1, 1) }, uNF: { value: new THREE.Vector2(0.5, 3e5) }, uK: { value: 1 }, uInk: { value: 1 }, uSunP: { value: new THREE.Vector3(0.5, 0.5, 0) }, uTilt: { value: 0 } };
   const mat = new THREE.ShaderMaterial({ uniforms: u, depthTest: false, depthWrite: false,
     vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }',
-    fragmentShader: `precision highp float; uniform sampler2D tC, tD; uniform vec2 uPx, uNF; uniform float uK, uInk; uniform vec3 uSunP; varying vec2 vUv;
+    fragmentShader: `precision highp float; uniform sampler2D tC, tD; uniform vec2 uPx, uNF; uniform float uK, uInk, uTilt; uniform vec3 uSunP; varying vec2 vUv;
 float Z(vec2 uv){ float d=texture2D(tD,uv).x; return uNF.x*uNF.y/(uNF.y-d*(uNF.y-uNF.x)); }
 float L(vec2 uv){ vec3 c=texture2D(tC,uv).rgb; c=c/(1.+c); return dot(c,vec3(0.3,0.59,0.11)); }
-void main(){ vec3 col=texture2D(tC,vUv).rgb; float zc=Z(vUv), solid=step(zc,uNF.y*0.9);
+void main(){ vec3 col=texture2D(tC,vUv).rgb;
+  // «тилт-шифт» для режима макета: резкая полоса посередине, выше и ниже кадр плавно размыт -- так снимают макеты
+  if(uTilt>0.){ float bl=smoothstep(0.10,0.42,abs(vUv.y-0.47))*uTilt; if(bl>0.02){ vec3 acc=vec3(0.); for(int i=-2;i<=2;i++) for(int j=-2;j<=2;j++) acc+=texture2D(tC,vUv+vec2(float(i),float(j))*uPx*uK*bl*2.6).rgb; col=acc/25.; } } float zc=Z(vUv), solid=step(zc,uNF.y*0.9);
   // толщина линии: вблизи жирнее, вдали тоньше (иначе дальний берег и горы тонут в туши)
   float nearK=1.-smoothstep(40.,2500.,zc); vec2 o=uPx*uK*mix(0.9,1.7,nearK);
   float zl=Z(vUv-vec2(o.x,0.)), zr=Z(vUv+vec2(o.x,0.)), zu=Z(vUv+vec2(0.,o.y)), zd=Z(vUv-vec2(0.,o.y));
@@ -58,7 +60,7 @@ void main(){ vec3 col=texture2D(tC,vUv).rgb; float zc=Z(vUv), solid=step(zc,uNF.
 }` });
   const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat); quad.frustumCulled = false; scene.add(quad);
   let ok = true, checked = false; const size = new THREE.Vector2();
-  return { get ok() { return ok; }, setSun(x, y, a) { u.uSunP.value.set(x, y, a); },
+  return { get ok() { return ok; }, setSun(x, y, a) { u.uSunP.value.set(x, y, a); }, setTilt(v) { u.uTilt.value = v; },
     resize() { renderer.getDrawingBufferSize(size); rt.setSize(Math.max(2, size.x), Math.max(2, size.y)); u.uPx.value.set(1 / size.x, 1 / size.y); u.uK.value = Math.max(0.75, size.y / 720); checked = false; },
     render(sc, camera) {
       if (!ok) { renderer.render(sc, camera); return; }
