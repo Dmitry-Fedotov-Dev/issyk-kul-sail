@@ -6,7 +6,7 @@
 // Закрытые передним склоном гребни не видны: работает обычная проверка глубины, а лента чуть выдвинута к камере
 // вдоль луча зрения (на экране она от этого не сдвигается), чтобы не тонуть в собственном склоне.
 import * as THREE from 'three';
-import { CURVE, END, MAP, exag } from './world.js';
+import { CURVE, END, MAP, exag, WS } from './world.js';
 
 const U = { uRes: { value: new THREE.Vector2(1280, 720) }, uK: { value: 1 } };
 export function setRidgeRes(w, h) { U.uRes.value.set(w, h); U.uK.value = Math.max(0.75, h / 720); }
@@ -56,7 +56,7 @@ export function makeRidges(hNear, farGrid, holes = []) {
   const mat = new THREE.ShaderMaterial({ uniforms: U, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     vertexShader: CURVE + /* glsl */`
 uniform vec2 uRes; uniform float uK; attribute vec3 aQ; attribute vec3 aSE; varying float vSide, vW, vAl;
-void main(){ float aS=aSE.x, aE=aSE.y, aA=aSE.z; vec3 p=position, q=aQ; p.y-=curve(p); q.y-=curve(q);
+void main(){ float aS=aSE.x, aE=aSE.y, aA=aSE.z; vec3 p=(modelMatrix*vec4(position,1.)).xyz, q=(modelMatrix*vec4(aQ,1.)).xyz; p.y-=curve(p); q.y-=curve(q); // мировые: группа масштабирована
   float dist=length(p-cameraPosition);
   p+=normalize(cameraPosition-p)*(2.+dist*0.004); q+=normalize(cameraPosition-q)*(2.+length(q-cameraPosition)*0.004);
   vec4 cp=projectionMatrix*viewMatrix*vec4(p,1.), cq=projectionMatrix*viewMatrix*vec4(q,1.);
@@ -78,7 +78,7 @@ void main(){ float a=vAl*(1.-smoothstep(vW-0.6,vW+0.6,abs(vSide))); if(a<0.01) d
         pos[o] = me[0]; pos[o + 1] = me[1]; pos[o + 2] = me[2]; q[o] = ot[0]; q[o + 1] = ot[1]; q[o + 2] = ot[2]; se[o] = v % 2 ? 1 : -1; se[o + 1] = end ? 1 : 0; se[o + 2] = me[3]; }
       const b0 = s * 4; idx.set([b0, b0 + 1, b0 + 2, b0 + 1, b0 + 3, b0 + 2], s * 6); }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aQ', new THREE.BufferAttribute(q, 3)); geo.setAttribute('aSE', new THREE.BufferAttribute(se, 3)); geo.setIndex(new THREE.BufferAttribute(idx, 1));
-    geo.computeBoundingSphere(); const sp = geo.boundingSphere, dd = Math.hypot(sp.center.x, sp.center.z) + 30000; sp.radius += (dd * dd) / 14866000 + 50;
+    geo.computeBoundingSphere(); const sp = geo.boundingSphere, dd = Math.hypot(sp.center.x, sp.center.z) * WS + 30000; sp.radius += (dd * dd) / 14866000 / WS + 50;
     const m = new THREE.Mesh(geo, mat); m.renderOrder = 1; g.add(m); segs += n; }
   g.userData.segs = segs; g.userData.lines = lines.length;
   return g;

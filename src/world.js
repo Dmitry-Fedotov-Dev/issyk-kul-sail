@@ -7,6 +7,10 @@ import { FOAM_GLSL } from './foam.js';
 
 // Карта высот: 1024x1024, 28.11 м/пиксель (тайлы z12, широта 42.65°). Начало мира -- в бухте.
 export const MAP = { N: 1024, M: 28.11, OX: 600, OY: 695 };
+// Масштаб ландшафта: озеро, берега и горы -- в WS раз больше настоящих во все стороны (пропорции рельефа сохранены),
+// а лодки, тополя и причал -- прежнего размера. Модели рельефа рисуются группами с масштабом WS; высота мира для
+// физики -- WS * h(X / WS, Y / WS) (main.js); карта и меню считают в настоящих координатах.
+export const WS = 3;
 export const SUN = new THREE.Vector3(Math.sin(3.55) * 0.78, 0.62, -Math.cos(3.55) * 0.78).normalize(); // ЮЮЗ, высоко: летний день
 export const HAZE = new THREE.Color(0.56, 0.76, 0.97);
 // Кривизна Земли считается в вершинных шейдерах воды и суши ОДИНАКОВО и от камеры: точка на расстоянии d опущена
@@ -60,7 +64,7 @@ float cloudLo(){ return 0.60-uCover*0.2; }
 // у кучевых резкий край: узкий переход от неба к облаку
 float cloudCov(float n){ float lo=cloudLo(); return smoothstep(lo, lo+0.075, n); }
 // дымка: густая у воды, редкая на высоте -- поэтому снежные вершины за 80 км видны над маревом
-vec3 applyFog(vec3 c, float dist, float y){ float f=min((1.-exp(-dist/mix(42000.,16000.,uStorm)))*mix(1.,0.34,smoothstep(150.,2600.,y)), mix(0.70,0.93,uStorm));
+vec3 applyFog(vec3 c, float dist, float y){ dist/=${WS}.; float f=min((1.-exp(-dist/mix(42000.,16000.,uStorm)))*mix(1.,0.34,smoothstep(150.,2600.,y)), mix(0.70,0.93,uStorm));
   // цвет дали задан в линейном пространстве: после тональной обработки он заметно светлеет
   return mix(c, mix(HOR, mix(vec3(0.13,0.26,0.60)*mix(0.04,1.,uDay),HOR*0.8,uStorm), smoothstep(12000.,60000.,dist)), f); }
 `;
@@ -149,7 +153,7 @@ function chunked(attrs, lists, matLand, matShore = matLand) {
   for (const [key, idx] of lists) { if (!idx.length) continue; const mat = key >= SHORE ? matShore : matLand;
     const geo = new THREE.BufferGeometry(); for (const k in attrs) geo.setAttribute(k, attrs[k]); geo.setIndex(idx);
     box.makeEmpty(); for (const i of idx) box.expandByPoint(v.fromArray(p, i * 3));
-    const sp = box.getBoundingSphere(new THREE.Sphere()), dd = Math.hypot(sp.center.x, sp.center.z) + 30000; sp.radius += (dd * dd) / 14866000; geo.boundingSphere = sp;
+    const sp = box.getBoundingSphere(new THREE.Sphere()), dd = Math.hypot(sp.center.x, sp.center.z) * WS + 30000; sp.radius += (dd * dd) / 14866000 / WS; geo.boundingSphere = sp;
     g.add(new THREE.Mesh(geo, mat)); tris += idx.length / 3; }
   g.userData.tris = tris; return g;
 }
@@ -160,7 +164,7 @@ export function terrainMaterial(shore = true) {
   const defs = shore ? { FDEPTH: 1 } : {};
   const tm = new THREE.ShaderMaterial({ defines: { ...QUALITY_DEFS[2], ...defs },
     uniforms: { ...ENV }, extensions: { derivatives: true },
-    vertexShader: CURVE + `attribute float aH; varying vec3 vP; varying vec3 vN; varying float vH; void main(){ vP=position; vN=normal; vH=aH; vec3 q=position; q.y-=curve(q); gl_Position=projectionMatrix*modelViewMatrix*vec4(q,1.); }`,
+    vertexShader: CURVE + `attribute float aH; varying vec3 vP; varying vec3 vN; varying float vH; void main(){ vec3 q=(modelMatrix*vec4(position,1.)).xyz; vP=q; vN=normal; vH=aH; q.y-=curve(q); gl_Position=projectionMatrix*viewMatrix*vec4(q,1.); }`, // мировые координаты: модель рельефа масштабирована (WS)
     fragmentShader: GLSL_COMMON + /* glsl */`
 varying vec3 vP; varying vec3 vN; varying float vH; uniform float uMap; uniform vec3 uMapDeep; uniform sampler2D uLakeM; uniform vec4 uLakeT;
 // гребневой шум: острые хребты и кулуары, которых нет в карте высот с её шагом в десятки метров
@@ -278,7 +282,7 @@ export async function makeFarTerrain(holes = []) {
 const GN = 128, GS = 20; // карта порывов: 128x128 клеток по 20 м. При 40 м клетки проступали на воде сеткой до горизонта
 export function makeWater(heightTex, quality) {
   // полярная сетка вокруг камеры: у лодки ячейки по 0.4 м, к горизонту растут экспоненциально
-  const NR = quality > 0 ? 150 : 100, NS = quality > 0 ? 192 : 128, A = 6, Bk = Math.log(34000 / A + 1) / NR;
+  const NR = quality > 0 ? 150 : 100, NS = quality > 0 ? 192 : 128, A = 6, Bk = Math.log(34000 * WS / A + 1) / NR;
   const pos = new Float32Array((NR + 1) * NS * 3), idx = [];
   for (let i = 0; i <= NR; i++) for (let s = 0; s < NS; s++) {
     const r = A * (Math.exp(Bk * i) - 1), a = ((s + (i % 2) * 0.5) / NS) * Math.PI * 2, k = (i * NS + s) * 3;
@@ -301,8 +305,8 @@ export function makeWater(heightTex, quality) {
   };
   const TERR = /* glsl */`
 uniform sampler2D uHeight;
-float terrH(vec2 xz){ vec2 uv=(vec2(xz.x,xz.y)/${MAP.M}+vec2(${MAP.OX}.5,${MAP.OY}.5))/${MAP.N}.; if(uv.y>1.) return -60.; if(uv.x<0.||uv.x>1.||uv.y<0.) return -30.;
-  vec4 t=texture2D(uHeight,uv); return (t.r*65280.+t.g*255.)/4.-64.; }`;
+float terrH(vec2 xz){ vec2 uv=(xz/(${MAP.M}*${WS}.)+vec2(${MAP.OX}.5,${MAP.OY}.5))/${MAP.N}.; if(uv.y>1.) return -60.*${WS}.; if(uv.x<0.||uv.x>1.||uv.y<0.) return -30.*${WS}.;
+  vec4 t=texture2D(uHeight,uv); return ((t.r*65280.+t.g*255.)/4.-64.)*${WS}.; }`;
   const mat = new THREE.ShaderMaterial({ defines: { ...QUALITY_DEFS[2] },
     uniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide, extensions: { derivatives: true },
     vertexShader: CURVE + TERR + /* glsl */`
@@ -470,20 +474,20 @@ void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
 }
 
 // ---------- берег: тополя, дома, пансионаты, причал яхт-клуба ----------
-export function makeShore(h, scene) {
+export function makeShore(h, scene, k = 1) { // h -- высота мира; k -- масштаб ландшафта (тополя и причал прежнего размера)
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
   const dummy = new THREE.Object3D(), col = new THREE.Color();
-  const scatter = (count, tries, accept) => { const out = []; for (let t = 0; t < tries && out.length < count; t++) { const X = -5200 + rnd() * 11500, Y = 100 + rnd() * 4200, y = h(X, Y); if (accept(X, Y, y)) out.push([X, y, Y]); } return out; };
-  const town = (X, Y) => 0.5 + 0.5 * noise2(X / 420, Y / 420);
+  const scatter = (count, tries, accept) => { const out = []; for (let t = 0; t < tries && out.length < count; t++) { const X = (-5200 + rnd() * 11500) * k, Y = (100 + rnd() * 4200) * k, y = h(X, Y); if (accept(X, Y, y)) out.push([X, y, Y]); } return out; };
+  const town = (X, Y) => 0.5 + 0.5 * noise2(X / 420 / k, Y / 420 / k);
   const inst = (geo, mat, pts, fn) => { const m = new THREE.InstancedMesh(geo, mat, pts.length); pts.forEach((p, i) => { fn(p, i); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); m.setColorAt(i, col); }); m.frustumCulled = false; scene.add(m); return m; };
 
   // пирамидальные тополя -- силуэт иссык-кульского берега
-  const pop = scatter(4200, 90000, (X, Y, y) => y > 1.8 && y < 170 && rnd() < (0.25 + town(X, Y)) * (y < 60 ? 1 : 0.35));
+  const pop = scatter(4200 * k, 90000 * k, (X, Y, y) => y > 1.8 && y < 170 * k && rnd() < (0.25 + town(X, Y)) * (y < 60 * k ? 1 : 0.35));
   const pg = new THREE.CylinderGeometry(0.25, 1.7, 1, 6); pg.translate(0, 0.5, 0);
   inst(pg, lam(0xffffff), pop, (p) => { const s = 0.7 + rnd() * 0.8; dummy.position.set(p[0], p[1] - 0.5, -p[2]); dummy.scale.set(s * 1.5, (11 + rnd() * 10) * s, s * 1.5); dummy.rotation.set(0, rnd() * 6, 0); col.setHSL(0.27 + rnd() * 0.06, 0.42 + rnd() * 0.2, 0.11 + rnd() * 0.08); });
   // причал яхт-клуба: идём от точки старта на север до берега
-  let py = 0; while (h(0, py) < -1.6 && py < 3000) py += 4;
+  let py = 0; while (h(0, py) < -1.6 && py < 3000 * k) py += 4;
   const pier = new THREE.Group(), wood = lam(0xa8845c), L = 150;
   const deck = new THREE.Mesh(new THREE.BoxGeometry(5, 0.5, L), wood); deck.position.set(0, 1.25, -(py + L / 2 - 50)); pier.add(deck);
   const head = new THREE.Mesh(new THREE.BoxGeometry(34, 0.5, 5), wood); head.position.set(0, 1.25, -(py - 50)); pier.add(head);
@@ -493,7 +497,7 @@ export function makeShore(h, scene) {
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 11, 6), lam(0xf2f2f2)); pole.position.set(15, 6.8, -(py - 50)); pier.add(pole);
   const flag = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2), new THREE.MeshLambertMaterial({ color: 0xe8112d, side: THREE.DoubleSide })); flag.geometry.translate(1.7, 0, 0); flag.position.set(15, 11.2, -(py - 50)); pier.add(flag);
   // оконечность мыса -- цель в свободном плавании
-  let cx = -1900, cy = -500; for (let Y = -900; Y < 600; Y += 20) for (let X = -2600; X < -1200; X += 20) if (h(X, Y) > 1.5 && Y < cy) { cy = Y; cx = X; }
+  let cx = -1900 * k, cy = -500 * k; for (let Y = -900 * k; Y < 600 * k; Y += 20 * k) for (let X = -2600 * k; X < -1200 * k; X += 20 * k) if (h(X, Y) > 1.5 && Y < cy) { cy = Y; cx = X; }
   scene.add(pier);
   // причал как препятствие: «высота» с уклоном наружу, чтобы лодку сталкивало от настила, а не клинило в нём
   const P0 = py - 50, pierH = (X, Y) => { const ax = Math.abs(X);

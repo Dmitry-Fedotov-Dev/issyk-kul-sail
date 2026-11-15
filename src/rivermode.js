@@ -27,7 +27,7 @@ export function makeRiver(scene, farH) {
   const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3)); wg.setAttribute('aw', new THREE.Float32BufferAttribute(wa, 4)); wg.setIndex(wi);
   const wm = new THREE.ShaderMaterial({ uniforms: { ...ENV, uT: { value: 0 } }, defines: { FBM_OCT: 3, RIP_OCT: 3, SHN: 6 }, side: THREE.DoubleSide, extensions: { derivatives: true },
     vertexShader: CURVE + `attribute vec4 aw; uniform float uT; varying vec4 vA; varying vec3 vP;
-void main(){ vA=aw; vec3 q=position; q.y+=aw.z*(0.22*sin(aw.x*0.85)*cos(aw.y*1.3)+0.06*sin(aw.x*2.3+uT*3.)); vP=q; q.y-=curve(q); gl_Position=projectionMatrix*modelViewMatrix*vec4(q,1.); }`,
+void main(){ vA=aw; vec3 q=(modelMatrix*vec4(position,1.)).xyz; q.y+=aw.z*(0.22*sin(aw.x*0.85)*cos(aw.y*1.3)+0.06*sin(aw.x*2.3+uT*3.)); vP=q; q.y-=curve(q); gl_Position=projectionMatrix*viewMatrix*vec4(q,1.); }`, // мировые: русло масштабировано вместе с ландшафтом
     fragmentShader: GLSL_COMMON + FOAM_GLSL + `uniform float uT; varying vec4 vA; varying vec3 vP;
 void main(){ float s=vA.x, u=vA.y, rp=vA.z, v=vA.w, dist=length(vP-cameraPosition); vec2 fl=vec2(u*7.2, s-uT*v*0.85);
   float str=fvn(vec2(u*5., fl.y*0.10))*0.6+fvn(vec2(u*11., fl.y*0.32))*0.4;                 // струи вдоль течения

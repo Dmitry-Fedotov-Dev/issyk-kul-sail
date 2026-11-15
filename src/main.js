@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TRAILS, RIVERS } from './trails.js';
 import { Boat, Wind, Waves, PRESETS, DEG, KN, clamp, wrapPi, smooth, pointOfSail, aiControl } from './sim.js';
-import { setExagHoles, exag, applyQuality, loadHeight, makeSky, makeTerrain, makeFarTerrain, makeWater, makeShore, makeMark, SUN, HAZE, ENV, MAP } from './world.js';
+import { WS, setExagHoles, exag, applyQuality, loadHeight, makeSky, makeTerrain, makeFarTerrain, makeWater, makeShore, makeMark, SUN, HAZE, ENV, MAP } from './world.js';
 import { makeBoat } from './boatmodel.js';
 import { makeSpray, makeWake, WAKE_LIGHT } from './fx.js';
 import { makeAudio } from './audio.js';
@@ -30,8 +30,8 @@ const PR_MAX = Math.min(window.devicePixelRatio || 1, 2), PR_MIN = Math.min(PR_M
 let pixelRatio = PR_MAX, quality = TOUCH ? 1 : 2, qHold = 0, qMode = 'auto'; // qMode: авто подстраивается само, остальные держат выбранное
 function setQuality(q) { quality = q; applyQuality(q);
   sunL.castShadow = q >= 1; const ms = qMode === 'high' ? 2048 : 1024; if (sunL.shadow.mapSize.x !== ms) { sunL.shadow.mapSize.set(ms, ms); if (sunL.shadow.map) { sunL.shadow.map.dispose(); sunL.shadow.map = null; } } }
-const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(HAZE, 0.000052);
-const camera = new THREE.PerspectiveCamera(56, 1, 0.5, 300000);
+const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(HAZE, 0.000052 / 3); // дымка -- по масштабу ландшафта (WS)
+const camera = new THREE.PerspectiveCamera(56, 1, 0.5, 300000 * 3); // ландшафт в WS раз больше -- и дальность обзора
 // ?scale=0.01 -- «макет»: весь мир (озеро, горы, лодки, волны, брызги) будто уменьшен так, что яхта длиной 10 см, а
 // сила тяжести прежняя. По подобию Фруда такой мир выглядит как обычный, только всё в нём идёт в 1/sqrt(scale) раз
 // быстрее: волны, ход, крен, брызги (при 0.01 -- в 10 раз). Поэтому мир не пересчитываем, а ускоряем время игры;
@@ -70,24 +70,24 @@ async function init() {
   await loadStep(18, 'Читаем карту высот…');
   const { h, tex } = await loadHeight(); setExagHoles(RIVER_HOLES); // горы выше (world.js, exag), у ущелья сплава -- настоящие
   const sky = makeSky(); scene.add(sky);
-  const nearT = makeTerrain(h); scene.add(nearT);
+  const nearT = makeTerrain(h); nearT.scale.setScalar(WS); scene.add(nearT);
   await loadStep(38, 'Строим берега и хребты…');
-  const far = await makeFarTerrain(RIVER_HOLES); scene.add(far);
+  const far = await makeFarTerrain(RIVER_HOLES); far.scale.setScalar(WS); scene.add(far);
   // маска озера для карты: заливка от середины Иссык-Куля по клеткам ниже уреза (низины за хребтами в неё не попадают)
   const lake = (() => { const { hs, W, H, X0, Y1, STEP } = far.userData.grid, m = new Uint8Array(W * H), st = [Math.round((Y1 + 25000) / STEP) * W + Math.round((10000 - X0) / STEP)];
     while (st.length) { const k = st.pop(); if (m[k] || hs[k] >= 0) continue; m[k] = 255; const i = k % W, j = (k / W) | 0; if (i > 0) st.push(k - 1); if (i < W - 1) st.push(k + 1); if (j > 0) st.push(k - W); if (j < H - 1) st.push(k + W); }
     for (let r = 0; r < 2; r++) { const c = m.slice(); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (c[k]) continue; // расширяем на 2 клетки: береговая полоса целиком внутри
         if ((i > 0 && c[k - 1]) || (i < W - 1 && c[k + 1]) || (j > 0 && c[k - W]) || (j < H - 1 && c[k + W])) m[k] = 255; } }
     const t = new THREE.DataTexture(m, W, H, THREE.RedFormat); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true;
-    ENV.uLakeM.value = t; ENV.uLakeT.value.set(X0 - STEP / 2, Y1 + STEP / 2, 1 / (W * STEP), 1 / (H * STEP)); return m; })();
-  const ridges = makeRidges(h, far.userData.grid, RIVER_HOLES); scene.add(ridges); // тушь по гребням гор
+    ENV.uLakeM.value = t; ENV.uLakeT.value.set((X0 - STEP / 2) * WS, (Y1 + STEP / 2) * WS, 1 / (W * STEP * WS), 1 / (H * STEP * WS)); return m; })();
+  const ridges = makeRidges(h, far.userData.grid, RIVER_HOLES); ridges.scale.setScalar(WS); scene.add(ridges); // тушь по гребням гор
   // Высота в любой точке котловины: у Чолпон-Аты -- по подробной карте, дальше -- по грубой (шаг 600 м)
   const hNear = h, NX0 = -MAP.OX * MAP.M, NX1 = (MAP.N - 1 - MAP.OX) * MAP.M, NY0 = (MAP.OY - (MAP.N - 1)) * MAP.M, NY1 = MAP.OY * MAP.M;
   const hRaw = (x, y) => (x > NX0 && x < NX1 && y > NY0 && y < NY1 ? hNear(x, y) : far.userData.heightAt(x, y));
-  const hA = (x, y) => exag(hRaw(x, y), x, y); // рельеф, как его видно: по нему ездят камера и съезжающая с горы лодка
+  const hA = (x, y) => WS * exag(hRaw(x / WS, y / WS), x / WS, y / WS); // высота мира: ландшафт в WS раз больше (world.js)
   await loadStep(56, 'Наливаем озеро…');
   const water = makeWater(tex, 1); scene.add(water.mesh);
-  const before = new Set(scene.children), shore = makeShore(h, scene), shoreObjs = scene.children.filter((o) => !before.has(o));
+  const before = new Set(scene.children), shore = makeShore(hA, scene, WS), shoreObjs = scene.children.filter((o) => !before.has(o));
   const hb = (x, y) => Math.max(hA(x, y), shore.pierH(x, y)); // дно + причал: то, обо что можно удариться
   const wind = new Wind(PRESETS.santash, hA), waves = new Waves();
   const spray = makeSpray(); scene.add(spray.mesh);
@@ -137,10 +137,10 @@ function applyPreset() {
 const MENU = { lakeW: 600, lakeH: 300, boatT: 80, boatB: 320, phone: false };
 let MLINES = null;
 const parseLines = (str) => str.split(';').map((w) => { const a = w.split(','), p = []; for (let i = 0; i + 1 < a.length; i += 2) p.push([+a[i] * 4, +a[i + 1] * 4]); return p; });
-function coastY(X) { let y = -9000; while (y < 8000 && G.h(X, y) < 0) y += 25; let a = y - 25, b = y; for (let k = 0; k < 9; k++) { const m = (a + b) / 2; if (G.h(X, m) < 0) a = m; else b = m; } return (a + b) / 2; }
+function coastY(X) { let y = -9000; while (y < 8000 && G.hRaw(X, y) < 0) y += 25; let a = y - 25, b = y; for (let k = 0; k < 9; k++) { const m = (a + b) / 2; if (G.hRaw(X, m) < 0) a = m; else b = m; } return (a + b) / 2; }
 // урез воды как изолиния h = 0 («марширующие квадраты»), сшитая в одну линию: проходит и вокруг мыса, и вглубь залива
 function shoreline(X0, X1, Ya, Yb, nx, ny) { const gx = (i) => X0 + (X1 - X0) * i / nx, gy = (j) => Ya + (Yb - Ya) * j / ny, v = new Float32Array((nx + 1) * (ny + 1)), at = (i, j) => v[j * (nx + 1) + i];
-  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) v[j * (nx + 1) + i] = G.h(gx(i), gy(j));
+  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) v[j * (nx + 1) + i] = G.hRaw(gx(i), gy(j)); // меню -- настоящая карта
   const pos = new Map(), adj = new Map(), H_ = (i, j) => 2 * (j * (nx + 1) + i), V_ = (i, j) => 2 * (j * (nx + 1) + i) + 1;
   const cross = (id, v0, v1, x0, y0, x1, y1) => { if ((v0 < 0) === (v1 < 0)) return null; if (!pos.has(id)) { const t = v0 / (v0 - v1); pos.set(id, [x0 + (x1 - x0) * t, y0 + (y1 - y0) * t]); } return id; };
   const link = (a, b) => { for (const [p, q] of [[a, b], [b, a]]) { if (!adj.has(p)) adj.set(p, []); adj.get(p).push(q); } };
@@ -446,18 +446,18 @@ function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; G.clock = (G.cl
 let mapLake = null;
 function makeMapLake() { const { W, H, X0, Y1, STEP } = G.far.userData.grid, pos = []; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) if (G.lake[j * W + i]) { const x0 = X0 + (i - 0.5) * STEP, x1 = x0 + STEP, z0 = -(Y1 - (j - 0.5) * STEP), z1 = z0 + STEP; pos.push(x0, 0, z0, x0, 0, z1, x1, 0, z0, x1, 0, z0, x0, 0, z1, x1, 0, z1); }
   const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); mapLake = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: ENV.uMapDeep.value, fog: false, side: THREE.DoubleSide }));
-  mapLake.position.y = -16; mapLake.layers.set(1); mapLake.frustumCulled = false; scene.add(mapLake); }
-const TILE = 256, mapCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 12000), tileCache = new Map(), tileQueue = [], tileWant = new Set(); let mapReady = false;
+  mapLake.scale.setScalar(WS); mapLake.position.y = -16 * WS; mapLake.layers.set(1); mapLake.frustumCulled = false; scene.add(mapLake); }
+const TILE = 256, mapCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 12000 * 3), tileCache = new Map(), tileQueue = [], tileWant = new Set(); let mapReady = false;
 mapCam.up.set(0, 0, -1); mapCam.layers.set(1);
 function mapTile(l, i, j) { const k = l + '/' + i + '/' + j, t = tileCache.get(k); if (t) { tileCache.delete(k); tileCache.set(k, t); return t; } if (!tileWant.has(k)) { tileWant.add(k); tileQueue.push([k, l, i, j]); } return null; }
 function mapWork() { if (!G) return; if (!mapReady) { mapReady = true; makeMapLake(); const en = (o, l) => o.traverse((c) => c.layers.enable(l)); for (const o of G.mapObjs) en(o, 1); en(G.ridges, 2); for (const o of scene.children) if (o.isLight) o.layers.enable(1); }
-  const g = G.far.userData.grid, size = (g.W * g.STEP), pr = renderer.getPixelRatio(), buf = renderer.getDrawingBufferSize(new THREE.Vector2()), cc = new THREE.Color(), ca = renderer.getClearAlpha(); renderer.getClearColor(cc);
+  const g = G.far.userData.grid, size = (g.W * g.STEP) * WS, pr = renderer.getPixelRatio(), buf = renderer.getDrawingBufferSize(new THREE.Vector2()), cc = new THREE.Color(), ca = renderer.getClearAlpha(); renderer.getClearColor(cc);
   const keep = { sun: SUN.clone(), day: ENV.uDay.value, dusk: ENV.uDusk.value, si: ENV.uSunI.value, st: ENV.uStorm.value, cov: ENV.uCover.value, hor: ENV.uHor.value.clone() };
   SUN.set(-0.55, 0.72, -0.42).normalize(); Object.assign(ENV.uDay, { value: 1 }); ENV.uDusk.value = 0; ENV.uSunI.value = 1; ENV.uStorm.value = 0; ENV.uCover.value = -1; ENV.uHor.value.set(0.56, 0.76, 0.97); ENV.uMap.value = 1;
   renderer.shadowMap.autoUpdate = false; renderer.setClearColor(0xd9cfb2, 1); // дыры сетки -- низины за хребтами: суша renderer.setRenderTarget(null); renderer.setScissorTest(true);
   const t0 = performance.now();
-  while (tileQueue.length && performance.now() - t0 < 10) { const [k, l, i, j] = tileQueue.pop(); tileWant.delete(k); const ts = size / 2 ** l, cx = g.X0 + (i + 0.5) * ts, cy = g.Y1 - (j + 0.5) * ts;
-    Object.assign(mapCam, { left: -ts / 2, right: ts / 2, top: ts / 2, bottom: -ts / 2 }); mapCam.position.set(cx, 5000, -cy); mapCam.lookAt(cx, 0, -cy); mapCam.updateProjectionMatrix();
+  while (tileQueue.length && performance.now() - t0 < 10) { const [k, l, i, j] = tileQueue.pop(); tileWant.delete(k); const ts = size / 2 ** l, cx = g.X0 * WS + (i + 0.5) * ts, cy = g.Y1 * WS - (j + 0.5) * ts;
+    Object.assign(mapCam, { left: -ts / 2, right: ts / 2, top: ts / 2, bottom: -ts / 2 }); mapCam.position.set(cx, 5000 * WS, -cy); mapCam.lookAt(cx, 0, -cy); mapCam.updateProjectionMatrix();
     if (l >= 4) mapCam.layers.enable(2); else mapCam.layers.disable(2); // тушь хребтов -- когда она различима
     setRidgeRes(TILE, TILE); renderer.setViewport(0, 0, TILE / pr, TILE / pr); renderer.setScissor(0, 0, TILE / pr, TILE / pr); renderer.render(scene, mapCam);
     const c = document.createElement('canvas'); c.width = c.height = TILE; c.getContext('2d').drawImage(renderer.domElement, 0, buf.y - TILE, TILE, TILE, 0, 0, TILE, TILE);
@@ -591,17 +591,14 @@ function updateCamera(dt, b, sp) {
     if (MENU.phone) camera.setViewOffset(W, H, 0, H / 2 - (MENU.boatT + MENU.boatB) * 0.5, W, H); else camera.setViewOffset(W, H, W / 2 - MENU.lakeW / 2, 0, W, H);
   } else {
     // камера ходит по сфере вокруг лодки: orbit -- вокруг, orbitP -- вверх-вниз, zoom -- ближе-дальше
-    // «Длинный объектив» (долли-зум): камера за кормой в TELE раз дальше и во столько же раз уже угол обзора. Лодка в кадре
-    // того же размера, а хребты на горизонте -- в TELE раз крупнее, как на съёмке гор длиннофокусным объективом.
-    // Рельеф и расстояния не тронуты -- меняется только оптика.
-    const TELE = 3, top = G.cam === 2, tele = top ? 1 : TELE, d = (top ? 40 : (b.camD || 13) + sp * (b.kind ? 0.22 : 0.55) + G.flyCam) * G.zoom * tele, el = clamp((top ? 1.2 : 0.14 / tele) + G.orbitP, -0.06, 1.45), ce = Math.cos(el), se = Math.sin(el);
+    const top = G.cam === 2, d = (top ? 40 : (b.camD || 13) + sp * (b.kind ? 0.22 : 0.55) + G.flyCam) * G.zoom, el = clamp((top ? 1.2 : 0.14) + G.orbitP, -0.06, 1.45), ce = Math.cos(el), se = Math.sin(el);
     const by = b.base || 0, ty = by + (top ? 1 : (b.kind ? 1.3 : 2.2) + (b.y - by) * 0.5), ahead = top ? 0 : 4.5 * Math.cos(G.orbit) * ce; // за кормой смотрим чуть вперёд лодки, сбоку -- на неё
     const hx = Math.sin(b.th), hz = -Math.cos(b.th), tx = bx + hx * ahead, tz = bz + hz * ahead;
     camera.position.set(tx - fx * d * ce - hx * ahead * 1.0 + jx, ty + d * se + 1.4 + jy, tz - fz * d * ce - hz * ahead * 1.0);
     const gy = Math.max(G.waves.sample(camera.position.x, camera.position.z, G.t, 1, tmpS).h + 0.9, G.h(camera.position.x, -camera.position.z) + 2); if (G.mode !== 'river' && camera.position.y < gy) camera.position.y = gy;
     camera.lookAt(tx, ty, tz);
     if (!top) camera.rotateZ(-b.phi * 0.2 * Math.cos(wrapPi(b.th - yaw)) * ce + jx * 0.06);
-    const f0 = top ? 50 : 54 + Math.min(14, sp * 1.7), fT = (2 * Math.atan(Math.tan((f0 * DEG) / 2) / tele)) / DEG; camera.fov += (fT - camera.fov) * Math.min(1, dt * 3);
+    camera.fov += ((top ? 50 : 54 + Math.min(14, sp * 1.7)) - camera.fov) * Math.min(1, dt * 3);
   }
   if (G.dbgCam) { const c = G.dbgCam, hx = Math.sin(b.th), hz = -Math.cos(b.th); // крупный план для автотестов
     camera.position.set(bx - hx * c.back + hz * -c.side, c.up, bz - hz * c.back + hx * c.side); camera.lookAt(bx, 1.2, bz); camera.fov = 45; }

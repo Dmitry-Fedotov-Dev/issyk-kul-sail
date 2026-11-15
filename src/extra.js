@@ -7,7 +7,7 @@ import { makeNet, radiusOf, encNpc, followNpc } from './net.js';
 import { makeRiver } from './rivermode.js';
 import { RIVER } from './river.js';
 import { TRAILS, RIVERS } from './trails.js';
-import { MAP } from './world.js';
+import { MAP, WS as LAND } from './world.js'; // LAND -- масштаб ландшафта
 import { makeWake } from './fx.js';
 import { makeMark } from './world.js';
 const MAP_M = MAP.M, MAP_N = MAP.N, MAP_OX = MAP.OX, MAP_OY = MAP.OY;
@@ -187,7 +187,12 @@ export function installExtra(A) {
     R.redraw(); setTimeout(() => { if (G.race2 === R) $('result').hidden = false; }, 1500); }
 
   // ---------- сплав ----------
-  function startRiver() { leaveModes(); G.mode = 'river'; G.race = null; setPlayer('kayak'); if (!river) river = makeRiver(scene, G.far.userData.heightAt); river.show(true);
+  // русло -- в масштабе ландшафта: модель увеличена, а функции течения, уровня, дна и камней принимают мировые координаты
+  function scaleRiver(r, k) { if (k === 1) return r; r.group.scale.setScalar(k); const u = (fn) => (X, Y, o) => fn(X / k, Y / k, o);
+    return { ...r, len: r.len * k, drop: r.drop * k, startPose() { const p = r.startPose(); return { ...p, X: p.X * k, Y: p.Y * k, z: p.z * k }; },
+      progress(X, Y) { const p = r.progress(X / k, Y / k); return { ...p, s: p.s * k, d: p.d * k }; }, surf: (X, Y) => r.surf(X / k, Y / k) * k, rough: u(r.rough), flowAt: u(r.flowAt),
+      h: (X, Y) => r.h(X / k, Y / k) * k, hitRock(b) { const hit = r.hitRock({ X: b.X / k, Y: b.Y / k }); if (hit) hit.pen *= k; return hit; } }; }
+  function startRiver() { leaveModes(); G.mode = 'river'; G.race = null; setPlayer('kayak'); if (!river) river = scaleRiver(makeRiver(scene, G.far.userData.heightAt), LAND); river.show(true);
     flow.at = river.flowAt; flow.surf = river.surf; flow.rough = river.rough; const p = river.startPose(); A.placeBoat(G.player, p.X, p.Y, p.th, 1.5); G.player.b.y = p.z; G.player.b.base = p.z; show(G.player, true);
     A.showGame(true); A.setRivals(false); $('race').hidden = false; $('brief').hidden = true; G.camYaw = p.th; A.resetView(); G.rv = { t: 0, hits: 0, over: false, cool: 0 }; G.modeT = 0;
     toast(`${river.name}: ${Math.round(river.len / 10) * 10} м, перепад ${Math.round(river.drop)} м`); }
@@ -289,10 +294,10 @@ export function installExtra(A) {
     c.textAlign = 'center'; c.textBaseline = 'middle';
     for (const [lx, ly, t, kind] of vec.labels) { if ((kind === 1 && mv.z < 4) || (kind === 3 && mv.z > 6)) continue; const x = X(lx), y = Y(ly) - (kind === 2 ? 12 * dpr : 0); if (x < -200 || x > w + 200 || y < -40 || y > h + 40) continue;
       c.font = `${kind === 3 ? 'italic 600' : '700'} ${(kind === 3 ? 11 : 12) * dpr}px "Avenir Next","Segoe UI",Arial,sans-serif`; c.lineWidth = 3 * dpr; c.strokeStyle = kind === 3 ? 'rgba(8,24,52,.55)' : 'rgba(255,255,255,.9)'; c.strokeText(t, x, y); c.fillStyle = kind === 3 ? '#e8f1ff' : '#10233f'; c.fillText(t, x, y); }
-    const dot = (Xw, Yw, col, rr) => { const x = X((Xw - g.X0) / g.STEP), y = Y((g.Y1 - Yw) / g.STEP); c.fillStyle = col; c.strokeStyle = '#fff'; c.lineWidth = 1.5 * dpr; c.beginPath(); c.arc(x, y, rr * dpr, 0, 7); c.fill(); c.stroke(); };
+    const dot = (Xw, Yw, col, rr) => { const x = X((Xw / LAND - g.X0) / g.STEP), y = Y((g.Y1 - Yw / LAND) / g.STEP); c.fillStyle = col; c.strokeStyle = '#fff'; c.lineWidth = 1.5 * dpr; c.beginPath(); c.arc(x, y, rr * dpr, 0, 7); c.fill(); c.stroke(); };
     dot(0, 0, '#ff7a1a', 4); if (startAt) dot(startAt.X, startAt.Y, '#ffd21f', 5);
     // масштабная линейка
-    const mpp = (g.STEP / k) * dpr, nice = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000].find((m) => m / mpp > 60) || 50000, bw = (nice / mpp) * dpr;
+    const mpp = (g.STEP * LAND / k) * dpr, nice = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000].find((m) => m / mpp > 60) || 50000, bw = (nice / mpp) * dpr;
     c.fillStyle = 'rgba(7,26,58,.7)'; c.fillRect(8 * dpr, h - 26 * dpr, bw + 16 * dpr, 18 * dpr); c.fillStyle = '#fff'; c.fillRect(16 * dpr, h - 13 * dpr, bw, 2 * dpr);
     c.font = `600 ${10 * dpr}px sans-serif`; c.textAlign = 'left'; c.fillText(nice >= 1000 ? nice / 1000 + ' км' : nice + ' м', 16 * dpr, h - 19 * dpr);
     $('mzoom').hidden = mv.z <= 1.01; }
@@ -302,7 +307,7 @@ export function installExtra(A) {
   function mapZoom(f, px, py) { const g = G.far.userData.grid, v = mapWin(), gx = v.sx + px * v.sw, gy = v.sy + py * v.sh; mv.z = clamp(mv.z * f, 1, 64);
     const sw = g.W / mv.z, sh = g.H / mv.z; mv.cx = gx - (px - 0.5) * sw; mv.cy = gy - (py - 0.5) * sh; redrawMap(); }
   function pickMap(ev) { const g = G.far.userData.grid, r = $('mapcv').getBoundingClientRect(), v = mapWin(), gx = v.sx + ((ev.clientX - r.left) / r.width) * v.sw, gy = v.sy + ((ev.clientY - r.top) / r.height) * v.sh;
-    const X = g.X0 + gx * g.STEP, Y = g.Y1 - gy * g.STEP, h = G.hRaw(X, Y), d = Math.hypot(X, Y) / 1000; // подпись -- настоящая высота
+    const X = (g.X0 + gx * g.STEP) * LAND, Y = (g.Y1 - gy * g.STEP) * LAND, h = G.h(X, Y), d = Math.hypot(X, Y) / 1000; // место -- в мире (ландшафт x LAND)
     const az = (Math.atan2(X, Y) / DEG + 360) % 360, dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'][Math.round(az / 45) % 8];
     startAt = { X, Y, land: h > -2, label: `${d.toFixed(0)} км к ${dirs} · ${h > -2 ? `суша, ${Math.round(h + 1601)} м` : 'озеро'}` }; refreshMenu(); mapInfo(); drawMap(); }
   const mapInfo = () => { $('mshare').hidden = !startAt; $('mapinfo').textContent = startAt ? `Выбрано: ${startAt.label}` : 'Нажмите на карту. Оранжевая точка — Чолпон-Ата. Два пальца или колесо — приблизить.'; };
