@@ -35,11 +35,11 @@ const camera = new THREE.PerspectiveCamera(56, 1, 0.5, 300000 * 3); // ланд�
 // ?scale=0.01 -- «макет»: весь мир (озеро, горы, лодки, волны, брызги) будто уменьшен так, что яхта длиной 10 см, а
 // сила тяжести прежняя. По подобию Фруда такой мир выглядит как обычный, только всё в нём идёт в 1/sqrt(scale) раз
 // быстрее: волны, ход, крен, брызги (при 0.01 -- в 10 раз). Поэтому мир не пересчитываем, а ускоряем время игры;
-// сутки идут как обычно (солнце над макетом не торопится). Чтобы глаз поверил в макет, кадр размыт сверху и снизу,
-// как на съёмке со сдвигом объектива («тилт-шифт»). В сети макеты видят только друг друга: у них свой мир и свои заезды.
+// сутки идут как обычно (солнце над макетом не торопится).
+// В сети макеты видят только друг друга: у них свой мир и свои заезды.
 const MINI = (() => { const v = parseFloat(new URLSearchParams(location.search).get('scale')); return Number.isFinite(v) && v > 0 && v < 1 ? Math.max(0.01, v) : 1; })();
 const TS = 1 / Math.sqrt(MINI), TSN = Math.ceil(TS);
-if (post && MINI < 1) post.setTilt(1); // режим макета: тилт-шифт
+// тилт-шифт в режиме макета выключен: размытые горы выглядели плохо (post.setTilt оставлен на будущее)
 const sunL = new THREE.DirectionalLight(0xfff2dc, 3.1); sunL.position.copy(SUN); const hemi = new THREE.HemisphereLight(0xcfe2ff, 0x5a7466, 1.9); scene.add(sunL, sunL.target, hemi);
 // тень -- только вокруг лодки игрока: паруса и мачта затеняют палубу и корпус
 sunL.castShadow = true; sunL.shadow.mapSize.set(1024, 1024); sunL.shadow.bias = -0.0006; sunL.shadow.normalBias = 0.03;
