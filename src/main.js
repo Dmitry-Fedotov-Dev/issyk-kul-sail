@@ -32,6 +32,10 @@ function setQuality(q) { quality = q; applyQuality(q);
   sunL.castShadow = q >= 1; const ms = qMode === 'high' ? 2048 : 1024; if (sunL.shadow.mapSize.x !== ms) { sunL.shadow.mapSize.set(ms, ms); if (sunL.shadow.map) { sunL.shadow.map.dispose(); sunL.shadow.map = null; } } }
 const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(HAZE, 0.000052);
 const camera = new THREE.PerspectiveCamera(56, 1, 0.5, 300000);
+// ?scale=0.01 в адресе -- своя лодка в 100 раз меньше (игрушка на настоящих волнах). Меняется только вид: модель, камера
+// и ближняя плоскость отсечения (иначе камера прорезала бы крошечную лодку). Физика и то, как лодку видят другие, -- прежние
+const BOAT_SCALE = (() => { const v = parseFloat(new URLSearchParams(location.search).get('scale')); return Number.isFinite(v) && v > 0 ? Math.min(10, Math.max(0.01, v)) : 1; })();
+if (BOAT_SCALE < 1) { camera.near = Math.max(0.03, 0.5 * BOAT_SCALE); camera.updateProjectionMatrix(); }
 const sunL = new THREE.DirectionalLight(0xfff2dc, 3.1); sunL.position.copy(SUN); const hemi = new THREE.HemisphereLight(0xcfe2ff, 0x5a7466, 1.9); scene.add(sunL, sunL.target, hemi);
 // тень -- только вокруг лодки игрока: паруса и мачта затеняют палубу и корпус
 sunL.castShadow = true; sunL.shadow.mapSize.set(1024, 1024); sunL.shadow.bias = -0.0006; sunL.shadow.normalBias = 0.03;
@@ -432,6 +436,7 @@ function loop(now) {
     if (rafIv < 10.5 && (rafOdd = !rafOdd)) return; }
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (!G.freeze) tick(dt); // freeze -- только для тестов: мир стоит, картинка рисуется
+  if (BOAT_SCALE !== 1) { G.player.model.root.scale.setScalar(BOAT_SCALE); if (BOAT_SCALE < 0.5) G.player.wake.mesh.visible = false; } // след во всю ширину рядом с игрушкой смотрелся бы дорогой
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
   sunL.target.position.set(b.X, b.base || 0, -b.Y); sunL.position.set(b.X + LIGHT.x * 30, (b.base || 0) + LIGHT.y * 30, -b.Y + LIGHT.z * 30);
@@ -545,11 +550,11 @@ function updateCamera(dt, b, sp) {
     if (MENU.phone) camera.setViewOffset(W, H, 0, H / 2 - (MENU.boatT + MENU.boatB) * 0.5, W, H); else camera.setViewOffset(W, H, W / 2 - MENU.lakeW / 2, 0, W, H);
   } else {
     // камера ходит по сфере вокруг лодки: orbit -- вокруг, orbitP -- вверх-вниз, zoom -- ближе-дальше
-    const top = G.cam === 2, d = (top ? 40 : (b.camD || 13) + sp * (b.kind ? 0.22 : 0.55) + G.flyCam) * G.zoom, el = clamp((top ? 1.2 : 0.14) + G.orbitP, -0.06, 1.45), ce = Math.cos(el), se = Math.sin(el);
-    const by = b.base || 0, ty = by + (top ? 1 : (b.kind ? 1.3 : 2.2) + (b.y - by) * 0.5), ahead = top ? 0 : 4.5 * Math.cos(G.orbit) * ce; // за кормой смотрим чуть вперёд лодки, сбоку -- на неё
+    const top = G.cam === 2, d = (top ? 40 : (b.camD || 13) + sp * (b.kind ? 0.22 : 0.55) * Math.min(1, BOAT_SCALE * 20) + G.flyCam) * G.zoom * BOAT_SCALE, el = clamp((top ? 1.2 : 0.14) + G.orbitP, -0.06, 1.45), ce = Math.cos(el), se = Math.sin(el);
+    const by = b.base || 0, ty = by + (top ? 1 : (b.kind ? 1.3 : 2.2)) * BOAT_SCALE + (b.y - by) * 0.5, ahead = (top ? 0 : 4.5 * Math.cos(G.orbit) * ce) * BOAT_SCALE; // за кормой смотрим чуть вперёд лодки, сбоку -- на неё
     const hx = Math.sin(b.th), hz = -Math.cos(b.th), tx = bx + hx * ahead, tz = bz + hz * ahead;
-    camera.position.set(tx - fx * d * ce - hx * ahead * 1.0 + jx, ty + d * se + 1.4 + jy, tz - fz * d * ce - hz * ahead * 1.0);
-    const gy = Math.max(G.waves.sample(camera.position.x, camera.position.z, G.t, 1, tmpS).h + 0.9, G.h(camera.position.x, -camera.position.z) + 2); if (G.mode !== 'river' && camera.position.y < gy) camera.position.y = gy;
+    camera.position.set(tx - fx * d * ce - hx * ahead * 1.0 + jx * BOAT_SCALE, ty + d * se + 1.4 * BOAT_SCALE + jy * BOAT_SCALE, tz - fz * d * ce - hz * ahead * 1.0);
+    const gy = Math.max(G.waves.sample(camera.position.x, camera.position.z, G.t, 1, tmpS).h + 0.9 * Math.min(1, BOAT_SCALE * 3), G.h(camera.position.x, -camera.position.z) + 2 * BOAT_SCALE); if (G.mode !== 'river' && camera.position.y < gy) camera.position.y = gy;
     camera.lookAt(tx, ty, tz);
     if (!top) camera.rotateZ(-b.phi * 0.2 * Math.cos(wrapPi(b.th - yaw)) * ce + jx * 0.06);
     camera.fov += ((top ? 50 : 54 + Math.min(14, sp * 1.7)) - camera.fov) * Math.min(1, dt * 3);
