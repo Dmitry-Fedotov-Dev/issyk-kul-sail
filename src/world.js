@@ -116,7 +116,7 @@ void main(){ vec3 d=normalize(vDir); vec3 c=skyBase(d); float dk=mix(0.05,1.,uDa
   return m;
 }
 
-export function makeTerrain(h) {
+export function makeTerrain(h, hole = null) {
   const N = 440, P = 1.9, M = MAP.M;
   const xw = -MAP.OX * M, xe = (MAP.N - 1 - MAP.OX) * M, ys = (MAP.OY - (MAP.N - 1)) * M, yn = MAP.OY * M;
   const pos = new Float32Array(N * N * 3), nor = new Float32Array(N * N * 3), hs = new Float32Array(N * N);
@@ -132,6 +132,7 @@ export function makeTerrain(h) {
   for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) {
     const a = j * N + i, b = a + 1, c = a + N, d = c + 1;
     if (Math.max(hs[a], hs[b], hs[c], hs[d]) < -9) continue; // глубокое дно не рисуем
+    if (hole) { const xa = pos[a * 3], za = -pos[a * 3 + 2], xd = pos[d * 3], zd = -pos[d * 3 + 2]; if (Math.min(xa, xd) > hole.x0 && Math.max(xa, xd) < hole.x1 && Math.min(za, zd) > hole.y0 && Math.max(za, zd) < hole.y1) continue; } // здесь подробная заплатка
     chunkList(lists, ((j / CH) | 0) * 64 + ((i / CH) | 0) + (Math.min(hs[a], hs[b], hs[c], hs[d]) < 0 ? SHORE : 0)).push(a, b, d, a, d, c);
   }
   return chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, terrainMaterial(false), terrainMaterial());
@@ -160,6 +161,40 @@ function chunked(attrs, lists, matLand, matShore = matLand) {
 // маска природных зон OSM (лес, ледники, кустарник): грузится один раз, по требованию -- когда открывают подзорную трубу
 let lcLoad = false;
 export function loadLandcover() { if (lcLoad) return; lcLoad = true; const img = new Image(); img.onload = () => { const t = new THREE.Texture(img); t.flipY = false; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = true; t.needsUpdate = true; ENV.uLC.value = t; ENV.uLCOn.value = 1; }; img.onerror = () => { lcLoad = false; }; img.src = 'landcover.png'; }
+// ---------- подробная заплатка: коридор Кургак-Сай -- берег (данные Terrain Tiles, шаг ~14 м) ----------
+// Сетка -- через точку (~28 м, на телефоне ~42 м), но свет считается по карте нормалей с полным шагом 14 м:
+// гребни, кулуары и осыпи видны чётко. К краям заплатка плавно переходит в обычный рельеф (300 м), над водой --
+// дно из обычной карты (в данных рельефа озеро -- ровная гладь).
+export async function loadDem(D, hNear) {
+  const img = new Image(); img.src = D.png; await img.decode(); const c = document.createElement('canvas'); c.width = D.W; c.height = D.H; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, D.W, D.H).data, H = new Float32Array(D.W * D.H); for (let i = 0; i < H.length; i++) H[i] = (d[i * 4] * 256 + d[i * 4 + 1]) / 4 - 64;
+  const { W, STEP, X0, Y1 } = D, Hh = D.H, X1 = X0 + (W - 1) * STEP, Y0 = Y1 - (Hh - 1) * STEP, B = 300;
+  const raw = (X, Y) => { const fx = (X - X0) / STEP, fy = (Y1 - Y) / STEP, i = Math.min(W - 2, Math.max(0, fx | 0)), j = Math.min(Hh - 2, Math.max(0, fy | 0)), u = fx - i, v = fy - j, k = j * W + i;
+    return (H[k] * (1 - u) + H[k + 1] * u) * (1 - v) + (H[k + W] * (1 - u) + H[k + W + 1] * u) * v; };
+  const inside = (X, Y) => X > X0 && X < X1 && Y > Y0 && Y < Y1;
+  const h = (X, Y) => { const n = hNear(X, Y); if (!inside(X, Y)) return n; const r = raw(X, Y); if (n < 1 && r < 4) return n; // вода -- из обычной карты (там дно)
+    const e = Math.min(X - X0, X1 - X, Y - Y0, Y1 - Y), w = smooth(0, B, e); return n + (r - n) * w; };
+  return { h, raw, inside, X0, X1, Y0, Y1, W, H: Hh, STEP, hs: H };
+}
+export function makeDemTerrain(dem, touch) {
+  const S = touch ? 3 : 2, { X0, Y1, STEP } = dem, W = Math.floor((dem.W - 1) / S) + 1, Hn = Math.floor((dem.H - 1) / S) + 1, M = STEP * S;
+  const pos = new Float32Array(W * Hn * 3), nor = new Float32Array(W * Hn * 3), hs = new Float32Array(W * Hn);
+  for (let j = 0; j < Hn; j++) for (let i = 0; i < W; i++) { const X = X0 + i * M, Y = Y1 - j * M, k = j * W + i, y = dem.h(X, Y), e = M;
+    hs[k] = y; pos[k * 3] = X; pos[k * 3 + 1] = y; pos[k * 3 + 2] = -Y;
+    const nx = dem.h(X - e, Y) - dem.h(X + e, Y), nz = dem.h(X, Y + e) - dem.h(X, Y - e), l = Math.hypot(nx, 2 * e, nz); nor[k * 3] = nx / l; nor[k * 3 + 1] = (2 * e) / l; nor[k * 3 + 2] = nz / l; }
+  const lists = new Map(), CH = 48;
+  for (let j = 0; j < Hn - 1; j++) for (let i = 0; i < W - 1; i++) { const a = j * W + i, b = a + 1, c = a + W, d = c + 1; if (Math.max(hs[a], hs[b], hs[c], hs[d]) < -9) continue;
+    chunkList(lists, ((j / CH) | 0) * 1000 + ((i / CH) | 0) + (Math.min(hs[a], hs[b], hs[c], hs[d]) < 0 ? SHORE : 0)).push(a, d, b, a, c, d); } // строки идут с севера -- обход обратный, чтобы лицо было вверх
+  // карта нормалей полного разрешения (по смешанной высоте -- чтобы края совпадали)
+  const nm = new Uint8Array(dem.W * dem.H * 4);
+  for (let j = 0; j < dem.H; j++) for (let i = 0; i < dem.W; i++) { const X = X0 + i * STEP, Y = Y1 - j * STEP, e = STEP, o = (j * dem.W + i) * 4;
+    const nx = dem.h(X - e, Y) - dem.h(X + e, Y), nz = dem.h(X, Y + e) - dem.h(X, Y - e), l = Math.hypot(nx, 2 * e, nz); nm[o] = (nx / l * 0.5 + 0.5) * 255; nm[o + 1] = (2 * e / l) * 255; nm[o + 2] = (nz / l * 0.5 + 0.5) * 255; nm[o + 3] = 255; }
+  const tex = new THREE.DataTexture(nm, dem.W, dem.H, THREE.RGBAFormat); tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter; tex.generateMipmaps = true; tex.flipY = false; tex.needsUpdate = true;
+  const T = new THREE.Vector4(X0, Y1, 1 / ((dem.W - 1) * STEP), 1 / ((dem.H - 1) * STEP));
+  const mk = (shore) => { const m = terrainMaterial(shore); m.userData.defs = { ...m.userData.defs, DEMN: 1 }; m.defines = { ...m.defines, DEMN: 1 }; m.uniforms = { ...m.uniforms, uDemN: { value: tex }, uDemT: { value: T } };
+    m.polygonOffset = true; m.polygonOffsetFactor = -1; m.polygonOffsetUnits = -2; return m; };
+  return chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, mk(false), mk(true));
+}
 export function terrainMaterial(shore = true) {
   const defs = shore ? { FDEPTH: 1 } : {};
   const tm = new THREE.ShaderMaterial({ defines: { ...QUALITY_DEFS[2], ...defs },
@@ -169,7 +204,13 @@ export function terrainMaterial(shore = true) {
 varying vec3 vP; varying vec3 vN; varying float vH; uniform float uMap; uniform vec3 uMapDeep; uniform sampler2D uLakeM; uniform vec4 uLakeT; uniform sampler2D uLC; uniform float uLCOn, uPaint; uniform vec4 uLCT;
 // гребневой шум: острые хребты и кулуары, которых нет в карте высот с её шагом в десятки метров
 float ridged(vec2 p){ float a=0.5, s=0., w=1.; for(int i=0;i<FBM_OCT;i++){ float r=1.-abs(2.*vnoise(p)-1.); r*=r*w; s+=a*r; w=clamp(r*1.6,0.,1.); p=mat2(1.6,1.2,-1.2,1.6)*p+7.; a*=0.5; } return s; }
+#ifdef DEMN
+uniform sampler2D uDemN; uniform vec4 uDemT;
+#endif
 void main(){ vec3 N=normalize(vN); float h=vH;
+#ifdef DEMN
+  { vec2 du=vec2((vP.x-uDemT.x)*uDemT.z, (uDemT.y+vP.z)*uDemT.w); vec3 t=texture2D(uDemN, du).xyz; vec3 Nd=normalize(vec3(t.x*2.-1., t.y, t.z*2.-1.)); N=normalize(mix(N, Nd, 1.-smoothstep(25., 70., length(fwidth(vP.xz))))); } // свет -- по карте нормалей 14 м
+#endif
   // на карте вода -- только сам Иссык-Куль: низины за хребтами ниже уровня озера (Чуйская долина) -- суша
   if(uMap>0. && texture2D(uLakeM, vec2((vP.x-uLakeT.x)*uLakeT.z, (uLakeT.y+vP.z)*uLakeT.w)).r<0.5) h=max(h,3.);
   float mt=smoothstep(70.,600.,h);
@@ -181,7 +222,11 @@ void main(){ vec3 N=normalize(vN); float h=vH;
   // Дальше -- только то, что реально влияет на цвет: на низком берегу (mt=0) гребни, тени облаков и осыпи ни на что
   // не влияют, под водой цвет суши целиком заменяется цветом дна, вне посёлка не нужна застройка. Результат прежний
   if(mt*kR>0.){ r0=ridged(rp); rx=ridged(rp+vec2(e*rs,0.)); rz=ridged(rp+vec2(0.,e*rs)); }
-  N=normalize(N+vec3(r0-rx,0.,r0-rz)*(7.5*mt*kR)); float sl=1.-N.y; r0=mix(0.45,r0,kR);
+  float RK=1.;
+#ifdef DEMN
+  RK=0.3; // настоящие гребни уже в карте нормалей -- выдуманных рёбер меньше
+#endif
+  N=normalize(N+vec3(r0-rx,0.,r0-rz)*(7.5*mt*kR*RK)); float sl=1.-N.y; r0=mix(0.45,r0,kR);
   float kN=1.-smoothstep(10.,45.,px), n=0.5, n2=0.5, n3=0.5;
   if(h>=0.){ n=mix(mix(0.5,vnoise(vP.xz*0.0035),1.-smoothstep(90.,260.,px)), fbm(vP.xz*0.0035), kN); n2=mix(0.5,fbm(vP.xz*0.045),kF); n3=mix(0.5,vnoise(vP.xz*0.6),kT); }
   vec3 sand=vec3(0.93,0.80,0.52), green=vec3(0.24,0.62,0.13), steppe=vec3(0.88,0.62,0.27), forest=vec3(0.06,0.30,0.14),
@@ -215,6 +260,19 @@ void main(){ vec3 N=normalize(vN); float h=vH;
   vec3 sunC=mix(mix(vec3(1.08,1.0,0.88), vec3(1.5,0.72,0.38), uDusk), vec3(0.8,0.85,0.9), uStorm), shC=mix(vec3(0.27,0.33,0.50), vec3(0.22,0.25,0.30), uStorm);
   c*=mix(1.,0.88,mt*(1.-snowM)); // камень и трава в горах темнее выгоревшей степи у берега
   float sunny=uSunI*(1.-uStorm); // в ясный день горы залиты светом: солнечные склоны почти слепят, тени наполнены отражённым
+#ifdef DEMN
+  // подробный коридор: цвет по высоте и крутизне, отмывка по кривизне карты высот -- гребни светлее, кулуары темнее
+  { vec2 du=vec2((vP.x-uDemT.x)*uDemT.z, (uDemT.y+vP.z)*uDemT.w), tx=vec2(uDemT.z*28.1,0.), ty=vec2(0.,uDemT.w*28.1);
+    vec3 nE=texture2D(uDemN,du+tx).xyz, nW=texture2D(uDemN,du-tx).xyz, nS=texture2D(uDemN,du+ty).xyz, nNn=texture2D(uDemN,du-ty).xyz;
+    float cav=clamp(((nE.x-nW.x)+(nS.z-nNn.z))*3.2,-1.,1.), slope=1.-N.y, Hm=h+1601.;
+    vec3 dry=vec3(0.52,0.44,0.27), meadow=vec3(0.26,0.38,0.17), scree=vec3(0.42,0.37,0.32), rock=vec3(0.30,0.28,0.29), cliff=vec3(0.18,0.17,0.20), snw=vec3(0.86,0.89,0.95), forest=vec3(0.07,0.17,0.10);
+    vec3 a=mix(dry, meadow, smoothstep(1850.,2250.,Hm)); a=mix(a, scree, smoothstep(3150.,3600.,Hm));
+    a=mix(a, rock, smoothstep(0.16,0.3,slope)); a=mix(a, cliff, smoothstep(0.36,0.55,slope));
+    float fN=smoothstep(0.04,0.22,-N.z)*smoothstep(2050.,2250.,Hm)*(1.-smoothstep(2800.,2950.,Hm))*(1.-smoothstep(0.34,0.5,slope))*(0.55+0.45*vnoise(vP.xz*0.011)); if(uLCOn>0.) fN=texture2D(uLC, vec2((vP.x-uLCT.x)*uLCT.z, (uLCT.y+vP.z)*uLCT.w)).r*(0.75+0.25*vnoise(vP.xz*0.02)); a=mix(a, forest, smoothstep(0.3,0.55,fN)); // ельники: по маске OSM, пока она не загружена -- по северным склонам
+    float sn=smoothstep(3880.,4020.,Hm+220.*vnoise(vP.xz*0.004)-cav*160.+max(0.,-N.z)*260.)*(1.-smoothstep(0.30,0.5,slope)); // летом снег -- пятнами у вершин, в кулуарах и на северных склонах a=mix(a, snw, sn);
+    c=a*mix(0.5,0.9,sn); snowM=sn; // под яркий свет сцены: иначе склоны выгорают в белое
+    float hsh=dot(N, normalize(vec3(-0.55,0.7,-0.45))); ao*=clamp((1.+cav*0.5)*mix(0.72,1.15,hsh),0.45,1.4); l*=clamp(1.+cav*0.25,0.7,1.25); }
+#endif
   vec3 col=c*(sunC*l*(1.25+0.75*sunny)+shC*ao*(1.25+0.3*sunny)+snowM*vec3(0.36,0.42,0.60)*mix(1.,0.5,uStorm)*ao);
   // контровой свет по гребням: кромка, обращённая к солнцу, горит
   vec3 Vd=normalize(cameraPosition-vP); col+=sunC*c*pow(1.-max(dot(N,Vd),0.),3.)*max(dot(N,uSun)+0.25,0.)*0.55*mt*uSunI;

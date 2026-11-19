@@ -6,6 +6,7 @@
 // Урез озера и дороги -- тушью, тем же пером, что гребни гор (ridges.js): тонкая линия постоянной толщины на экране.
 import * as THREE from 'three';
 import { HOUSES, TREES, ROADS } from './shoredata.js';
+import { FOREST_PTS } from './forestdata.js';
 import { CURVE, END, ENV, GLSL_COMMON } from './world.js';
 import { makeInk, inkMaterial, INK_U } from './ridges.js';
 
@@ -101,6 +102,9 @@ export function makeShoreArt(scene, h) {
   const rows = [];
   for (let i = 0; i < nT; i++) { const X = T[i * 4] / 2, Y = T[i * 4 + 1] / 2, k = T[i * 4 + 2], s = T[i * 4 + 3] / 100, y = h(X, Y); if (k === 5 ? y < 0.25 : y < 0.8) continue;
     const [asp, hh, dv] = TREE_SHAPE[k], ht = (hh + (rnd() - 0.5) * 2 * dv) * s; rows.push([X, y - 0.25, Y, asp * ht, ht, k, rnd(), 0, 0]); }
+  // лес и кустарник предгорий (OSM): те же спрайты, что у деревьев города
+  { const F = i16(FOREST_PTS); for (let i = 0; i < F.length; i += 4) { const X = F[i] * 2, Y = F[i + 1] * 2, k = F[i + 2], s = F[i + 3] / 100, y = h(X, Y); if (y < 2) continue;
+      const [asp, hh, dv] = TREE_SHAPE[k], ht = (hh + (rnd() - 0.5) * 2 * dv) * s * (k === 3 ? 1.35 : 1); rows.push([X, y - 0.25, Y, asp * ht, ht, k, rnd(), 0, 0]); } }
   for (let i = 0; i < nH; i++) { const X = H[i * 6] / 2, Y = H[i * 6 + 1] / 2, w = H[i * 6 + 2] / 10, d = H[i * 6 + 3] / 10, fl = H[i * 6 + 4], y = h(X, Y); if (y < 0.5) continue;
     const face = Math.min(60, (w + d) * 0.55), wallH = fl * 3.1 + 0.8, roofH = fl <= 2 ? Math.min(5, Math.max(1.6, face * 0.32)) : 0, ht = wallH + roofH;
     rows.push([X, y - 0.8, Y, face / 2 * 2, ht, 6, rnd(), fl, roofH / ht]); }

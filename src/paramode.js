@@ -13,10 +13,12 @@ import { makeGlider } from './glidermodel.js';
 import { makeClouds, makeBirds, makeCylinder, makeWinch, makeWindsock, makeTarget, makeShadow, makeTowLine, makeAirDust, makeTrail, makeVector, makeStreaks } from './paramodel.js';
 import { MODEL } from './craftmodels.js';
 import { playToon } from './paratoon.js';
-import { SUN } from './world.js';
+import { SUN, loadLandcover } from './world.js';
 import { clamp, smooth, wrapPi, DEG } from './sim.js';
 
-const AIRPORT = { X: -4385, Y: 1809, name: 'старый аэродром' }; // 42°39′13″ с. ш., 77°03′24″ в. д., полоса 16/34
+const AIRPORT = { X: -4385, Y: 1809, name: 'старый аэродром' };
+// места старта: аэродром (склон над ним), высшая точка над Чолпон-Атой -- пик Кургак-Сай, гора Калитка
+const SITES = { airport: { name: 'Аэродром', sub: 'склон над городом', X: AIRPORT.X, Y: AIRPORT.Y, r0: 600, r1: 4500 }, kurgak: { name: 'Кургак-Сай', sub: 'вершина ≈4100 м', X: -7576, Y: 15976, r0: 120, r1: 900 }, kalitka: { name: 'Калитка', sub: 'гора ≈2600 м', X: -7471, Y: 7112, r0: 60, r1: 700 } }; // 42°39′13″ с. ш., 77°03′24″ в. д., полоса 16/34
 const RIVALS = [['Беркут', 0.95, [0x9cc6dd, 0xf6e3b4, 0x5d7b91], 0x5d7b91], ['Ак-Шумкар', 0.88, [0xc7e3b8, 0xf2b8c6, 0x6b7f5d], 0x6b7f5d], ['Кара-Куш', 0.8, [0xd8c3ea, 0xa9d8cf, 0x6a5d86], 0x6a5d86], ['Тулпар', 0.72, [0xf6d29b, 0xa7c4e8, 0x8a6a4f], 0x8a6a4f]]; // пастель под Дымка
 const TPS = [['Опол-Тоо', -5508, 4286], ['Круглая горка', -6896, 3332], ['Тегерек-Тоо', -5386, 6377], ['Кызыл-Тоо', 3519, 3246], ['Чоң-Таш', 3465, 5495], ['Чолпон-Ата', 0, 1500], ['Ак-Ала-Таш', -4522, 8731]];
 const DIRS = ['С', 'ССВ', 'СВ', 'ВСВ', 'В', 'ВЮВ', 'ЮВ', 'ЮЮВ', 'Ю', 'ЮЮЗ', 'ЮЗ', 'ЗЮЗ', 'З', 'ЗСЗ', 'СЗ', 'ССЗ'];
@@ -48,6 +50,8 @@ body.touchdev #p_brk{bottom:calc(122px + env(safe-area-inset-bottom,0px))}
 #p_coach p{margin:0;font-size:14px;line-height:1.45;color:#dfe9f7}#p_coach kbd{display:inline-block;min-width:22px;padding:1px 6px;border-radius:6px;border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.12);font:700 13px var(--ui);text-align:center;color:#fff}
 #p_coach .row{display:flex;justify-content:space-between;align-items:center;margin-top:10px}#p_coach .dots i{display:inline-block;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);margin-right:5px}#p_coach .dots i.on{background:var(--buoy)}#p_coach .dots i.ok{background:var(--ok)}
 #p_coach button{font:600 12px var(--ui);color:var(--dim);background:none;border:0;cursor:pointer;padding:4px 0}#p_coach.ok{border-color:var(--ok)}#p_coach.ok h3::after{content:' ✓';color:var(--ok)}
+#p_brave{left:50%;top:62px;transform:translateX(-50%);text-align:center;transition:transform .15s}#p_brave b{font-size:30px;font-weight:800;color:#ffe9a8}#p_brave i{font-style:normal;font-size:22px;font-weight:800;color:#ff8a2a;margin-left:6px}
+#p_brave small{display:block;font-size:12px;color:var(--dim);letter-spacing:.06em}#p_brave.live b{color:#fff}#p_brave.fl{transform:translateX(-50%) scale(1.25)}
 #p_cloud{position:fixed;inset:0;background:#e9eef3;opacity:0;pointer-events:none;transition:opacity .4s}
 #p_flash{position:fixed;left:50%;top:30%;transform:translateX(-50%);font:800 clamp(22px,5vmin,40px) var(--ui);color:#fff;text-shadow:0 2px 14px rgba(0,0,0,.6);opacity:0;pointer-events:none;white-space:nowrap}
 #p_flash.go{animation:pflash 2.2s ease-out}@keyframes pflash{0%{opacity:0;transform:translateX(-50%) scale(.6)}12%{opacity:1;transform:translateX(-50%) scale(1.06)}25%{transform:translateX(-50%) scale(1)}75%{opacity:1}100%{opacity:0}}
@@ -84,7 +88,7 @@ export function makeParaMode(A) {
     const hud = document.createElement('div'); hud.id = 'phudwrap'; hud.hidden = true;
     hud.innerHTML = `<div id="p_mood"></div><div id="p_cloud"></div><div id="phud" class="hud"><div id="p_alt"><b>0</b><small>м</small><div class="s" id="p_agl"></div><div class="s" id="p_spd"></div><div id="p_st"></div></div></div>
       <div id="p_var" class="hud"><div class="bar"><u></u><i></i><s></s></div><div><b>0.0</b><small>м/с</small><div class="avg"></div></div></div>
-      <div id="p_brk" class="hud"><i><b></b></i><i class="k"><b></b></i><i><b></b></i><span>Л · аксель · П</span></div><div id="p_flash" class="hud"></div><div id="p_coach" class="panel" hidden></div>`;
+      <div id="p_brk" class="hud"><i><b></b></i><i class="k"><b></b></i><i><b></b></i><span>Л · аксель · П</span></div><div id="p_flash" class="hud"></div><div id="p_brave" class="hud" hidden></div><div id="p_coach" class="panel" hidden></div>`;
     $('game').appendChild(hud);
     field = findField(); air = new Air(G.h, G.wind, 11);
     W = { clouds: makeClouds(scene), birds: makeBirds(scene), winch: makeWinch(), sockA: makeWindsock(), sockF: makeWindsock(), target: makeTarget(), shadow: makeShadow(), tow: makeTowLine(), boat: MODEL.boat({}), cyl: [], dust: makeAirDust(scene), streaks: makeStreaks(scene), trail: makeTrail(scene), vec: makeVector(scene) };
@@ -103,9 +107,9 @@ export function makeParaMode(A) {
   let briefHtml = null, briefT = 0;
   function brief() { const b = $('brief'), p = b.querySelector('p'); if (briefHtml === null) briefHtml = p.innerHTML; drawRose($('briefc'), G.wind.p.dir);
     p.innerHTML = 'Днём бриз с озера и прогретый воздух идут <b>вверх по склонам</b> — у южных склонов держит динамика, над отрогами рвутся термики. К вечеру и ночью холодный воздух <b>стекает с гор</b> к озеру — у склонов спуск. <b>Санташ</b> (с востока) и <b>Улан</b> (с запада) забивают местные ветры, за гребнями — ротор и болтанка.'; b.hidden = false; briefT = 9; }
-  function begin() { build(); if (!on) prevPlayer = G.player; on = true; for (const k in G.marks || {}) G.marks[k].visible = false;
+  function begin() { build(); loadLandcover(); /* лес под ельниками -- по маске OSM */ if (!on) prevPlayer = G.player; on = true; for (const k in G.marks || {}) G.marks[k].visible = false;
     if (prevPlayer && prevPlayer.model) prevPlayer.model.root.visible = false; if (prevPlayer && prevPlayer.wake) prevPlayer.wake.mesh.visible = false;
-    show(true); G.player = P; G.race = null; G.race2 = null; G.rv = null; R = null; F = null; lift.length = 0; air.list.length = 0; W.trail.reset(); air.setSky(G.preset); G.clockK = 0.12;
+    show(true); G.player = P; G.race = null; G.race2 = null; G.rv = null; R = null; F = null; lift.length = 0; air.list.length = 0; W.trail.reset(); BR.run = 0; BR.total = 0; BR.mult = 1; air.setSky(G.preset); G.clockK = 0.12;
     if (G.clock === undefined || G.clock < 10.5 || G.clock > 16.5) G.clock = 12; // летают днём: термики в силе
     document.body.classList.add('para'); document.body.classList.toggle('feel', !inst); document.body.classList.remove('motor'); $('ts').textContent = 'аксель'; $('mark').hidden = true; $('brief').hidden = true;
     G.mode = 'para'; A.showGame(true); A.resetView(); G.cam = G.cam === 1 ? 0 : G.cam; G.modeT = 0; hold.L = hold.R = hold.B = hold.F = 0; }
@@ -114,20 +118,21 @@ export function makeParaMode(A) {
   function winchAt(X, Y) { let a = upwind(); for (let k = 0; k < 8; k++) { const t = a + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35, x = X + Math.sin(t) * 1000, y = Y + Math.cos(t) * 1000; if (G.h(x, y) > 2) { a = t; break; } }
     return { X: X + Math.sin(a) * 1000, Y: Y + Math.cos(a) * 1000, th: a }; }
   // склон для старта с разбега над аэродромом: крутизна 20-45%, вниз -- к озеру и по возможности против ветра
-  function findHill() { let best = null; const up = upwind();
-    for (let r = 600; r <= 4500; r += 150) for (let a = -1.4; a <= 1.4; a += 0.1) { const X = AIRPORT.X + Math.sin(a) * r, Y = AIRPORT.Y + Math.cos(a) * r, e = 40;
+  function findHill(site = SITES.airport) { let best = null; const up = upwind(), wide = site !== SITES.airport;
+    for (let r = site.r0; r <= site.r1; r += wide ? 40 : 150) for (let a = wide ? -3.14 : -1.4; a <= (wide ? 3.14 : 1.4); a += 0.1) { const X = site.X + Math.sin(a) * r, Y = site.Y + Math.cos(a) * r, e = 40;
       const gx = (G.h(X + e, Y) - G.h(X - e, Y)) / (2 * e), gy = (G.h(X, Y + e) - G.h(X, Y - e)) / (2 * e), sl = Math.hypot(gx, gy); if (sl < 0.2 || sl > 0.6 || G.h(X, Y) < 60) continue;
       const down = Math.atan2(-gx, -gy), ahead = G.h(X, Y) - G.h(X + Math.sin(down) * 80, Y + Math.cos(down) * 80), far = G.h(X, Y) - Math.max(G.h(X + Math.sin(down) * 500, Y + Math.cos(down) * 500), G.h(X + Math.sin(down) * 300, Y + Math.cos(down) * 300) + 25); const behind = G.h(X - Math.sin(down) * 300, Y - Math.cos(down) * 300) - G.h(X, Y); if (ahead < 12 || far < 90 || behind < 60) continue; // середина склона: выше ещё есть гора -- там держит динамика
-      const sc = r / 1000 + Math.abs(wrapPi(down - up)) * 1.2 + Math.abs(wrapPi(down - Math.PI)) * 0.5; if (!best || sc < best.sc) best = { sc, X, Y, grad: [gx, gy] }; }
-    return best || { X: AIRPORT.X, Y: AIRPORT.Y + 2500, grad: [0, 0.2] }; }
+      const sc = r / (wide ? 300 : 1000) + Math.abs(wrapPi(down - up)) * 1.2 + Math.abs(wrapPi(down - Math.PI)) * 0.5; if (!best || sc < best.sc) best = { sc, X, Y, grad: [gx, gy] }; }
+    return best || (wide ? findHill(SITES.airport) : { X: AIRPORT.X, Y: AIRPORT.Y + 2500, grad: [0, 0.2] }); }
   function startFree(at) { begin(); const g = P.g; F = { t: 0, gain: 0, ridgeT: 0, colT: 0, landT: 0, how: '', maxZ: 0, z0: 0, res: null, again: at };
     let X = AIRPORT.X, Y = AIRPORT.Y, how = 'winch';
-    if (!at) { const h = findHill(); X = h.X; Y = h.Y; how = 'foot'; F.grad = h.grad; }
+    const site = SITES[store.get('paraSite')] || SITES.airport; F.site = site;
+    if (!at) { const h = findHill(site); X = h.X; Y = h.Y; how = 'foot'; F.grad = h.grad; }
     else { X = at.X; Y = at.Y; const e = 60, gx = (G.h(X + e, Y) - G.h(X - e, Y)) / (2 * e), gy = (G.h(X, Y + e) - G.h(X, Y - e)) / (2 * e); how = !at.land ? 'boat' : Math.hypot(gx, gy) > 0.16 ? 'foot' : 'winch'; F.grad = [gx, gy]; }
     F.how = how; const gz = Math.max(0, G.h(X, Y));
     if (how === 'winch') { const w = winchAt(X, Y); g.reset(X, Y, gz, w.th, 'tow'); g.startTow({ X: w.X, Y: w.Y, Z: Math.max(0, G.h(w.X, w.Y)), max: 420 }); W.winch.visible = true; W.winch.position.set(w.X, Math.max(0, G.h(w.X, w.Y)), -w.Y); W.winch.rotation.y = -w.th; toast(`Лебёдка: ${at ? at.label : AIRPORT.name}. Держите крыло по тросу`); }
     else if (how === 'boat') { const th = upwind(); g.reset(X, Y, 0.5, th, 'tow'); g.startTow({ X: X + Math.sin(th) * 160, Y: Y + Math.cos(th) * 160, Z: 0, vx: Math.sin(th) * 9, vy: Math.cos(th) * 9, max: 300 }); W.winch.visible = false; W.boat.root.visible = true; toast('Буксировка за катером. Держите крыло по тросу'); }
-    else { const [gx, gy] = F.grad, down = Math.atan2(-gx, -gy), into = upwind(), th = Math.abs(wrapPi(into - down)) < 0.6 ? into : down; g.reset(X, Y, gz, th, 'launch'); g.startLaunch(); W.winch.visible = false; toast(`Старт со склона над аэродромом, ${Math.round(gz + 1601)} м`); }
+    else { const [gx, gy] = F.grad, down = Math.atan2(-gx, -gy), into = upwind(), th = Math.abs(wrapPi(into - down)) < 0.6 ? into : down; g.reset(X, Y, gz, th, 'launch'); g.startLaunch(); W.winch.visible = false; toast(`Старт: ${F.site.name}, ${Math.round(gz + 1601)} м`); }
     F.z0 = g.Z; P.leg = 0; P.time = 0;
     // в небе ещё трое местных: они кружат в термиках -- по ним видно, где подъём
     const focus = [{ X, Y }]; air.seed(focus, sunK()); rivals.forEach((e, i) => { if (i > 2) { e.model.root.visible = false; e.active = false; return; } placeAI(e, X + (i - 1) * 900, Y + 1200 + i * 400, 450 + i * 120); e.free = true; e.active = true; });
@@ -164,7 +169,7 @@ export function makeParaMode(A) {
 
   // ---------- кадр ----------
   let acc = 0;
-  function tick(dt) { const g = P.g, sk = sunK(); air.sun = sk;
+  function tick(dt) { if (BR.slow > 0) { BR.slow -= dt; dt *= 0.35; } const g = P.g, sk = sunK(); air.sun = sk; // замедление на гребне
     const act = [P, ...rivals.filter((e) => e.active)], focus = act.map((e) => e.g);
     air.update(dt, focus, sk); const ctl = playerCtl(dt);
     acc += dt; let n = 0; while (acc >= 1 / 60 && n++ < 6) { acc -= 1 / 60;
@@ -176,7 +181,7 @@ export function makeParaMode(A) {
       if (d < 18 && d > 0.1) { const k = (18 - d) / d * 0.5 * dt * 2; a.X -= dx * k; a.Y -= dy * k; b.X += dx * k; b.Y += dy * k; if (i === 0 && d < 10 && (G.t - (P.near || 0)) > 3) { P.near = G.t; toast(`Близко к ${act[j].name}!`); } } }
     G.modeT = (G.modeT || 0) + dt; g.base = g.Z; g.y = g.Z; g.aws = g.V; g.awa = 0; g.tws = 0;
     events(P); for (const e of rivals) e.g.events.length = 0;
-    if (R) race(dt); else if (F) { freeStep(dt); coachStep(dt); }
+    braveStep(g, dt); if (R) race(dt); else if (F) { freeStep(dt); coachStep(dt); }
     // модели
     for (const e of act) e.model.update(e.g, dt, G.t, e === P || Math.hypot(e.g.X - camera.position.x, e.g.Z - camera.position.y, -e.g.Y - camera.position.z) < 350);
     W.clouds.update(air, G.t); W.birds.update(air, G.t); // порывы: ветер резко сильнее среднего -- крыло вздрагивает, камеру качает, шорох, по воздуху проносятся полосы
@@ -295,6 +300,27 @@ export function makeParaMode(A) {
     if (coach.i < 4 && g.mode === 'landed') coach.i = 4;
     if (STEPS[coach.i].ok(g, coach)) { coach.okT = 1.4; audio.chime(); coachDraw(); } }
 
+  // ---------- смелость: полёт на бреющем у склона ----------
+  // Каждый кадр меряем зазор до рельефа: под собой и по сторонам (лучи вбок и вперёд). Чем ближе и быстрее -- тем
+  // больше очков; пока держишься у склона, растёт множитель (до ×5). Перескочил гребень на бреющем -- бонус и
+  // замедление на полсекунды. Отошёл от рельефа на 2 с -- серия засчитывается; удар о склон -- серия сгорает.
+  const BR = { run: 0, mult: 1, away: 0, best: store.get('paraBrave') || 0, total: 0, slow: 0, lastRidge: -9, flash: 0 };
+  function clearance(g) { let c = g.agl; const fx = Math.sin(g.th), fy = Math.cos(g.th), rx = fy, ry = -fx;
+    for (const [dx, dy] of [[rx, ry], [-rx, -ry], [fx, fy], [(fx + rx) * 0.7, (fy + ry) * 0.7], [(fx - rx) * 0.7, (fy - ry) * 0.7]]) for (const d of [8, 18, 32, 50]) { const gz = air.ground(g.X + dx * d, g.Y + dy * d); if (gz > g.Z - 3) { c = Math.min(c, d * 0.8); break; } c = Math.min(c, Math.hypot(d, g.Z - gz) * (g.Z - gz < 25 ? 1 : 9)); }
+    return c; }
+  function braveStep(g, dt) { const el = $('p_brave'); if (BR.flash > 0) BR.flash -= dt;
+    if (g.mode !== 'air') { if (BR.run > 0) bank(g.mode === 'landed' && g.landed && g.landed.q === 'slam'); el.hidden = BR.total <= 0; return; }
+    const c = clearance(g), near = c < 40 && g.agl > 1.5;
+    if (near) { BR.away = 0; const k = (1 - c / 40) ** 1.5; BR.run += k * g.speed * dt * 2 * BR.mult; BR.mult = Math.min(5, BR.mult + k * dt * 0.25);
+      // гребень под нами: по обе стороны ниже -- перевалили на бреющем
+      const fx = Math.sin(g.th), fy = Math.cos(g.th), gz = air.ground(g.X, g.Y), b1 = air.ground(g.X - fx * 60, g.Y - fy * 60), b2 = air.ground(g.X + fx * 60, g.Y + fy * 60);
+      if (g.agl < 30 && gz - b1 > 6 && gz - b2 > 6 && G.t - BR.lastRidge > 3) { BR.lastRidge = G.t; BR.run += 150 * BR.mult; BR.slow = 0.6; BR.flash = 1; flash('Гребень!'); audio.gust && audio.gust(1.2); } }
+    else if (BR.run > 0) { BR.away += dt; if (BR.away > 2) bank(false); }
+    if (BR.run > 0 || BR.total > 0) { el.hidden = false; const live = BR.run > 0; el.className = 'hud' + (live ? ' live' : '') + (BR.flash > 0 ? ' fl' : '');
+      if (G.frame % 3 === 0) el.innerHTML = live ? `<b>+${Math.round(BR.run)}</b> <i>×${BR.mult.toFixed(1)}</i><small>смелость · всего ${Math.round(BR.total)}</small>` : `<b>${Math.round(BR.total)}</b><small>смелость · рекорд ${Math.round(Math.max(BR.best, BR.total))}</small>`;
+      if (near && G.frame % 20 === 0) audio.tick && audio.tick(500 + BR.mult * 180, 0.03); } }
+  function bank(lost) { if (lost) { toast(`Серия сгорела: −${Math.round(BR.run)}`); } else { BR.total += BR.run; toast(`+${Math.round(BR.run)} смелости`); audio.chime(); if (BR.total > BR.best) { BR.best = BR.total; store.set('paraBrave', Math.round(BR.best)); } if (BR.run > 1000) ach('p_brave'); }
+    BR.run = 0; BR.mult = 1; BR.away = 0; }
   // ---------- свободный полёт: журнал ----------
   function freeStep(dt) { const g = P.g; F.t += dt; if (g.mode !== 'air') return;
     if (g.vario > 0.3) F.run = (F.run || 0) + g.vz * dt; else if (g.vario < -0.6) F.run = Math.max(0, (F.run || 0) - dt * 3);
@@ -390,7 +416,7 @@ export function makeParaMode(A) {
     if (G.frame % 10 === 0) { const hh = Math.floor(G.clock), mm = Math.floor((G.clock % 1) * 60), wd = ((Math.atan2(-Wn.wx, -Wn.wy) / DEG) + 360) % 360;
       setT($('windtxt'), `ветер ${DIRS[Math.round(wd / 22.5) % 16]} ${Math.round(Wn.U * 3.6)} км/ч · ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`); } }
 
-  function sound(dt) { const g = P.g; audio.vario(g.vario, inst && (g.mode === 'air' || g.mode === 'tow')); audio.airflow((g.mode === 'air' ? g.V : g.mode === 'tow' ? 9 : g.speed) + gust * 5, g.turb + gust, (g.col + g.front) * 0.8 + (g.stall ? 0.5 : 0), true); audio.winch(g.mode === 'tow' && !(g.tow && g.tow.vx), g.tow ? Math.min(1, g.tow.t / 6) : 0); }
+  function sound(dt) { const g = P.g; audio.vario(g.vario || 0, inst && (g.mode === 'air' || g.mode === 'tow')); audio.airflow(((g.mode === 'air' ? g.V : g.mode === 'tow' ? 9 : g.speed) || 0) + gust * 5, (g.turb || 0) + gust, (g.col + g.front) * 0.8 + (g.stall ? 0.5 : 0), true); audio.winch(g.mode === 'tow' && !(g.tow && g.tow.vx), g.tow ? Math.min(1, g.tow.t / 6) : 0); }
 
   return {
     get on() { return on; }, get player() { return P; }, get air() { return air; }, get race() { return R; }, get field() { return field; },

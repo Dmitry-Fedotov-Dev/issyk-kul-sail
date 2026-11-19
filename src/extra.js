@@ -218,10 +218,15 @@ export function installExtra(A) {
   // ---------- меню ----------
   function refreshMenu() { for (const c of $('crafts').children) c.setAttribute('aria-pressed', c.dataset.id === sel);
     $('brace').innerHTML = `${COMPETE[sel][0]}<small>${COMPETE[sel][1]}</small>`; $('briver').hidden = sel !== 'kayak';
-    $('bfree').innerHTML = sel === 'para' ? 'Свободный полёт<small>старт с разбега над аэродромом, с инструктором</small>' : 'Свободное плавание<small>бухта, мыс, открытая вода</small>';
+    siteUI(); $('bfree').innerHTML = sel === 'para' ? `Свободный полёт<small>старт: ${({ airport: 'склон над аэродромом', kurgak: 'пик Кургак-Сай', kalitka: 'гора Калитка' })[store.get('paraSite') || 'airport']}</small>` : 'Свободное плавание<small>бухта, мыс, открытая вода</small>';
     $('how').innerHTML = sel === 'yacht' ? yachtHow : HOW[sel].replace(/<b>Пробел<\/b>/g, TOUCH ? `кнопка <b>«${info(sel).key}»</b>` : '<b>Пробел</b>').replace(/<b>← →<\/b>/g, TOUCH ? '<b>касание слева и справа</b>' : '<b>← →</b>');
     $('bmap').textContent = startAt ? `Место: ${startAt.label}` : 'Место: Чолпон-Ата';
     const br = brokenStored(sel); $('brace').classList.toggle('pulse', br); $('brace').title = br ? 'Ресурс 0% — финиш в гонке восстановит его' : ''; }
+  // места старта параплана -- ряд кнопок под снарядами (виден, только когда выбран параплан)
+  function siteUI() { let box = $('psites'); if (!box) { const lbl = document.createElement('p'); lbl.className = 'lbl'; lbl.id = 'psitesl'; lbl.textContent = 'Старт';
+      box = document.createElement('div'); box.className = 'chips'; box.id = 'psites'; $('crafts').after(lbl, box);
+      for (const [id, n, sub] of [['airport', 'Аэродром', 'склон над городом'], ['kurgak', 'Кургак-Сай', 'вершина ≈4100 м'], ['kalitka', 'Калитка', 'гора ≈2600 м']]) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${n}</b><small>${sub}</small>`; b.onclick = () => { store.set('paraSite', id); refreshMenu(); }; box.appendChild(b); } }
+    const on = sel === 'para'; box.hidden = !on; $('psitesl').hidden = !on; for (const c of box.children) c.setAttribute('aria-pressed', c.dataset.id === (store.get('paraSite') || 'airport')); }
   function buildMenu() { yachtHow = $('how').innerHTML;
     for (const id of [...CRAFT_ORDER, 'para']) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); refreshMenu(); }; $('crafts').appendChild(b); }
     $('briver').onclick = () => { audio.start(); startRiver(); }; $('bjournal').onclick = () => { $('journal').hidden = false; }; $('jclose').onclick = () => { $('journal').hidden = true; };
