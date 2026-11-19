@@ -9,7 +9,8 @@
 // цилиндра, два поворотных цилиндра над предгорьями, цель -- поле у пляжа. Сели раньше -- считается оставшийся путь.
 import * as THREE from 'three';
 import { Air, Glider, aiPilot, aiLand, WING } from './para.js';
-import { makeGlider, makeClouds, makeBirds, makeCylinder, makeWinch, makeWindsock, makeTarget, makeShadow, makeTowLine } from './paramodel.js';
+import { makeGlider } from './glidermodel.js';
+import { makeClouds, makeBirds, makeCylinder, makeWinch, makeWindsock, makeTarget, makeShadow, makeTowLine } from './paramodel.js';
 import { MODEL } from './craftmodels.js';
 import { SUN } from './world.js';
 import { clamp, smooth, wrapPi, DEG } from './sim.js';
@@ -85,7 +86,7 @@ export function makeParaMode(A) {
     scene.add(W.winch, W.sockA.root, W.sockF.root, W.target, W.shadow, W.tow.line, W.boat.root);
     const gA = G.h(AIRPORT.X + 40, AIRPORT.Y - 120); W.sockA.root.position.set(AIRPORT.X + 40, gA, -(AIRPORT.Y - 120));
     W.sockF.root.position.set(field.X + 28, G.h(field.X + 28, field.Y), -field.Y); W.target.position.set(field.X, G.h(field.X, field.Y) + 0.15, -field.Y);
-    P = mkEnt('Вы', [0xff6a1a, 0xffffff, 0x1d3f8f], 0x22303f, 1, 0xf2f2f2); P.id = 'para'; P.g.feel = true;
+    P = mkEnt('Вы', [0xff5a14, 0x1d3f8f, 0x15213a], 0x22303f, 1, 0xf2f2f2); P.id = 'para'; P.g.feel = true;
     rivals = RIVALS.map((r, i) => mkEnt(r[0], r[2], r[3], r[1], 0xffffff, 100 + i));
     show(false); }
   function mkEnt(name, pal, suit, skill, helmet = 0xffffff, seed = 1) { const g = new Glider(seed), model = makeGlider(pal, suit, helmet); scene.add(model.root); g.eye = [0, 0.95, 0.15];
@@ -170,7 +171,7 @@ export function makeParaMode(A) {
     events(P); for (const e of rivals) e.g.events.length = 0;
     if (R) race(dt); else if (F) { freeStep(dt); coachStep(dt); }
     // модели
-    for (const e of act) e.model.update(e.g, dt, G.t);
+    for (const e of act) e.model.update(e.g, dt, G.t, e === P || Math.hypot(e.g.X - camera.position.x, e.g.Z - camera.position.y, -e.g.Y - camera.position.z) < 350);
     W.clouds.update(air, G.t); W.birds.update(air, G.t); { const a = air.windAt(AIRPORT.X, AIRPORT.Y, Math.max(0, G.h(AIRPORT.X, AIRPORT.Y)) + 6, {}), f = air.windAt(field.X, field.Y, Math.max(0, G.h(field.X, field.Y)) + 6, {}); W.sockA.update(a.wx, a.wy, G.t); W.sockF.update(f.wx, f.wy, G.t); }
     // тень пилота и крыла на земле -- по солнцу: по ней видно высоту на заходе
     { const s = W.shadow, k = SUN.y > 0.12 ? g.agl / SUN.y : 0, sx = g.X - SUN.x * k, sy = g.Y + SUN.z * k, gz = Math.max(0, G.h(sx, sy)); s.position.set(sx, gz + 0.25, -sy); s.scale.setScalar(9 + g.agl * 0.02); s.material.opacity = (1 - smooth(60, 420, g.agl)) * (SUN.y > 0.12 ? 1 : 0); s.visible = s.material.opacity > 0.01; }
@@ -290,7 +291,7 @@ export function makeParaMode(A) {
     P.model.fp(G.cam === 1);
     if (G.cam === 1) { C3.set(0, 0.92, 0.2); root.localToWorld(C3); camera.position.copy(C3); camera.quaternion.copy(root.quaternion); camera.rotateY(-G.orbit); camera.rotateX(0.32 - G.orbitP * 0.8); camera.rotateZ(jx * 0.05); camera.fov = clamp(78 * G.zoom, 35, 100); }
     else { const top = G.cam === 2, d = (top ? 75 : 15 + g.V * 0.25) * G.zoom, el = clamp((top ? 0.55 : 0.14) + G.orbitP, -0.35, 1.45), ce = Math.cos(el), se = Math.sin(el);
-      const tx = g.X, ty = g.Z + (g.mode === 'air' || g.mode === 'tow' ? 3.2 : 1.5), tz = -g.Y;
+      const tx = g.X, ty = g.Z + (g.mode === 'air' || g.mode === 'tow' ? 0.6 + 2.6 * smooth(0.2, 0.9, G.zoom) : 1.5), tz = -g.Y; // вблизи камера смотрит на пилота, издали -- на всё крыло
       camera.position.set(tx - fx * d * ce + jx, ty + d * se + jy, tz - fz * d * ce); const gy = Math.max(0, G.h(camera.position.x, -camera.position.z)) + 2.5; if (camera.position.y < gy) camera.position.y = gy;
       camera.lookAt(tx, ty, tz); if (!top) camera.rotateZ(-(g.phi || 0) * 0.22 * Math.cos(G.orbit)); camera.fov += ((top ? 50 : 60) - camera.fov) * Math.min(1, dt * 3); }
     if (camera.view && camera.view.enabled) camera.clearViewOffset(); camera.updateProjectionMatrix(); }
