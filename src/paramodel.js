@@ -69,3 +69,54 @@ export function makeShadow() { const c = document.createElement('canvas'); c.wid
   const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 })); m.rotation.x = -Math.PI / 2; m.renderOrder = 4; return m; }
 export function makeTowLine() { const pos = new Float32Array(6), l = new THREE.Line(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pos, 3)), new THREE.LineBasicMaterial({ color: 0xffe14a })); l.frustumCulled = false;
   return { line: l, set(a, b) { pos[0] = a.x; pos[1] = a.y; pos[2] = a.z; pos[3] = b.x; pos[4] = b.y; pos[5] = b.z; l.geometry.attributes.position.needsUpdate = true; } }; }
+
+// ---------- подсказки полёта: видимый воздух, след, вектор ----------
+// Пух в воздухе вокруг пилота: в восходящем потоке летит вверх (светлый, зелёный), в нисходящем -- вниз (красноватый),
+// в ровном воздухе почти не виден. Так в настоящем небе поток выдают пух тополя, насекомые и пыль.
+export function makeAirDust(scene, N = 900) {
+  const pos = new Float32Array(N * 3), col = new Float32Array(N * 4), w = new Float32Array(N), life = new Float32Array(N), geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 4));
+  const dc = document.createElement('canvas'); dc.width = dc.height = 32; { const x = dc.getContext('2d'), gr = x.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 32, 32); }
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: 4.5, map: new THREE.CanvasTexture(dc), vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: true, fog: false }));
+  pts.frustumCulled = false; pts.renderOrder = 6; scene.add(pts); const S = {}; let k = 0;
+  const seed = (i, cx, cy, cz) => { const a = Math.random() * 6.283, r = 15 + Math.sqrt(Math.random()) * 260; pos[i * 3] = cx + Math.cos(a) * r; pos[i * 3 + 1] = cz + (Math.random() - 0.5) * 170; pos[i * 3 + 2] = cy + Math.sin(a) * r; life[i] = 4 + Math.random() * 6; w[i] = 0; };
+  for (let i = 0; i < N; i++) seed(i, 0, 0, -1e5);
+  return { points: pts,
+    update(air, g, dt, on) { pts.visible = on; if (!on) return; const cx = g.X, cy = -g.Y, cz = g.Z;
+      for (let n = 0; n < 110; n++) { const i = k++ % N, X = pos[i * 3], Y = -pos[i * 3 + 2], Z = pos[i * 3 + 1]; // по 70 пушинок за кадр спрашиваем воздух
+        if (Math.hypot(X - g.X, Y - g.Y) > 300 || Math.abs(Z - cz) > 110 || life[i] <= 0) { seed(i, cx, cy, cz); continue; }
+        air.sample(X, Y, Z, S); w[i] = S.w; const gz = air.ground(X, Y); if (Z < gz + 3) life[i] = 0; }
+      for (let i = 0; i < N; i++) { life[i] -= dt; const v = w[i]; pos[i * 3 + 1] += v * dt * 2.2; // ускорено вдвое: движение заметно издали
+        const a = smooth(0.35, 1.6, Math.abs(v)) * Math.min(1, life[i]);
+        const o = i * 4; if (v > 0) { col[o] = 0.2; col[o + 1] = 0.95; col[o + 2] = 0.45; } else { col[o] = 1.0; col[o + 1] = 0.3; col[o + 2] = 0.22; } col[o + 3] = a * 0.9; }
+      geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true; } };
+}
+// след за пилотом: лента, цвет по вариометру (зелёный -- набор, синий -- обычное снижение, красный -- сильный спуск)
+export function makeTrail(scene, N = 240) {
+  const pos = new Float32Array(N * 2 * 3), col = new Float32Array(N * 2 * 3), geo = new THREE.BufferGeometry(), idx = [];
+  for (let i = 0; i < N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.setIndex(idx);
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false })); m.frustumCulled = false; m.renderOrder = 5; scene.add(m);
+  const P = []; let acc = 0;
+  return { mesh: m, reset() { P.length = 0; },
+    update(g, dt, on) { m.visible = on && P.length > 1; if (!on) return; acc += dt; if (g.mode === 'air' && acc > 0.25) { acc = 0; P.push([g.X, g.Z + 0.2, -g.Y, g.vario]); if (P.length > N) P.shift(); }
+      for (let i = 0; i < N; i++) { const p = P[Math.min(i, P.length - 1)] || [g.X, g.Z, -g.Y, 0], f = i / N, h = 0.12 + 0.1 * f, v = p[3];
+        const c = v > 0.2 ? [0.25, 0.95, 0.45] : v < -2 ? [1, 0.3, 0.25] : [0.35, 0.7, 1]; const a = (P.length > i ? 1 : 0) * (0.2 + 0.8 * (i / Math.max(1, P.length)));
+        for (let q = 0; q < 2; q++) { const o = (i * 2 + q) * 3; pos[o] = p[0]; pos[o + 1] = p[1] + (q ? h : -h); pos[o + 2] = p[2]; col[o] = c[0] * a; col[o + 1] = c[1] * a; col[o + 2] = c[2] * a; } }
+      geo.attributes.position.needsUpdate = true; geo.attributes.color.needsUpdate = true; } };
+}
+// вектор полёта: куда реально несёт (с ветром и снижением) и где коснёмся земли, если лететь прямо
+export function makeVector(scene) {
+  const lp = new Float32Array(6), line = new THREE.Line(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(lp, 3)), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false }));
+  line.frustumCulled = false; scene.add(line);
+  const head = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 10), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false })); scene.add(head);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(5, 7, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -6 })); ring.rotation.x = -Math.PI / 2; scene.add(ring);
+  const d = new THREE.Vector3(), Q = new THREE.Quaternion(), UPv = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
+  return { update(g, air, on) { const vis = on && g.mode === 'air'; line.visible = head.visible = ring.visible = vis; if (!vis) return;
+    const k = 2.2; d.set(g.gx, g.vz, -g.gy); const L = d.length() || 1; col.set(g.vz > 0.2 ? 0x58d68d : g.vz < -2.5 ? 0xff5a46 : 0xffffff); line.material.color.copy(col); head.material.color.copy(col); ring.material.color.copy(col);
+    lp[0] = g.X; lp[1] = g.Z + 0.3; lp[2] = -g.Y; lp[3] = g.X + d.x * k; lp[4] = g.Z + 0.3 + d.y * k; lp[5] = -g.Y + d.z * k; line.geometry.attributes.position.needsUpdate = true;
+    head.position.set(lp[3], lp[4], lp[5]); Q.setFromUnitVectors(UPv, d.clone().multiplyScalar(1 / L)); head.quaternion.copy(Q);
+    // точка касания по прямой (с нынешним снижением и ветром)
+    let x = g.X, y = g.Y, z = g.Z, hit = false; if (g.vz < -0.05) for (let i = 0; i < 400; i++) { x += g.gx * 2; y += g.gy * 2; z += g.vz * 2; if (z <= air.ground(x, y)) { hit = true; break; } }
+    ring.visible = hit; if (hit) { ring.position.set(x, air.ground(x, y) + 0.4, -y); const s = 1 + Math.hypot(x - g.X, y - g.Y) / 900; ring.scale.setScalar(s); } } };
+}
