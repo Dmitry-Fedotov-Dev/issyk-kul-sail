@@ -1,6 +1,9 @@
 // Мультфильм-инструктаж перед свободным полётом: ретро-стиль учебных фильмов 1950-х -- кремовая бумага, жирный
-// чёрный контур, солнечные лучи, плашки-ленты, зерно и дрожание плёнки. Ведёт свой герой -- весёлый пилот в шлеме.
-// Девять коротких сцен рисуются кодом на холсте (без картинок); пробел или «дальше» -- следующая, Esc -- пропустить.
+// чёрный контур, солнечные лучи, плашки-ленты, зерно и дрожание плёнки. Ведёт Дымок -- котёнок из дыма, маскот
+// одноимённой игры (его пиксельные кадры -- из атласа dymok.js). Девять коротких сцен рисуются на холсте;
+// пробел или «дальше» -- следующая, Esc -- пропустить.
+import { DYMOK } from './dymok.js';
+const IMG = typeof Image !== 'undefined' ? new Image() : { complete: false }; if (IMG.src !== undefined) IMG.src = DYMOK.png;
 const INK = '#1c1712', PAPER = '#f1e4c3', RED = '#d6402b', TEAL = '#2f8f8a', ORANGE = '#f08a24', GREEN = '#4fae55', SKY = '#bfe0dc', NAVY = '#24395e';
 const ease = (x) => (x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x));
 
@@ -35,17 +38,15 @@ export function playToon({ audio, TOUCH, onDone }) {
   function cloud(cx, cy, s, a = 1) { x.save(); x.globalAlpha = a; x.translate(cx, cy); x.scale(s, s); x.beginPath(); for (const [px, py, r] of [[-50, 0, 30], [-15, -22, 38], [28, -12, 32], [55, 4, 24], [0, 8, 30]]) { x.moveTo(px + r, py); x.arc(px, py, r, 0, 6.283); } fillStroke('#fffdf6', 4 / s); x.restore(); }
   function sun(cx, cy, t) { x.save(); x.translate(cx, cy); x.rotate(t * 0.6); lw(4); for (let i = 0; i < 12; i++) { x.rotate(Math.PI / 6); x.beginPath(); x.moveTo(44, 0); x.lineTo(64, 0); x.stroke(); } x.restore(); x.beginPath(); x.arc(cx, cy, 36, 0, 6.283); fillStroke('#ffd447', 4);
     x.fillStyle = INK; x.beginPath(); x.arc(cx - 12, cy - 6, 4, 0, 6.283); x.arc(cx + 12, cy - 6, 4, 0, 6.283); x.fill(); lw(3); x.beginPath(); x.arc(cx, cy + 2, 16, 0.3, 2.84); x.stroke(); }
-  // герой: голова в шлеме, улыбка, кокон; thumb -- большой палец вверх
-  function pilot(cx, cy, s = 1, { thumb = false, run = 0, mood = 1 } = {}) { x.save(); x.translate(cx, cy); x.scale(s, s);
-    if (run) { lw(5); const p = Math.sin(run * 14); x.beginPath(); x.moveTo(-6, 30); x.lineTo(-14 + p * 14, 62); x.moveTo(6, 30); x.lineTo(14 - p * 14, 62); x.stroke(); }
-    x.beginPath(); x.ellipse(0, 22, 26, run ? 22 : 30, 0, 0, 6.283); fillStroke(NAVY);
-    if (!run) { x.beginPath(); x.ellipse(-26, 34, 38, 15, 0.12, 0, 6.283); fillStroke(NAVY); x.beginPath(); x.rect(-40, 28, 16, 10); x.fillStyle = ORANGE; x.fill(); }
-    lw(6); x.beginPath(); x.moveTo(-18, 10); x.lineTo(-30, -26); x.moveTo(18, 10); x.lineTo(thumb ? 44 : 30, thumb ? -6 : -26); x.stroke();
-    if (thumb) { x.save(); x.translate(48, -8); x.rotate(-0.25); x.beginPath(); x.roundRect(-10, -6, 20, 16, 6); fillStroke('#f3c9a0', 3); x.beginPath(); x.ellipse(-6, -13, 5.5, 10, -0.35, 0, 6.283); fillStroke('#f3c9a0', 3); lw(2); for (const yy of [-1, 4]) { x.beginPath(); x.moveTo(-2, yy); x.lineTo(8, yy); x.stroke(); } x.restore(); } // кулак с большим пальцем вверх
-    x.beginPath(); x.arc(0, -16, 26, 0, 6.283); fillStroke('#f3c9a0'); // лицо
-    x.beginPath(); x.arc(0, -20, 28, Math.PI * 1.05, Math.PI * 1.95); x.lineTo(24, -12); x.lineTo(-24, -12); x.closePath(); fillStroke('#f7f7f2'); x.fillStyle = RED; x.fillRect(-4, -48, 8, 34); lw(3); x.strokeRect(-4, -48, 8, 0.1);
-    x.fillStyle = INK; x.beginPath(); x.ellipse(-9, -10, 3.5, 5, 0, 0, 6.283); x.ellipse(9, -10, 3.5, 5, 0, 0, 6.283); x.fill(); lw(3); x.beginPath(); if (mood > 0) x.arc(0, -2, 11, 0.25, 2.9); else x.arc(0, 8, 9, 3.5, 5.9); x.stroke();
-    x.fillStyle = 'rgba(214,64,43,.35)'; x.beginPath(); x.arc(-17, -2, 5, 0, 6.283); x.arc(17, -2, 5, 0, 6.283); x.fill(); x.restore(); }
+  // ведущий -- Дымок, котёнок из дыма (пиксельные кадры из его атласа, крупно и без сглаживания)
+  function kit(name, cx, cy, px, flip = false, alpha = 1) { const f = DYMOK.frames[name]; if (!f || !IMG.complete) return; x.save(); x.globalAlpha *= alpha; x.imageSmoothingEnabled = false; x.translate(cx, cy); if (flip) x.scale(-1, 1);
+    x.drawImage(IMG, f[0], f[1], f[2], f[3], -f[4] * px, -f[5] * px, f[2] * px, f[3] * px); x.restore(); }
+  const anim = (base, n, fps) => `${base}_${Math.floor(performance.now() / 1000 * fps) % n}`;
+  // pilot(...) -- прежнее имя: так Дымок встаёт на место героя во всех сценах. Начало координат -- у его груди, стропы -- к лапкам
+  function pilot(cx, cy, s = 1, { thumb = false, run = 0, mood = 1, fly = false } = {}) { const px = 4.4 * s;
+    if (fly) for (let k = 0; k < 5; k++) { const ph = (performance.now() / 1000 * 1.4 + k / 5) % 1; kit(`smoke_${Math.min(5, Math.floor(ph * 6))}`, cx - 30 * s - ph * 120 * s, cy + 22 * s - ph * 30 * s, px * (0.8 + ph * 0.6), false, 0.75 * (1 - ph)); } // дымный след
+    const name = run ? anim('run', 2, 10) : thumb ? 'emo_joy' : mood < 0 ? 'emo_sad' : fly ? 'emo_content' : anim('idle', 4, 5);
+    const f = DYMOK.frames[name]; kit(name, cx, cy - 34 * s + (f ? f[5] : 24) * px, px, false); } // макушка -- там, где сходятся стропы
   // крыло: дуга с ячейками и стропами к пилоту; bank -- крен, sag -- просадка задней кромки (клеванты)
   function wing(cx, cy, s = 1, { bank = 0, up = 1, sag = 0 } = {}) { x.save(); x.translate(cx, cy); x.rotate(bank); x.scale(s, s);
     const span = 170, top = -150 * up - 40 * (1 - up), drop = 46; x.save(); lw(2.2); x.strokeStyle = 'rgba(28,23,18,.75)';
@@ -64,10 +65,10 @@ export function playToon({ audio, TOUCH, onDone }) {
 
   // ---------- сцены ----------
   const SC = [
-    { t: 6, draw(t) { sunburst(W / 2, 330, t); banner('ПАРАПЛАН: ИНСТРУКЦИЯ ПИЛОТА', 48); pilot(W / 2, 330 + wobble(t * 2, 4), 2.2, { thumb: true }); caption('Привет, пилот! За минуту покажем всё, что нужно, чтобы взлететь, набрать высоту и мягко сесть.'); } },
+    { t: 6, draw(t) { sunburst(W / 2, 330, t); banner('ДЫМОК УЧИТ ЛЕТАТЬ', 48); pilot(W / 2, 330 + wobble(t * 2, 4), 2.2, { thumb: true }); caption('Мяу! Я Дымок. За минуту покажу, как взлететь на параплане, набрать высоту и мягко сесть. Смотри!'); } },
     { t: 7, draw(t) { x.fillStyle = SKY; x.fillRect(0, 0, W, H); ground(470); cloud(170, 120, 1); cloud(760, 90, 0.8); banner('МОТОРА НЕТ', 40);
       const k = (t % 7) / 7, px = 200 + k * 560, py = 200 + k * 160; x.save(); x.setLineDash([12, 12]); lw(4); x.beginPath(); x.moveTo(200, 210); x.lineTo(760, 370); x.stroke(); x.restore();
-      wing(px, py, 0.55); pilot(px, py, 0.55); bubble(px + 70, py - 120, '−1 м/с'); arrow(px - 80, py + 30, px - 80, py + 90, RED, 8);
+      wing(px, py, 0.55); pilot(px, py, 0.55, { fly: true }); bubble(px + 70, py - 120, '−1 м/с'); arrow(px - 80, py + 30, px - 80, py + 90, RED, 8);
       caption('Крыло — это планер без мотора. Вне потоков оно всегда плавно снижается: примерно метр в секунду. Поэтому высоту надо искать в воздухе!'); } },
     { t: 7, draw(t) { x.fillStyle = SKY; x.fillRect(0, 0, W, H); banner('ВЗЛЁТ', 40); x.beginPath(); x.moveTo(0, 230); x.quadraticCurveTo(420, 260, 960, 560); x.lineTo(960, 600); x.lineTo(0, 600); x.closePath(); fillStroke('#c9b77e', 4);
       const k = t / 7, up = ease((k - 0.12) / 0.3), run = Math.max(0, k - 0.35) * 2.2, px = 170 + Math.min(1.2, run) * 330, py = 250 + Math.min(1.2, run) * 110 - Math.max(0, run - 0.75) * 120;
@@ -75,7 +76,7 @@ export function playToon({ audio, TOUCH, onDone }) {
       key(760, 130, K('ПРОБЕЛ', 'АКСЕЛЬ'), k < 0.4 && Math.sin(t * 10) > 0, 170); if (run > 0.85) bubble(px + 60, py - 130, 'ВЗЛЁТ!');
       caption(K('Нажмите ПРОБЕЛ: крыло поднимется над головой, пилот сам разбежится вниз по склону и оторвётся от земли.', 'Нажмите кнопку «аксель»: крыло поднимется над головой, пилот сам разбежится вниз по склону и оторвётся от земли.')); } },
     { t: 8, draw(t) { sunburst(W / 2, 600, t, '#cfe7e3', SKY); banner('ПОВОРОТЫ', 40); const ph = Math.floor(t / 2.6) % 3, b = ph === 0 ? -0.35 : ph === 1 ? 0.35 : 0, bank = b * ease((t % 2.6) / 0.8);
-      wing(W / 2, 360, 1.05, { bank }); x.save(); x.translate(W / 2, 360); x.rotate(bank); pilot(0, 0, 1.05); x.restore();
+      wing(W / 2, 360, 1.05, { bank }); x.save(); x.translate(W / 2, 360); x.rotate(bank); pilot(0, 0, 1.05, { fly: true }); x.restore();
       key(120, 330, '←', ph === 0); key(840, 330, '→', ph === 1);
       if (ph < 2) arrow(W / 2 + (ph ? 140 : -140), 140, W / 2 + (ph ? 260 : -260), 210, TEAL, 8);
       caption(K('Держите ← или →: крыло кренится и поворачивает. Держите дольше — вираж круче. Отпустили — летит прямо.', 'Держите палец на левой или правой половине экрана: крыло кренится и поворачивает. Дольше — круче. Отпустили — прямо.')); } },
@@ -84,12 +85,12 @@ export function playToon({ audio, TOUCH, onDone }) {
       fluff(490, 340, 190, 300, t); cloud(490, 170, 0.85 * (0.6 + 0.4 * ease(t / 3)));
       for (let i = 0; i < 3; i++) { lw(3); x.beginPath(); x.arc(440 + i * 50, 462, 10, Math.PI, 0); x.stroke(); } // жар от земли
       const a = t * 1.6, py = 400 - (t % 9) * 22, px = 490 + Math.cos(a) * 80; x.save(); lw(3); x.setLineDash([8, 10]); x.beginPath(); x.ellipse(490, py + 10, 80, 20, 0, 0, 6.283); x.stroke(); x.restore();
-      wing(px, py, 0.45, { bank: -Math.sin(a) * 0.25 }); pilot(px, py, 0.45); bubble(px + 80, py - 90, `пи-пи-пи! +${(1.5 + Math.sin(t) * 0.5).toFixed(1)}`, '#e9f8de');
+      wing(px, py, 0.45, { bank: -Math.sin(a) * 0.25 }); pilot(px, py, 0.45, { fly: true }); bubble(px + 80, py - 90, `пи-пи-пи! +${(1.5 + Math.sin(t) * 0.5).toFixed(1)}`, '#e9f8de');
       x.save(); x.font = "900 18px 'Arial Black',Arial"; x.fillStyle = INK; x.fillText('ТЕПЛО ОТ ЗЕМЛИ', 640, 405); x.restore(); arrow(660, 412, 590, 440, ORANGE, 6);
       caption('Солнце греет землю — тёплый воздух пузырём уходит вверх, над ним растёт облако. Ищите зелёный пух, облака и зелёные пятна на компасе. Запищал вариометр — держите стрелку и кружите на месте!'); } },
     { t: 7, draw(t) { x.fillStyle = SKY; x.fillRect(0, 0, W, H); banner('ВЕТЕР НА СКЛОН', 40); x.beginPath(); x.moveTo(380, 600); x.lineTo(760, 230); x.lineTo(960, 210); x.lineTo(960, 600); x.closePath(); fillStroke('#c9b77e', 4);
       for (let i = 0; i < 4; i++) { const o = ((t * 120 + i * 120) % 480), y = 300 + i * 60; const xx = 20 + o; const bend = xx > 330 - i * 60 ? (xx - (330 - i * 60)) : 0; arrow(xx - 60, y - bend * 0.9 + 20, xx, y - bend * 1.1, TEAL, 6); }
-      const px = 560 + Math.sin(t * 0.8) * 60, py = 270 + Math.sin(t * 1.3) * 8; wing(px, py, 0.5); pilot(px, py, 0.5); bubble(px - 110, py - 100, 'ДЕРЖИТ!', '#e9f8de');
+      const px = 560 + Math.sin(t * 0.8) * 60, py = 270 + Math.sin(t * 1.3) * 8; wing(px, py, 0.5); pilot(px, py, 0.5, { fly: true }); bubble(px - 110, py - 100, 'ДЕРЖИТ!', '#e9f8de');
       caption('Ветер, дующий на склон, поднимает воздух вверх. Летайте вдоль такого склона — это «динамика». А за гребнем, с подветренной стороны, наоборот тянет вниз.'); } },
     { t: 7, draw(t) { sunburst(W / 2, 330, t, '#f3c7b8', PAPER); banner('НЕ ТОРМОЗИ ЗРЯ', 40, '#8a1f14'); const sag = 0.5 + 0.5 * Math.sin(t * 2);
       wing(W / 2 - 170, 380, 0.9, { sag: 1 }); pilot(W / 2 - 170, 380 + 10, 0.9, { mood: -1 }); bubble(W / 2 - 170, 150, 'СКОРОСТЬ ↓', '#fbd7cf'); key(70, 260, '←', true); key(70, 335, '→', true);
