@@ -1,7 +1,7 @@
 // Снаряды кроме яхты: гребные (каяк, академическая одиночка, SUP) и моторные (гидроцикл, катер).
 // Все наследуют Boat, чтобы остальная игра (камера, звук, приборы, столкновения) работала с ними как с яхтой.
 // Управление у каждого -- те же три кнопки: влево, вправо, пробел.
-import { deepTarget, Boat, clamp, smooth, wrapPi, DEG } from './sim.js';
+import { Boat, clamp, smooth, wrapPi, DEG } from './sim.js';
 
 const GR = 9.81, W = { x: 0, y: 0, speed: 0, dir: 0 }, S1 = { h: 0, sx: 0, sz: 0 };
 
@@ -63,7 +63,7 @@ class Craft extends Boat {
   }
   move(dt, terrainH) {
     this.X += this.vx * dt; this.Y += this.vy * dt; this.dist += Math.hypot(this.vx, this.vy) * dt;
-    if (terrainH && -terrainH(this.X, this.Y) < this.spec.draft && !this.air) { this.aground = true; this.agT = 0; this.agTgt = null; this.events.push({ type: 'aground', speed: this.speed }); }
+    if (terrainH && -terrainH(this.X, this.Y) < this.spec.draft && !this.air) { this.aground = true; this.agT = 0; this.events.push({ type: 'aground', speed: this.speed }); }
   }
   stepCapsizedC(dt, inp) {
     const S = this.spec, k = Math.exp(-1.8 * dt); this.vx = this.cx + (this.vx - this.cx) * k; this.vy = this.cy + (this.vy - this.cy) * k; this.r *= k; this.powerN = 0; this.st = null; this.thr = 0;
@@ -78,11 +78,8 @@ class Craft extends Boat {
   stepAgroundC(dt, terrainH) {
     this.agT += dt; this.vx = this.vy = 0; this.r = 0; this.powerN = 0; this.st = null; this.thr = 0; this.phi *= Math.exp(-2 * dt);
     if (this.agT < 0.8) return;
-    // по уклону дна; не снялись за 3 с -- прямо к ближайшей достаточной глубине (из «ямки» по уклону не выйти)
-    if (this.agT > 3 && !this.agTgt) this.agTgt = deepTarget(terrainH, this.X, this.Y, this.spec.draft + 1);
-    let dx, dy; if (this.agTgt) { const ex = this.agTgt.X - this.X, ey = this.agTgt.Y - this.Y, d = Math.hypot(ex, ey) || 1; dx = ex / d; dy = ey / d; }
-    else { const e = 5, gx = terrainH(this.X + e, this.Y) - terrainH(this.X - e, this.Y), gy = terrainH(this.X, this.Y + e) - terrainH(this.X, this.Y - e), n = Math.hypot(gx, gy) || 1; dx = -gx / n; dy = -gy / n; }
-    const vs = this.agTgt ? 8 : 3; this.X += dx * vs * dt; this.Y += dy * vs * dt; this.th = wrapPi(this.th + clamp(wrapPi(Math.atan2(dx, dy) - this.th), -1.5 * dt, 1.5 * dt));
+    const e = 5, gx = terrainH(this.X + e, this.Y) - terrainH(this.X - e, this.Y), gy = terrainH(this.X, this.Y + e) - terrainH(this.X, this.Y - e), n = Math.hypot(gx, gy) || 1, dx = -gx / n, dy = -gy / n;
+    this.X += dx * 3 * dt; this.Y += dy * 3 * dt; this.th = wrapPi(this.th + clamp(wrapPi(Math.atan2(dx, dy) - this.th), -1.5 * dt, 1.5 * dt));
     if (-terrainH(this.X, this.Y) > this.spec.draft + 0.6) { this.aground = false; this.events.push({ type: 'refloat' }); }
   }
 }

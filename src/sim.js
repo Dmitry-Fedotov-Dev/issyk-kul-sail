@@ -29,8 +29,7 @@ export const PRESETS = {
     sky: { cover: -0.62, cirrus: 0.12, storm: 0, scale: 1.7, hor: [0.56, 0.76, 0.97], sun: 1 } }, // почти чистое солнечное небо: редкие кучевые
   santash: { id: 'santash', name: 'Санташ', sub: 'с востока · 14 узлов · порывы', dir: 98, speed: 7.0, gust: 0.27, shift: 10, fetch: 24000,
     sky: { cover: -0.5, cirrus: 0.08, storm: 0, scale: 0.75, hor: [0.54, 0.73, 0.95], sun: 1 } }, // солнечно, отдельные кучевые
-  // штормовой Улан: ветер вдвое сильнее прежнего -- и волна из него же (при ограниченном разгоне высота растёт как ветер)
-  ulan: { id: 'ulan', name: 'Улан', sub: 'с запада · 40 узлов · шторм и волна', dir: 262, speed: 20.4, gust: 0.33, shift: 12, fetch: 30000,
+  ulan: { id: 'ulan', name: 'Улан', sub: 'с запада · 20 узлов · шквалы и волна', dir: 262, speed: 10.2, gust: 0.33, shift: 12, fetch: 30000,
     sky: { cover: 0.86, cirrus: 0, storm: 0.78, scale: 0.62, hor: [0.36, 0.41, 0.47], sun: 0.32 } }, // штормовой фронт: слоисто-кучевые, свинец
 };
 
@@ -76,13 +75,12 @@ export class Wind {
 export const NWAVES = 10;
 export class Waves {
   constructor() { this.w = []; this.Hs = 0; this.qf = 0.7; }
-  // k -- множитель волны: высота и длина вместе, крутизна прежняя (период -- в sqrt(k) раз дольше)
-  setFromWind(U, dirFrom, fetch, k = 1) {
+  setFromWind(U, dirFrom, fetch) {
     // эмпирика для ограниченного разгона (SMB / JONSWAP)
     // у берега волна короче и круче открытой: добавляем 25% высоты
-    const Hs = Math.min(0.0016 * U * Math.sqrt(fetch / G) * 1.25, 3) * k;
+    const Hs = Math.min(0.0016 * U * Math.sqrt(fetch / G) * 1.25, 1.5);
     const Tp = 0.286 * (U / G) * Math.cbrt((G * fetch) / (U * U));
-    const lp = (G * Tp * Tp) / (2 * Math.PI) * k;
+    const lp = (G * Tp * Tp) / (2 * Math.PI);
     const ratio = [1.0, 0.71, 1.38, 0.47, 0.31, 0.2, 0.845, 0.577, 1.171, 0.383], off = [0, 15, -19, -34, 41, -58, 26, -8, -46, 63], wt = [1, 0.85, 0.6, 0.7, 0.5, 0.36, 0.78, 0.72, 0.5, 0.55];
     let sum = 0; for (const x of wt) sum += x * x;
     const A = Math.sqrt((Hs * Hs) / 8 / sum);
@@ -94,7 +92,7 @@ export class Waves {
       this.w.push({ dx: -Math.sin(d), dz: Math.cos(d), k, a, om: Math.sqrt(G * k) });
       ak += a * k;
     }
-    this.Hs = Hs; this.Tp = Tp * Math.sqrt(k); this.lp = lp; this.qf = Math.min(0.75, 0.85 / Math.max(ak, 1e-6));
+    this.Hs = Hs; this.Tp = Tp; this.lp = lp; this.qf = Math.min(0.75, 0.85 / Math.max(ak, 1e-6));
   }
   // высота и уклон в точке (x,z); att -- ослабление на мелководье
   sample(x, z, t, att, out) {
@@ -122,16 +120,12 @@ export const BOAT = {
 };
 const W = { x: 0, y: 0, speed: 0, dir: 0 }, WS = { h: 0, sx: 0, sz: 0 };
 
-// Ближайшая точка с глубиной не меньше need: кольца вокруг лодки. Нужна, когда склон дна ведёт в мелкую «ямку»
-// (бухта, ложбина за косой), где по уклону на глубину не выйти и лодка застряла бы навсегда.
-export function deepTarget(terrainH, X, Y, need) { for (let r = 15; r < 6000; r *= 1.25) for (let k = 0; k < 32; k++) { const a = (k / 32) * 6.2832, x = X + Math.sin(a) * r, y = Y + Math.cos(a) * r; if (-terrainH(x, y) > need) return { X: x, Y: y }; } return null; }
-
 export class Boat {
   constructor() { this.events = []; this.skill = 1; this.reset(0, 0, 0); }
   reset(X, Y, th) {
     Object.assign(this, { X, Y, th, vx: 0, vy: 0, r: 0, phi: 0, p: 0, rudder: 0, ease: 0, boom: 0, trim: 30 * DEG, crew: 0,
       capsized: false, righting: 0, rightHold: 0, aground: false, y: 0, pitch: 0, slopeR: 0, slopeF: 0,
-      awa: 0, aws: 0, tws: 0, twd: 0, twa: 0, alpha: 0, luff: 0, u: 0, vs: 0, power: 0, lastAwaSign: 0, slam: 0, att: 1, reef: undefined });
+      awa: 0, aws: 0, tws: 0, twd: 0, twa: 0, alpha: 0, luff: 0, u: 0, vs: 0, power: 0, lastAwaSign: 0, slam: 0, att: 1 });
     this.events.length = 0;
   }
   get speed() { return Math.hypot(this.vx, this.vy); }
@@ -185,12 +179,7 @@ export class Boat {
     const alpha = Math.max(0, absA - Math.abs(this.boom)), aDeg = alpha / DEG;
     this.alpha = alpha; this.luff = 1 - smooth(3, 11, aDeg);
     const ce = Math.pow(Math.max(0, Math.cos(this.phi)), 1.2) * this.skill * (1 - 0.35 * (this.wearA || 0)) * (1 - 0.4 * (this.brkA || 0)); // растянутый парус тянет хуже, рваный -- совсем плохо
-    // риф: площадь грота (reef -- доля паруса, 1 -- весь). Игрок берёт риф сам ползунком: reefSet -- 0..0.75, экипаж
-    // опускает или поднимает грот за пару секунд. У кого ползунка нет (соперники, автомат тестов) -- рифятся сами:
-    // выше 11.5 м/с вымпельного ветра площадь падает так, что тяга не растёт (но не меньше пятой части паруса)
-    const man = this.reefSet !== undefined, reefT = man ? 1 - this.reefSet : Math.max(0.2, Math.min(1, (11.5 / Math.max(aws, 1e-3)) ** 2));
-    this.reef = this.reef === undefined ? reefT : this.reef + (reefT - this.reef) * Math.min(1, dt * (man ? 0.7 : 3)); // на старте -- сразу как надо
-    const q = 0.5 * B.rhoAir * aws * aws * B.sail * this.reef * ce, hx = ax / aws, hy = ay / aws;
+    const q = 0.5 * B.rhoAir * aws * aws * B.sail * ce, hx = ax / aws, hy = ay / aws;
     // нормаль паруса (подветренная сторона) -- выбирает знак подъёмной силы
     const sb = this.boom >= 0 ? 1 : -1, cb = Math.cos(Math.abs(this.boom)), snb = Math.sin(Math.abs(this.boom));
     const bx = -fx * cb + sb * rx * snb, by = -fy * cb + sb * ry * snb;
@@ -234,7 +223,7 @@ export class Boat {
     if (Math.abs(this.phi) > 60 * DEG) { this.capsized = true; this.rightHold = 0; this.righting = 0; ev.push({ type: 'capsize' }); }
 
     this.X += this.vx * dt; this.Y += this.vy * dt; this.u = u; this.vs = vs;
-    if (terrainH && -terrainH(this.X, this.Y) < B.draft) { this.aground = true; this.agT = 0; this.agTgt = null; ev.push({ type: 'aground', speed: this.speed }); }
+    if (terrainH && -terrainH(this.X, this.Y) < B.draft) { this.aground = true; this.agT = 0; ev.push({ type: 'aground', speed: this.speed }); }
   }
 
   stepCapsized(dt, inp, u, vs, fx, fy, rx, ry) {
@@ -257,11 +246,9 @@ export class Boat {
     this.agT += dt; this.vx = this.vy = 0; this.r = 0; this.power = 0;
     this.phi += (0.25 * Math.sign(this.phi || 1) - this.phi) * Math.min(1, 2 * dt); this.p = 0;
     if (this.agT < 1.2) return;
-    // по уклону дна; не снялись за 4 с -- прямо к ближайшей достаточной глубине
-    if (this.agT > 4 && !this.agTgt) this.agTgt = deepTarget(terrainH, this.X, this.Y, BOAT.draft + 2);
-    let dx, dy; if (this.agTgt) { const ex = this.agTgt.X - this.X, ey = this.agTgt.Y - this.Y, d = Math.hypot(ex, ey) || 1; dx = ex / d; dy = ey / d; }
-    else { const e = 6, gx = terrainH(this.X + e, this.Y) - terrainH(this.X - e, this.Y), gy = terrainH(this.X, this.Y + e) - terrainH(this.X, this.Y - e), n = Math.hypot(gx, gy) || 1; dx = -gx / n; dy = -gy / n; }
-    const vs = this.agTgt ? 10 : 5; this.X += dx * vs * dt; this.Y += dy * vs * dt; // к найденной глубине -- быстрее: отмель бывает широкой
+    const e = 6, gx = terrainH(this.X + e, this.Y) - terrainH(this.X - e, this.Y), gy = terrainH(this.X, this.Y + e) - terrainH(this.X, this.Y - e);
+    const n = Math.hypot(gx, gy) || 1, dx = -gx / n, dy = -gy / n;
+    this.X += dx * 5 * dt; this.Y += dy * 5 * dt;
     this.th = wrapPi(this.th + clamp(wrapPi(Math.atan2(dx, dy) - this.th), -1.2 * dt, 1.2 * dt));
     if (-terrainH(this.X, this.Y) > BOAT.draft + 1.4) { this.aground = false; this.phi = 0; this.events.push({ type: 'refloat' }); }
   }

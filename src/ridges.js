@@ -6,7 +6,7 @@
 // Закрытые передним склоном гребни не видны: работает обычная проверка глубины, а лента чуть выдвинута к камере
 // вдоль луча зрения (на экране она от этого не сдвигается), чтобы не тонуть в собственном склоне.
 import * as THREE from 'three';
-import { CURVE, END, MAP, exag, WS } from './world.js';
+import { CURVE, END, MAP } from './world.js';
 
 const U = { uRes: { value: new THREE.Vector2(1280, 720) }, uK: { value: 1 } };
 export function setRidgeRes(w, h) { U.uRes.value.set(w, h); U.uK.value = Math.max(0.75, h / 720); }
@@ -37,16 +37,16 @@ export function makeRidges(hNear, farGrid, holes = []) {
   { const S = 2, M = MAP.M * S, W = Math.floor((MAP.N - 1) / S) + 1, X0 = -MAP.OX * MAP.M, Y1 = MAP.OY * MAP.M, hs = new Float32Array(W * W);
     for (let j = 0; j < W; j++) for (let i = 0; i < W; i++) hs[j * W + i] = hNear(X0 + i * M, Y1 - j * M);
     const near = []; extract(hs, W, W, M, (i, j, h) => h > 25, 30, (i, j) => [X0 + i * M, Y1 - j * M], near);
-    for (const l of near) lines.push({ pts: chaikin(chaikin(l)), h: (X, Y) => exag(hNear(X, Y), X, Y) }); }
+    for (const l of near) lines.push({ pts: chaikin(chaikin(l)), h: hNear }); }
   // вся котловина: грубая карта (шаг 600 м) за пределами подробной и не там, где стоит рельеф ущелья
   { const { hs, W, H, X0, Y1, STEP } = farGrid, M = MAP.M, pad = 2 * STEP;
     const nx0 = -MAP.OX * M + pad, nx1 = (MAP.N - 1 - MAP.OX) * M - pad, ny0 = (MAP.OY - (MAP.N - 1)) * M + pad, ny1 = MAP.OY * M - pad;
     const mask = (i, j, h) => { if (h < 40) return false; const X = X0 + i * STEP, Y = Y1 - j * STEP; if (X > nx0 && X < nx1 && Y > ny0 && Y < ny1) return false;
       return !holes.some((o) => Math.hypot(X - o.X, Y - o.Y) < o.r + STEP); };
     const at = (X, Y) => { const fx = Math.min(Math.max((X - X0) / STEP, 0), W - 1.001), fy = Math.min(Math.max((Y1 - Y) / STEP, 0), H - 1.001), i = fx | 0, j = fy | 0, u = fx - i, v = fy - j;
-      return (hs[j * W + i] * (1 - u) + hs[j * W + i + 1] * u) * (1 - v) + (hs[(j + 1) * W + i] * (1 - u) + hs[(j + 1) * W + i + 1] * u) * v; }, atE = (X, Y) => exag(at(X, Y), X, Y) - 12; // дальняя сетка лежит на 12 м ниже
+      return (hs[j * W + i] * (1 - u) + hs[j * W + i + 1] * u) * (1 - v) + (hs[(j + 1) * W + i] * (1 - u) + hs[(j + 1) * W + i + 1] * u) * v - 12; }; // дальняя сетка лежит на 12 м ниже
     const far = []; extract(hs, W, H, STEP, mask, 400, (i, j) => [X0 + i * STEP, Y1 - j * STEP], far);
-    for (const l of far) lines.push({ pts: chaikin(l), h: atE }); } // вдали хватает одного сглаживания: вдвое меньше вершин
+    for (const l of far) lines.push({ pts: chaikin(l), h: at }); } // вдали хватает одного сглаживания: вдвое меньше вершин
 
   // каждый отрезок -- четыре вершины ленты; отрезки раскладываются по клеткам 8 км, чтобы невидимые отсекались
   const tiles = new Map();
@@ -56,9 +56,9 @@ export function makeRidges(hNear, farGrid, holes = []) {
   const mat = new THREE.ShaderMaterial({ uniforms: U, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     vertexShader: CURVE + /* glsl */`
 uniform vec2 uRes; uniform float uK; attribute vec3 aQ; attribute vec3 aSE; varying float vSide, vW, vAl;
-void main(){ float aS=aSE.x, aE=aSE.y, aA=aSE.z; vec3 p=(modelMatrix*vec4(position,1.)).xyz, q=(modelMatrix*vec4(aQ,1.)).xyz; p.y-=curve(p); q.y-=curve(q); // мировые: группа масштабирована
-  float dist=length(p-cameraPosition)/${WS}.; // настоящие расстояния: тушь хребтов той же густоты
-  p+=normalize(cameraPosition-p)*(2.+dist*${WS}.*0.004); q+=normalize(cameraPosition-q)*(2.+length(q-cameraPosition)*0.004);
+void main(){ float aS=aSE.x, aE=aSE.y, aA=aSE.z; vec3 p=position, q=aQ; p.y-=curve(p); q.y-=curve(q);
+  float dist=length(p-cameraPosition);
+  p+=normalize(cameraPosition-p)*(2.+dist*0.004); q+=normalize(cameraPosition-q)*(2.+length(q-cameraPosition)*0.004);
   vec4 cp=projectionMatrix*viewMatrix*vec4(p,1.), cq=projectionMatrix*viewMatrix*vec4(q,1.);
   if(cp.w<0.5 || cq.w<0.5){ gl_Position=vec4(2.,2.,2.,1.); vAl=0.; vW=1.; vSide=0.; return; }
   // вдали остаются только крупные хребты; отрог тает к началу (там на него «стекает» меньше склона)
@@ -78,7 +78,7 @@ void main(){ float a=vAl*(1.-smoothstep(vW-0.6,vW+0.6,abs(vSide))); if(a<0.01) d
         pos[o] = me[0]; pos[o + 1] = me[1]; pos[o + 2] = me[2]; q[o] = ot[0]; q[o + 1] = ot[1]; q[o + 2] = ot[2]; se[o] = v % 2 ? 1 : -1; se[o + 1] = end ? 1 : 0; se[o + 2] = me[3]; }
       const b0 = s * 4; idx.set([b0, b0 + 1, b0 + 2, b0 + 1, b0 + 3, b0 + 2], s * 6); }
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aQ', new THREE.BufferAttribute(q, 3)); geo.setAttribute('aSE', new THREE.BufferAttribute(se, 3)); geo.setIndex(new THREE.BufferAttribute(idx, 1));
-    geo.computeBoundingSphere(); const sp = geo.boundingSphere, dd = Math.hypot(sp.center.x, sp.center.z) * WS + 30000; sp.radius += (dd * dd) / 14866000 / WS + 50;
+    geo.computeBoundingSphere(); const sp = geo.boundingSphere, dd = Math.hypot(sp.center.x, sp.center.z) + 30000; sp.radius += (dd * dd) / 14866000 + 50;
     const m = new THREE.Mesh(geo, mat); m.renderOrder = 1; g.add(m); segs += n; }
   g.userData.segs = segs; g.userData.lines = lines.length;
   return g;
