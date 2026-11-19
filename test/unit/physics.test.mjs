@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
-for (const [suite, file] of [['поляра яхты', 'test/polar.mjs'], ['снаряды', 'test/crafts.mjs']]) {
+for (const [suite, file] of [['поляра яхты', 'test/polar.mjs'], ['снаряды', 'test/crafts.mjs'], ['параплан', 'test/para.mjs']]) {
   const r = spawnSync(process.execPath, [file], { encoding: 'utf8', timeout: 600000 });
   const checks = r.stdout.split('\n').filter((l) => /^(ok|FAIL) /.test(l));
   test(`${suite}: скрипт отработал`, () => { assert.equal(r.status, 0, r.stdout.slice(-2000) + r.stderr.slice(-2000)); assert.ok(checks.length > 0, 'нет ни одной проверки'); });

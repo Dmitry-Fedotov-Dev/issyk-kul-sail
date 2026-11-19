@@ -68,8 +68,28 @@ export function makeAudio() {
     if (!sir) { if (!on) return; const g = ctx.createGain(); g.gain.value = 0; g.connect(master); const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = 700; const l = ctx.createOscillator(), lg = ctx.createGain(); l.frequency.value = 0.9; lg.gain.value = 260; l.connect(lg); lg.connect(o.frequency);
       const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900; f.Q.value = 0.8; o.connect(f); f.connect(g); o.start(); l.start(); sir = { g }; }
     set(sir.g.gain, on ? 0.09 * (1 - 0.8 * far) : 0, 0.2); }
+  // ---- параплан ----
+  // Вариометр как у настоящего прибора: набор -- короткие писки, тем чаще и выше, чем сильнее; спуск сильнее 2.5 м/с --
+  // низкий гудок. Поток: гул по воздушной скорости, в болтанку -- рывками; хлопок ткани при подсложении.
+  let vNext = 0, sinkO = null, winchO = null;
+  function vario(v, on = true) { if (!ctx || ctx.state !== 'running') return; const t = ctx.currentTime;
+    if (on && v > 0.12 && t >= vNext) { const f = Math.min(1500, 640 + v * 150), per = 1 / Math.min(9, 2.2 + v * 1.4), d = per * 0.48;
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'square'; o.frequency.setValueAtTime(f, t); o.frequency.linearRampToValueAtTime(f * 1.04, t + d);
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t + 0.008); g.gain.setValueAtTime(0.06, t + d - 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(lp); lp.connect(g); g.connect(master); o.start(t); o.stop(t + d + 0.02); vNext = t + per; }
+    if (!sinkO) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sawtooth'; o.frequency.value = 260; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700; g.gain.value = 0; o.connect(lp); lp.connect(g); g.connect(master); o.start(); sinkO = { o, g }; }
+    const sk = on && v < -2.5; set(sinkO.g.gain, sk ? Math.min(0.05, 0.02 + (-v - 2.5) * 0.008) : 0, 0.08); if (sk) set(sinkO.o.frequency, Math.max(140, 300 + (v + 2.5) * 25), 0.1); }
+  function airflow(V, turb = 0, flap = 0, on = true) { if (!ctx || ctx.state !== 'running') return; const a = on ? V : 0, j = 1 + turb * 0.5 * Math.sin(ctx.currentTime * 23) * Math.sin(ctx.currentTime * 7.3);
+    set(L.low.g.gain, Math.min(0.5, (0.02 + a * a * 0.0021) * j)); set(L.low.fl.frequency, 150 + a * 15); if (L.low.pan.pan) set(L.low.pan.pan, 0);
+    set(L.mid.g.gain, Math.min(0.32, a * a * 0.0012 * j)); set(L.mid.fl.frequency, 380 + a * 40); set(L.whistle.g.gain, Math.min(0.1, Math.max(0, a - 12) ** 2 * 0.004), 0.25);
+    set(L.rush.g.gain, 0); set(L.bubble.g.gain, 0); set(L.flap.g.gain, on ? Math.min(0.5, flap * 0.5) : 0); }
+  function winch(on, k = 0) { if (!ctx || ctx.state !== 'running') return;
+    if (!winchO) { if (!on) return; const o = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = 90; f.type = 'bandpass'; f.frequency.value = 500; f.Q.value = 1.5; g.gain.value = 0; o.connect(f); f.connect(g); g.connect(master); o.start(); winchO = { o, g }; }
+    set(winchO.g.gain, on ? 0.03 + 0.03 * k : 0, 0.2); set(winchO.o.frequency, 80 + 60 * k, 0.3); }
   return {
-    start, update, engine, siren,
+    start, update, engine, siren, vario, airflow, winch,
+    pop(p = 1) { noise(260, 0.9, 0.35, 0.5 * p, 0, 90); tone(70, 0.3, 'sine', 0.35 * p, 40); },
+    rustle(p = 1) { noise(1800, 0.6, 0.6, 0.12 * p, 0, 500); },
     stroke(q = 1) { noise(500 + 500 * q, 0.9, 0.3, 0.05 + 0.07 * q, 0, 200); },
     slap(p = 1) { noise(900, 0.7, 0.55, 0.3 * p, 0, 240); noise(3200, 0.8, 0.9, 0.12 * p, 0, 1500); },
     thump(p = 1) { tone(95, 0.35, 'sine', 0.5 * p, 38); noise(700, 0.8, 0.25, 0.35 * p); },
