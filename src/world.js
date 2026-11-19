@@ -36,7 +36,8 @@ export async function loadHeight() {
 export const ENV = {
   uSun: { value: SUN }, uHor: { value: new THREE.Vector3(0.56, 0.76, 0.97) }, uCover: { value: 0.4 }, uCirrus: { value: 0.3 },
   uStorm: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
-  uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() }, // съёмка карты сверху: дно плавно уходит в цвет озера на карте
+  uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() },
+  uLC: { value: null }, uLCOn: { value: 0 }, uPaint: { value: 1 }, uLCT: { value: new THREE.Vector4(-141000, 63000, 1 / 273600, 1 / 180600) }, // маска зон OSM (по требованию) // съёмка карты сверху: дно плавно уходит в цвет озера на карте
 };
 export const GLSL_COMMON = /* glsl */`
 uniform vec3 uSun, uHor; uniform float uCover, uCirrus, uStorm, uCloudScale, uSunI, uDay, uDusk; uniform vec2 uCloud;
@@ -156,13 +157,16 @@ function chunked(attrs, lists, matLand, matShore = matLand) {
 
 // Геометрия гор -- строго по карте высот, без растяжения. Всё «монструозное» делает свет и фактура: рёбра и кулуары
 // в нормали, тёмные скальные стены, рваная граница снега, тени облаков, туман на хребтах.
+// маска природных зон OSM (лес, ледники, кустарник): грузится один раз, по требованию -- когда открывают подзорную трубу
+let lcLoad = false;
+export function loadLandcover() { if (lcLoad) return; lcLoad = true; const img = new Image(); img.onload = () => { const t = new THREE.Texture(img); t.flipY = false; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = true; t.needsUpdate = true; ENV.uLC.value = t; ENV.uLCOn.value = 1; }; img.onerror = () => { lcLoad = false; }; img.src = 'landcover.png'; }
 export function terrainMaterial(shore = true) {
   const defs = shore ? { FDEPTH: 1 } : {};
   const tm = new THREE.ShaderMaterial({ defines: { ...QUALITY_DEFS[2], ...defs },
     uniforms: { ...ENV }, extensions: { derivatives: true },
     vertexShader: CURVE + `attribute float aH; varying vec3 vP; varying vec3 vN; varying float vH; void main(){ vP=position; vN=normal; vH=aH; vec3 q=position; q.y-=curve(q); gl_Position=projectionMatrix*modelViewMatrix*vec4(q,1.); }`,
     fragmentShader: GLSL_COMMON + /* glsl */`
-varying vec3 vP; varying vec3 vN; varying float vH; uniform float uMap; uniform vec3 uMapDeep; uniform sampler2D uLakeM; uniform vec4 uLakeT;
+varying vec3 vP; varying vec3 vN; varying float vH; uniform float uMap; uniform vec3 uMapDeep; uniform sampler2D uLakeM; uniform vec4 uLakeT; uniform sampler2D uLC; uniform float uLCOn, uPaint; uniform vec4 uLCT;
 // гребневой шум: острые хребты и кулуары, которых нет в карте высот с её шагом в десятки метров
 float ridged(vec2 p){ float a=0.5, s=0., w=1.; for(int i=0;i<FBM_OCT;i++){ float r=1.-abs(2.*vnoise(p)-1.); r*=r*w; s+=a*r; w=clamp(r*1.6,0.,1.); p=mat2(1.6,1.2,-1.2,1.6)*p+7.; a*=0.5; } return s; }
 void main(){ vec3 N=normalize(vN); float h=vH;
@@ -215,13 +219,46 @@ void main(){ vec3 N=normalize(vN); float h=vH;
   // контровой свет по гребням: кромка, обращённая к солнцу, горит
   vec3 Vd=normalize(cameraPosition-vP); col+=sunC*c*pow(1.-max(dot(N,Vd),0.),3.)*max(dot(N,uSun)+0.25,0.)*0.55*mt*uSunI;
   float dist=length(vP-cameraPosition);
+  // ---- Дальние горы -- живописью: большие плоскости цвета по поясам высоты, мазки вдоль горизонталей, свет в три тона
+  // (тёплое солнце, холодная фиолетовая тень), снег и ледники. Мелкая фактура, которая вдали только рябит, уходит.
+  // Лес и ледники -- по данным OSM (маска uLC грузится при первом открытии трубы), до того лес -- по северным склонам.
+  // При увеличении (пиксель на местности мельче 30 м) проступают контуры зон пером, кроны точками, скалы с трещинами.
+  float pk=smoothstep(3500.,11000.,dist)*(1.-uMap)*uPaint;
+  if(pk>0.){ vec3 Ns=normalize(vN); float sl0=1.-Ns.y; vec2 fall=normalize(Ns.xz+1e-4), along=vec2(-fall.y,fall.x);
+    float strk=vnoise(vec2(dot(vP.xz,along)*0.0022, dot(vP.xz,fall)*0.00035)+3.);
+    vec3 pc=mix(vec3(0.74,0.53,0.30), vec3(0.52,0.56,0.32), smoothstep(150.,700.,h+strk*120.));
+    pc=mix(pc, vec3(0.42,0.52,0.30), smoothstep(1000.,1500.,h+strk*200.));
+    float rockA=clamp(smoothstep(1700.,2100.,h+strk*200.)*0.9+smoothstep(0.45,0.7,sl0)*0.6*smoothstep(400.,900.,h),0.,1.); pc=mix(pc, vec3(0.47,0.41,0.50), rockA);
+    vec3 lc=vec3(0.); if(uLCOn>0.) lc=texture2D(uLC, vec2((vP.x-uLCT.x)*uLCT.z, (uLCT.y+vP.z)*uLCT.w)).rgb;
+    float wv=(vnoise(vP.xz*0.011)-0.5)*0.3, fz=uLCOn>0. ? lc.r : fr, fzw=fz+wv*smoothstep(0.02,0.3,fz);   // рваный край леса
+    float fwF=max(fwidth(fzw)*1.2,0.015), fM=smoothstep(0.5-fwF,0.5+fwF,fzw);
+    float gz=lc.g+wv*0.5*smoothstep(0.02,0.3,lc.g), fwG=max(fwidth(gz)*1.2,0.015), gM=smoothstep(0.5-fwG,0.5+fwG,gz);
+    float bz=lc.b+wv*smoothstep(0.02,0.3,lc.b), bM=smoothstep(0.45,0.55,bz);
+    pc=mix(pc, vec3(0.45,0.50,0.22), bM*0.7); pc=mix(pc, vec3(0.12,0.29,0.16), fM); float wh=max(snowM,gM); pc=mix(pc, mix(vec3(0.97,0.95,0.92),vec3(0.86,0.93,0.99),gM), wh);
+    float L=dot(Ns,uSun)*uSunI, aw=max(fwidth(L)*1.5,0.03), tone=0.45*smoothstep(0.08-aw,0.08+aw,L)+0.55*smoothstep(0.5-aw,0.5+aw,L);
+    vec3 shd=mix(vec3(0.50,0.48,0.66), vec3(0.34,0.35,0.41), uStorm), pcol=pc*mix(shd, sunC*1.12, tone)*(0.94+0.12*strk);
+    pcol=mix(pcol, pcol*HOR*1.35, 0.14); // палитра в тон неба -- в любое время суток
+    float dK=(1.-smoothstep(8.,30.,px))*pk;
+    if(dK>0.){ vec3 ink=vec3(0.07,0.08,0.12); float ip=0.;
+      ip=max(ip, (1.-smoothstep(0.6,1.6,abs(fzw-0.5)/max(fwidth(fzw),1e-4)))*step(0.02,fz));                // контур леса
+      ip=max(ip, (1.-smoothstep(0.6,1.6,abs(gz-0.5)/max(fwidth(gz),1e-4)))*step(0.02,lc.g)*0.8);             // контур ледника
+      float tK=1.-smoothstep(3.,7.,px); if(tK>0. && fM>0.5){ vec2 cc=floor(vP.xz/32.), fp=fract(vP.xz/32.)-0.5-(vec2(hash(cc),hash(cc+3.))-0.5)*0.4; float dd=length(fp)*32.;
+        float tr=1.-smoothstep(6.-px,6.+px,dd); pcol=mix(pcol, pcol*vec3(0.62,0.75,0.72), tr*tK); ip=max(ip, (1.-smoothstep(0.,px*1.3,abs(dd-6.)))*tK*0.7); } // кроны точками
+      float rz=sl0+(vnoise(vP.xz*0.02)-0.5)*0.22, fwR=max(fwidth(rz),1e-4), rM=smoothstep(0.52-fwR,0.52+fwR,rz)*smoothstep(500.,900.,h)*(1.-wh);
+      pcol=mix(pcol, mix(shd,sunC*1.35,tone)*vec3(0.6,0.56,0.64), rM*0.85); ip=max(ip, (1.-smoothstep(0.6,1.6,abs(rz-0.52)/fwR))*smoothstep(500.,900.,h)*(1.-wh)); // скалы
+      float cK=1.-smoothstep(2.5,6.,px); if(cK>0. && rM>0.5){ float cr=abs(fract(dot(vP.xz,along)/13.+vnoise(vP.xz*0.05)*0.6)-0.5)*13.; ip=max(ip, (1.-smoothstep(0.,px,cr))*cK*0.5); } // трещины
+      pcol=mix(pcol, ink, ip*dK*0.8); }
+    pcol*=0.66; // под экспозицию сцены: краски гуще, без пастельной засветки
+    col=mix(col, pcol, pk); }
   // облака цепляются за хребты: полоса тумана на высоте, рваная, плывёт по ветру
   float band=exp(-pow((h-1500.-380.*n)/260.,2.))*smoothstep(6000.,16000.,dist); band=band>0.002 ? band*smoothstep(0.52,0.74,fbm(vP.xz*0.00045+uCloud*0.6+3.)) : 0.; // вне полосы шум не считаем
   col=mix(col, mix(vec3(0.93,0.95,0.99),vec3(0.30,0.33,0.37),uStorm), band*(0.42+0.45*uStorm));
   // в шторм вершины уходят в тучу
   col=mix(col, vec3(0.24,0.27,0.31), uStorm*smoothstep(1300.,2600.,h)*0.8);
   col*=mix(vec3(0.045,0.06,0.11), vec3(1.), uDay); // ночью -- синий полумрак
-  col=applyFog(col, dist, h);
+  // живописная даль: своя лёгкая воздушная перспектива -- планы светлеют и холодеют, но цвет не тонет в дымке
+  { vec3 fogd=applyFog(col, dist, h); if(pk>0.){ float f2=min((1.-exp(-dist/100000.))*mix(1.,0.45,smoothstep(150.,2600.,h)),0.17);
+      vec3 lay=mix(col, HOR*mix(0.04,1.,uDay)*vec3(0.80,0.84,0.95), f2); fogd=mix(fogd, lay, pk*0.92*(1.-uStorm)); } col=fogd; }
   // дно под водой не должно давать контуров сквозь воду: пишем ему глубину «бесконечность». Заодно кромка берега
   // получает чистую линию ровно по урезу воды
   #ifdef FDEPTH

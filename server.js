@@ -13,6 +13,9 @@ const VIEW = 1800, MAX_NEAR = 16, MAX_RACE = 64, MAX_CLIENTS = 400, MAX_MSG = 61
 
 const server = http.createServer((req, res) => {
   if (req.url === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ online: clients.size })); return; }
+  // маска природных зон (лес, ледники, кустарник) -- игра берёт её, только когда открывают подзорную трубу
+  if (req.url === '/landcover.png') { fs.readFile(path.join(__dirname, 'dist', 'landcover.png'), (err, data) => { if (err) { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' }); res.end(data); }); return; }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(500); res.end('dist/index.html не найден: сначала npm run build'); return; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }); res.end(data);
