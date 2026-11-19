@@ -120,3 +120,41 @@ export function makeVector(scene) {
     let x = g.X, y = g.Y, z = g.Z, hit = false; if (g.vz < -0.05) for (let i = 0; i < 400; i++) { x += g.gx * 2; y += g.gy * 2; z += g.vz * 2; if (z <= air.ground(x, y)) { hit = true; break; } }
     ring.visible = hit; if (hit) { ring.position.set(x, air.ground(x, y) + 0.4, -y); const s = 1 + Math.hypot(x - g.X, y - g.Y) / 900; ring.scale.setScalar(s); } } };
 }
+
+// ---------- воздух полосами ----------
+// Тонкие пастельные полосы вдоль движения воздуха: появляются, тянутся и тают. Цвет -- «температура»: тёплый подъём --
+// блёкло-жёлтый и блёкло-зелёный, ровный воздух -- серо-голубой, холодный спуск -- синева; штормовой мокрый ветер у
+// нуля градусов -- сине-чёрные полосы. Вертикальное движение показано втрое крупнее: термик виден как струи вверх.
+const ST_V = `attribute vec3 iPos; attribute vec4 iDir; attribute vec4 iCol; varying vec4 vCol; varying vec2 vUv;
+void main(){ vec3 d = iDir.xyz; vec3 p = iPos + d * (position.y - 0.5) * iDir.w; vec3 vw = normalize(cameraPosition - p);
+  vec3 sd = normalize(cross(d, vw) + 1e-5); float w = max(0.06, distance(cameraPosition, p) * 0.0036); p += sd * position.x * w;
+  vCol = iCol; vUv = vec2(position.x, position.y); gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0); }`;
+const ST_F = `varying vec4 vCol; varying vec2 vUv; void main(){ float a = vCol.a * pow(sin(3.14159 * vUv.y), 1.5) * (1.0 - abs(vUv.x) * 1.2); gl_FragColor = vec4(vCol.rgb, a); }`;
+export function makeStreaks(scene, N = 760) {
+  const base = new THREE.PlaneGeometry(1, 1, 1, 1); base.translate(0, 0.5, 0); const geo = new THREE.InstancedBufferGeometry(); geo.index = base.index; geo.attributes.position = base.attributes.position;
+  const iPos = new Float32Array(N * 3), iDir = new Float32Array(N * 4), iCol = new Float32Array(N * 4);
+  geo.setAttribute('iPos', new THREE.InstancedBufferAttribute(iPos, 3)); geo.setAttribute('iDir', new THREE.InstancedBufferAttribute(iDir, 4)); geo.setAttribute('iCol', new THREE.InstancedBufferAttribute(iCol, 4)); geo.instanceCount = N;
+  const m = new THREE.Mesh(geo, new THREE.ShaderMaterial({ vertexShader: ST_V, fragmentShader: ST_F, transparent: true, depthWrite: false, side: THREE.DoubleSide })); m.frustumCulled = false; m.renderOrder = 6; scene.add(m);
+  const S = { x: new Float32Array(N), y: new Float32Array(N), z: new Float32Array(N), vx: new Float32Array(N), vy: new Float32Array(N), vz: new Float32Array(N), life: new Float32Array(N), max: new Float32Array(N), a: new Float32Array(N), r: new Float32Array(N), g: new Float32Array(N), b: new Float32Array(N) }, A = {};
+  const mix = (a, b, t) => a + (b - a) * t;
+  function spawn(i, air, g, env) { const ang = Math.random() * 6.283, rr = 8 + Math.random() ** 1.6 * 220, X = g.X + Math.sin(ang) * rr, Y = g.Y + Math.cos(ang) * rr, Z = g.Z + (Math.random() - 0.45) * 120;
+    const gz = air.ground(X, Y); if (Z < gz + 4) { S.life[i] = 0; S.a[i] = 0; return; } air.sample(X, Y, Z, A); const w = A.w, U = Math.hypot(A.wx, A.wy);
+    S.x[i] = X; S.y[i] = Z; S.z[i] = -Y; S.vx[i] = A.wx; S.vy[i] = w * 3; S.vz[i] = -A.wy; S.max[i] = S.life[i] = 2.5 + Math.random() * 3.5;
+    // цвет и видимость
+    const cold = Math.min(1, env.storm * 0.8 + smooth(900, 2400, Z) * 0.35 + env.night * 0.3), wind = smooth(4.5, 10, U) * (0.4 + 0.6 * env.storm);
+    let r, gg, b, a;
+    if (w > 0.25) { const k = smooth(0.3, 3, w); r = mix(0.99, 0.6, k); gg = mix(0.86, 0.86, k); b = mix(0.42, 0.46, k); a = 0.45 + 0.4 * smooth(0.3, 2, w); }
+    else if (w < -0.4) { const k = smooth(0.4, 3, -w); r = mix(0.66, 0.36, k); gg = mix(0.76, 0.48, k); b = mix(0.9, 0.78, k); a = 0.3 + 0.4 * k; }
+    else { if (U < 6 && Math.random() < 0.7) { S.life[i] = 0; S.a[i] = 0; return; } r = 0.74; gg = 0.8; b = 0.86; a = 0.1 + 0.25 * smooth(3, 9, U); } // ровный воздух -- редкие бледные штрихи
+    const dk = Math.min(1, cold * smooth(4, 9, U) * 2.2); if (dk > 0) { r = mix(r, 0.06, dk); gg = mix(gg, 0.08, dk); b = mix(b, 0.15, dk); a = Math.max(a, 0.6 * dk); } void wind; // пронизывающий мокрый холод -- чёрные полосы
+    S.r[i] = r; S.g[i] = gg; S.b[i] = b; S.a[i] = a * (1 - (env.gustBurst ? 0 : 0)); }
+  let k = 0;
+  return { mesh: m,
+    update(air, g, dt, on, env) { m.visible = on; if (!on) return; const n = env.gustBurst ? 70 : 34;
+      for (let q = 0; q < n; q++) { const i = k++ % N; if (S.life[i] <= 0 || q < 6) spawn(i, air, g, env); }
+      for (let i = 0; i < N; i++) { S.life[i] -= dt; const L = S.life[i]; if (L <= 0) { iCol[i * 4 + 3] = 0; continue; }
+        S.x[i] += S.vx[i] * dt; S.y[i] += S.vy[i] * dt * 0.6; S.z[i] += S.vz[i] * dt; const sp = Math.hypot(S.vx[i], S.vy[i], S.vz[i]) || 1, f = L / S.max[i];
+        iPos[i * 3] = S.x[i]; iPos[i * 3 + 1] = S.y[i]; iPos[i * 3 + 2] = S.z[i]; iDir[i * 4] = S.vx[i] / sp; iDir[i * 4 + 1] = S.vy[i] / sp; iDir[i * 4 + 2] = S.vz[i] / sp; iDir[i * 4 + 3] = clamp(sp * 1.1, 3, 18) * (0.5 + 0.5 * Math.sin(Math.PI * f));
+        iCol[i * 4] = S.r[i]; iCol[i * 4 + 1] = S.g[i]; iCol[i * 4 + 2] = S.b[i]; iCol[i * 4 + 3] = S.a[i] * Math.sin(Math.PI * f); }
+      for (const a of ['iPos', 'iDir', 'iCol']) geo.attributes[a].needsUpdate = true; } };
+}

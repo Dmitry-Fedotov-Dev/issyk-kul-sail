@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { clamp, smooth } from './sim.js';
 import { WING } from './para.js';
+import { DYMOK } from './dymok.js';
 
 const NCELL = 44, NCOL = NCELL * 2 + 1, NROW = 15, HANG = WING.hang, ARC = 0.92, C0 = 2.75;
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z), UP = V3(0, 1, 0);
@@ -42,7 +43,6 @@ function fabric(pal, top) { const W = 1024, H = 256, c = document.createElement(
       x.fillStyle = a; x.beginPath(); x.moveTo(500, H); x.lineTo(380, H * 0.16); x.lineTo(430, H * 0.16); x.lineTo(540, H); x.closePath(); x.fill();
       x.fillStyle = m; x.fillRect(W / 2 - 120, 0, 120, H); x.fillStyle = e; x.fillRect(W / 2 - 52, 0, 52, H);
       x.restore(); }
-    x.save(); x.fillStyle = 'rgba(255,255,255,.92)'; x.font = '900 64px "Avenir Next",Arial,sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
     for (const sd of [-1, 1]) { x.save(); x.translate(W / 2 + sd * 245, H * 0.6); x.scale(0.8, 1.6); x.fillText('ИССЫК-КУЛЬ', 0, 0); x.restore(); } x.restore();
   } else { // низ: цвет крыла, белые шевроны, тёмные воздухозаборники у кромки
     x.fillStyle = a; for (let i = 0; i < 6; i++) { const X = W / 2 + (i - 2.5) * 70; x.beginPath(); x.moveTo(X - 25, H); x.lineTo(X, H * 0.3); x.lineTo(X + 25, H); x.closePath(); x.globalAlpha = 0.85; x.fill(); } x.globalAlpha = 1;
@@ -54,6 +54,34 @@ function fabric(pal, top) { const W = 1024, H = 256, c = document.createElement(
   x.strokeStyle = 'rgba(0,0,0,.05)'; x.lineWidth = 1; for (let X = 0; X < W; X += 6) { x.beginPath(); x.moveTo(X, 0); x.lineTo(X, H); x.stroke(); } for (let Y = 0; Y < H; Y += 6) { x.beginPath(); x.moveTo(0, Y); x.lineTo(W, Y); x.stroke(); }
   x.strokeStyle = 'rgba(0,0,0,.25)'; x.lineWidth = 2; x.beginPath(); x.moveTo(0, H - 1); x.lineTo(W, H - 1); x.stroke(); // задняя кромка
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; }
+
+// ---------- пилот -- Дымок: пиксельный котёнок из дыма в пиксельном снаряжении ----------
+// Кадр эмоции из атласа + дорисованные пиксели: шлем между ушами с очками, подвеска-сиденье с полосой, свободные концы
+// по бокам. Один холст на эмоцию; спрайт всегда лицом к камере и кренится вместе с крылом.
+const DIMG = typeof Image !== 'undefined' ? new Image() : null; if (DIMG) DIMG.src = DYMOK.png;
+const EMO = { content: 'emo_content', joy: 'emo_joy', surprised: 'emo_surprised', sad: 'emo_sad', curious: 'emo_curious' };
+function dymokSheet(helmetCol, seatCol, stripeCol) { const out = {}, ready = [];
+  for (const k in EMO) { const f = DYMOK.frames[EMO[k]], w = f[2], h = f[3], ox = 3, oy = 1, Wd = w + 6, Hd = h + 9, sy = oy + h - 3, c = document.createElement('canvas'); c.width = Wd; c.height = Hd;
+    const tex = new THREE.CanvasTexture(c); tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.colorSpace = THREE.SRGBColorSpace;
+    const draw = () => { const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.clearRect(0, 0, Wd, Hd); const px = (X, Y, col) => { x.fillStyle = col; x.fillRect(X, Y, 1, 1); };
+      const INK = '#3b3340', cx = ox + f[4];
+      // свободные концы: по бокам от карабинов вверх
+      for (let y = 0; y < sy; y++) { px(ox - 1, y, INK); px(ox + w, y, INK); }
+      x.drawImage(DIMG, f[0], f[1], w, h, ox, oy, w, h);
+      // подвеска: сиденье-кокон под котиком
+      const seat = [[-7, 7], [-8, 8], [-8, 8], [-8, 8], [-7, 7], [-6, 6], [-4, 4]];
+      seat.forEach(([a, b], r) => { for (let X = a; X <= b; X++) px(cx + X, sy + r, X === a || X === b || r === seat.length - 1 ? INK : r === 2 ? stripeCol : seatCol); });
+      for (let X = -8; X <= 8; X++) px(cx + X, sy - 1, INK);
+      px(ox - 1, sy, INK); px(ox + w, sy, INK); px(cx - 9, sy, '#c9ced6'); px(cx + 9, sy, '#c9ced6'); // карабины
+      // шлем между ушами: купол на макушке, светлая полоса, очки на лбу
+      const hy = oy + 3, dome = [[-3, 3], [-5, 5], [-5, 5], [-6, 6]];
+      dome.forEach(([a, b], r) => { for (let X = a; X <= b; X++) px(cx + X, hy + r, r === 0 || X === a || X === b ? INK : X === 0 ? '#fff6ea' : helmetCol); });
+      for (let X = -5; X <= 5; X++) px(cx + X, hy + 4, X === -5 || X === 5 ? INK : Math.abs(X) === 3 || Math.abs(X) === 2 ? '#9fd6f0' : INK); // очки
+      tex.needsUpdate = true; };
+    if (DIMG && DIMG.complete) draw(); else if (DIMG) ready.push(draw);
+    out[k] = { tex, W: Wd, H: Hd, seatY: sy + 2 }; }
+  if (DIMG && ready.length) DIMG.addEventListener('load', () => ready.forEach((d) => d()));
+  return out; }
 
 // pal: [основной, акцент, кромка]; suit -- кокон и куртка; helmet -- шлем
 export function makeGlider(pal = [0xff6a1a, 0x1d3f8f, 0x16243a], suit = 0x22303f, helmet = 0xf2f2f2) {
@@ -76,7 +104,7 @@ export function makeGlider(pal = [0xff6a1a, 0x1d3f8f, 0x16243a], suit = 0x22303f
   const top = new THREE.Mesh(geos[0], mTop), bot = new THREE.Mesh(geos[1], mBot); for (const m of [top, bot]) { m.castShadow = true; m.frustumCulled = false; wingG.add(m); }
   // ---- стропы: каскад ----
   // точки крепления на нижней поверхности: ряды A, B, C, D по нервюрам через одну ячейку; тормозные -- на задней кромке
-  const ROWS = [{ s: 0.06, col: 0xe8452a, rz: -0.07 }, { s: 0.3, col: 0xf2c11b, rz: -0.02 }, { s: 0.55, col: 0x2a7de1, rz: 0.03 }, { s: 0.76, col: 0x37b36b, rz: 0.07 }];
+  const ROWS = [{ s: 0.06, col: 0xc98a7a, rz: -0.07 }, { s: 0.3, col: 0xcdb98a, rz: -0.02 }, { s: 0.55, col: 0x8fa5bf, rz: 0.03 }, { s: 0.76, col: 0x98b59c, rz: 0.07 }]; // приглушённые цвета рядов
   const ribs = []; for (let j = 0; j < NCOL; j += 4) { const u = (j / (NCOL - 1)) * 2 - 1; if (Math.abs(u) > 0.02 && Math.abs(u) < 0.995) ribs.push(j); }
   const rowK = (s) => { let k = 0; while (k < NROW - 1 && sSpace(k) < s) k++; return k; };
   const segs = []; // [от, до] -- ссылки на точки: {v: индекс вершины низа} или {node}
@@ -92,8 +120,8 @@ export function makeGlider(pal = [0xff6a1a, 0x1d3f8f, 0x16243a], suit = 0x22303f
     // тормозные: задняя кромка внешних двух третей размаха -> узлы -> основная -> ручка
     const hand = { p: V3(sx * 0.3, 0.6, 0.12) }; risers[`${sx}b`] = hand;
     const te = []; for (let j = 0; j < NCOL; j += 3) { const u = (j / (NCOL - 1)) * 2 - 1; if (Math.sign(u) === sx && Math.abs(u) > 0.22 && Math.abs(u) < 0.995) te.push({ v: j * NROW + NROW - 1 }); }
-    const bu = []; for (let i = 0; i < te.length; i += 4) { const kids = te.slice(i, i + 4), n = node(kids, hand, 0.25); bu.push(n); for (const k of kids) segs.push([k, n, 0xff8a00]); }
-    const bm = node(bu, hand, 0.55); for (const k of bu) segs.push([k, bm, 0xff8a00]); segs.push([bm, hand, 0xff8a00]); }
+    const bu = []; for (let i = 0; i < te.length; i += 4) { const kids = te.slice(i, i + 4), n = node(kids, hand, 0.25); bu.push(n); for (const k of kids) segs.push([k, n, 0xd9a07a]); }
+    const bm = node(bu, hand, 0.55); for (const k of bu) segs.push([k, bm, 0xd9a07a]); segs.push([bm, hand, 0xd9a07a]); }
   const lp = new Float32Array(segs.length * 6), lc = new Float32Array(segs.length * 6);
   segs.forEach((sg, i) => { const c = new THREE.Color(sg[2]); for (let q = 0; q < 2; q++) { lc[i * 6 + q * 3] = c.r; lc[i * 6 + q * 3 + 1] = c.g; lc[i * 6 + q * 3 + 2] = c.b; } });
   const lgeo = new THREE.BufferGeometry(); lgeo.setAttribute('position', new THREE.BufferAttribute(lp, 3)); lgeo.setAttribute('color', new THREE.BufferAttribute(lc, 3));
@@ -124,11 +152,16 @@ export function makeGlider(pal = [0xff6a1a, 0x1d3f8f, 0x16243a], suit = 0x22303f
   const arms = [-1, 1].map((sx) => { const up = new THREE.Mesh(G_LIMB, sm), lo = new THREE.Mesh(G_LIMB, sm), glove = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), dark); pilot.add(up, lo, glove); return { up, lo, glove, sx }; });
   const legs = [-1, 1].map((sx) => { const m = new THREE.Mesh(G_LIMB, sm); pilot.add(m); m.visible = false; return { m, sx }; });
   root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  // Дымок вместо человечка
+  const sheet = dymokSheet('#' + new THREE.Color(pal[1]).getHexString(), '#' + new THREE.Color(suit).getHexString(), '#' + new THREE.Color(pal[0]).getHexString());
+  const sm2 = new THREE.SpriteMaterial({ map: sheet.content.tex, transparent: true, alphaTest: 0.3 }), spr = new THREE.Sprite(sm2), PXM = 0.075; let emoNow = 'content';
+  const setEmo = (k) => { const S = sheet[k] || sheet.content; sm2.map = S.tex; spr.scale.set(S.W * PXM, S.H * PXM, 1); spr.center.set(0.5, 1 - S.seatY / S.H); emoNow = k; };
+  setEmo('content'); root.add(spr); pilot.visible = false;
   const tv = V3(0, 0, 0), tw = V3(0, 0, 0), sh = V3(0, 0, 0), el = V3(0, 0, 0), hd = V3(0, 0, 0), vp = (v) => tv.set(pos[1][v * 3], pos[1][v * 3 + 1], pos[1][v * 3 + 2]);
   let frame = 0; const PINV = new THREE.Matrix4();
   // ---- форма в кадре ----
   function shape(g, t, full) {
-    const up = clamp(g.wingUp ?? 1, 0, 1), fl = 0.25 + 0.75 * up, cs = g.colSide || 0, cf = g.col || 0, fr = g.front || 0, st = g.stall ? 1 : 0, flut = (g.turb || 0) * 0.03 + cf * 0.04, bL = g.L || 0, bR = g.R || 0;
+    const up = clamp(g.wingUp ?? 1, 0, 1), fl = 0.25 + 0.75 * up, cs = g.colSide || 0, cf = g.col || 0, fr = g.front || 0, st = g.stall ? 1 : 0, flut = (g.turb || 0) * 0.03 + cf * 0.04 + (g.gustFx || 0) * 0.07, bL = g.L || 0, bR = g.R || 0;
     if (full) for (let side = 0; side < 2; side++) { const b = base[side], p = pos[side];
       for (let n = 0; n < NV; n++) { const u = meta[n * 3], s = meta[n * 3 + 1], c = meta[n * 3 + 2]; let x = b[n * 3], y = b[n * 3 + 1], z = b[n * 3 + 2]; const a = arcA(u), sa = Math.sin(a), ca = Math.cos(a);
         // клеванта: задняя кромка своей половины вниз, сильнее к законцовке; в сваливании -- вся кромка и хорда назад
@@ -142,13 +175,13 @@ export function makeGlider(pal = [0xff6a1a, 0x1d3f8f, 0x16243a], suit = 0x22303f
         p[n * 3] = x; p[n * 3 + 1] = y; p[n * 3 + 2] = z; }
       geos[side].attributes.position.needsUpdate = true; if (frame % 2 === 0) geos[side].computeVertexNormals(); }
     // свободные концы: акселератор тянет передние ряды вниз и чуть вперёд
-    for (const R in risers) { if (R.endsWith('b')) continue; const ri = +R.slice(-1), sx = +R.slice(0, -1); risers[R].p.set(sx * (0.2 + ri * 0.012), 0.48 - (g.bar || 0) * (ri === 0 ? 0.13 : ri === 1 ? 0.08 : 0), ROWS[ri].rz - (g.bar || 0) * 0.03 * (3 - ri)); }
-    for (const sx of [-1, 1]) { const b = sx < 0 ? bL : bR; risers[`${sx}b`].p.set(sx * 0.31, 0.62 - 0.62 * b, 0.13 - 0.1 * b); }
+    for (const R in risers) { if (R.endsWith('b')) continue; const ri = +R.slice(-1), sx = +R.slice(0, -1); risers[R].p.set(sx * (0.92 + ri * 0.01), 1.12 - (g.bar || 0) * (ri === 0 ? 0.13 : ri === 1 ? 0.08 : 0), ROWS[ri].rz - (g.bar || 0) * 0.03 * (3 - ri)); } // к свободным концам Дымка
+    for (const sx of [-1, 1]) { const b = sx < 0 ? bL : bR; risers[`${sx}b`].p.set(sx * 0.95, 0.75 - 0.55 * b, 0.12); }
     // узлы каскада: среднее своих строп, подтянутое к свободному концу
     for (const n of nodes) { tw.set(0, 0, 0); for (const k of n.kids) tw.add(k.v !== undefined ? vp(k.v) : k.p); tw.multiplyScalar(1 / n.kids.length); n.p.copy(tw).lerp(n.toward.p, n.t); }
     let m = 0; const put = (o) => { const q = o.v !== undefined ? vp(o.v) : o.p; lp[m++] = q.x; lp[m++] = q.y; lp[m++] = q.z; };
     for (const sg of segs) { put(sg[0]); put(sg[1]); } lgeo.attributes.position.needsUpdate = true; lines.visible = up > 0.4;
-    for (const S of strap) { const r = risers[`${S.sx}${S.ri}`].p; limb(S.m, tw.set(S.sx * 0.2, 0.02, 0), r, 0.014, 0.004); S.m.visible = up > 0.2; }
+    for (const S of strap) { const r = risers[`${S.sx}${S.ri}`].p; limb(S.m, tw.set(S.sx * 0.2, 0.02, 0), r, 0.014, 0.004); S.m.visible = false; }
     toggles.forEach((tg, i) => { tg.position.copy(risers[`${i ? 1 : -1}b`].p); });
     // руки пилота держат ручки (перевод из осей подвески в оси пилота)
     pivot.updateMatrix(); pilot.updateMatrix(); PINV.copy(pilot.matrix).invert();
@@ -164,7 +197,10 @@ export function makeGlider(pal = [0xff6a1a, 0x1d3f8f, 0x16243a], suit = 0x22303f
       // перенос веса: в повороте пилот кренится в сторону поворота сильнее крыла
       pilot.rotation.set(standing ? -0.35 : 0, 0, standing ? 0 : -((g.R || 0) - (g.L || 0)) * 0.16); pilot.position.y = standing ? -0.15 : 0;
       pod.visible = !standing; for (const L of legs) { L.m.visible = standing; if (standing) limb(L.m, tw.set(L.sx * 0.1, 0.05, 0.1), sh.set(L.sx * 0.12, -0.8, 0.0), 0.07); }
-      shape(g, t, near || frame % 4 === 0); },
-    fp(on) { head.visible = visor.visible = hstripe.visible = !on; },
+      shape(g, t, near || frame % 4 === 0);
+      const emo = g.col || g.front || g.stall || g.spin || (g.gustFx || 0) > 0.55 ? 'surprised' : g.mode === 'launch' || g.mode === 'tow' ? 'curious' : g.mode === 'landed' ? (g.landed && g.landed.q === 'soft' ? 'joy' : 'content')
+        : g.vario > 0.8 ? 'joy' : g.vario < -2.4 ? 'sad' : 'content'; if (emo !== emoNow) setEmo(emo);
+      sm2.rotation = -(g.phi || 0) * 0.35; spr.position.set(0, standing ? -0.85 : 0.0 + Math.sin(t * 2.3) * 0.03, 0); },
+    fp(on) { spr.visible = !on; },
   };
 }

@@ -87,7 +87,7 @@ export function playToon({ audio, TOUCH, onDone }) {
       const a = t * 1.6, py = 400 - (t % 9) * 22, px = 490 + Math.cos(a) * 80; x.save(); lw(3); x.setLineDash([8, 10]); x.beginPath(); x.ellipse(490, py + 10, 80, 20, 0, 0, 6.283); x.stroke(); x.restore();
       wing(px, py, 0.45, { bank: -Math.sin(a) * 0.25 }); pilot(px, py, 0.45, { fly: true }); bubble(px + 80, py - 90, `пи-пи-пи! +${(1.5 + Math.sin(t) * 0.5).toFixed(1)}`, '#e9f8de');
       x.save(); x.font = "900 18px 'Arial Black',Arial"; x.fillStyle = INK; x.fillText('ТЕПЛО ОТ ЗЕМЛИ', 640, 405); x.restore(); arrow(660, 412, 590, 440, ORANGE, 6);
-      caption('Солнце греет землю — тёплый воздух пузырём уходит вверх, над ним растёт облако. Ищите зелёный пух, облака и зелёные пятна на компасе. Запищал вариометр — держите стрелку и кружите на месте!'); } },
+      caption('Солнце греет землю — тёплый воздух пузырём уходит вверх, над ним растёт облако. Тёплый воздух видно: вверх тянутся жёлто-зелёные полосы. Попали в него — Дымок радуется, держите стрелку и кружите на месте!'); } },
     { t: 7, draw(t) { x.fillStyle = SKY; x.fillRect(0, 0, W, H); banner('ВЕТЕР НА СКЛОН', 40); x.beginPath(); x.moveTo(380, 600); x.lineTo(760, 230); x.lineTo(960, 210); x.lineTo(960, 600); x.closePath(); fillStroke('#c9b77e', 4);
       for (let i = 0; i < 4; i++) { const o = ((t * 120 + i * 120) % 480), y = 300 + i * 60; const xx = 20 + o; const bend = xx > 330 - i * 60 ? (xx - (330 - i * 60)) : 0; arrow(xx - 60, y - bend * 0.9 + 20, xx, y - bend * 1.1, TEAL, 6); }
       const px = 560 + Math.sin(t * 0.8) * 60, py = 270 + Math.sin(t * 1.3) * 8; wing(px, py, 0.5); pilot(px, py, 0.5, { fly: true }); bubble(px - 110, py - 100, 'ДЕРЖИТ!', '#e9f8de');
@@ -102,9 +102,9 @@ export function playToon({ audio, TOUCH, onDone }) {
       x.save(); x.font = "900 16px 'Arial Black',Arial"; x.fillStyle = INK; x.fillText('ВЕТЕР', 820, 150); x.restore();
       const k = Math.min(1, t / 6), px = 150 + k * 490, py = 190 + k * 170, fl = k > 0.86; wing(px, py - (fl ? 8 : 0), 0.5, { sag: fl ? 1 : 0 }); pilot(px, py, 0.5, { thumb: k >= 1 });
       key(330, 300, '↓', fl, 70); if (k >= 1) { bubble(px + 30, py - 120, 'МЯГКО!', '#e9f8de'); for (let i = 0; i < 6; i++) { const a = i + t * 3; x.fillStyle = '#ffd447'; x.beginPath(); x.arc(px + Math.cos(a) * 70, py - 40 + Math.sin(a) * 30, 6, 0, 6.283); x.fill(); } }
-      caption(K('Летите к кресту на пляже (оранжевая точка на компасе), развернитесь против ветра. В двух метрах над землёй нажмите ↓ — крыло затормозит, и касание будет мягким.', 'Летите к кресту на пляже (оранжевая точка на компасе), развернитесь против ветра. У самой земли коснитесь обеих половин экрана — касание будет мягким.')); } },
+      caption(K('Летите к метке «поле» — там крест на пляже. Развернитесь против ветра. В двух метрах над землёй нажмите ↓ — крыло затормозит, и касание будет мягким.', 'Летите к метке «поле» — там крест на пляже. Развернитесь против ветра. У самой земли коснитесь обеих половин экрана — касание будет мягким.')); } },
     { t: 99, draw(t) { sunburst(W / 2, 330, t); banner('ГОТОВЫ? ПОЕХАЛИ!', 48); pilot(W / 2, 330 + wobble(t * 3, 5), 2.2, { thumb: true });
-      x.save(); x.font = "700 20px Georgia,serif"; x.fillStyle = INK; x.textAlign = 'center'; x.fillText(K('H — показать или скрыть подсказки потоков · R — новый старт', 'Удачного полёта!'), W / 2, 540); x.restore(); } },
+      x.save(); x.font = "700 20px Georgia,serif"; x.fillStyle = INK; x.textAlign = 'center'; x.fillText(K('H — полосы воздуха · I — приборы · R — новый старт', 'Удачного полёта!'), W / 2, 540); x.restore(); } },
   ];
 
   // ---------- плёнка ----------

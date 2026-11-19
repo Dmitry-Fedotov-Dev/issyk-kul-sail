@@ -89,6 +89,7 @@ export function makeAudio() {
   return {
     start, update, engine, siren, vario, airflow, winch,
     pop(p = 1) { noise(260, 0.9, 0.35, 0.5 * p, 0, 90); tone(70, 0.3, 'sine', 0.35 * p, 40); },
+    gust(p = 1) { noise(500, 0.7, 1.2, 0.22 * p, (Math.random() - 0.5) * 0.8, 1700); noise(180, 0.8, 0.9, 0.18 * p, 0, 90); },
     rustle(p = 1) { noise(1800, 0.6, 0.6, 0.12 * p, 0, 500); },
     stroke(q = 1) { noise(500 + 500 * q, 0.9, 0.3, 0.05 + 0.07 * q, 0, 200); },
     slap(p = 1) { noise(900, 0.7, 0.55, 0.3 * p, 0, 240); noise(3200, 0.8, 0.9, 0.12 * p, 0, 1500); },

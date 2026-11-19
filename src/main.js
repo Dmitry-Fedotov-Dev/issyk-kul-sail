@@ -334,6 +334,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyF' && G.mode !== 'menu' && !(PG && PG.on)) X.hookPress();
   else if (e.code === 'KeyR' && PG && PG.on) PG.restart();
   else if (e.code === 'KeyH' && PG && PG.on) PG.toggleHelp();
+  else if (e.code === 'KeyI' && PG && PG.on) PG.toggleInst();
   else if (e.code === 'KeyR' && G.mode === 'race') startRace(); else if (e.code === 'KeyR' && G.mode === 'free') startFree();
 });
 window.addEventListener('keyup', (e) => { if (e.code === 'KeyE' && SPY && SPY.on) SPY.holdEnd(); if (e.code === 'Space') input.bar = false; if (e.code === 'ArrowDown' || e.code === 'KeyS') input.flare = false; if (KEY[e.code]) { input[KEY[e.code]] = false; e.preventDefault(); } });
