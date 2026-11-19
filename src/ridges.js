@@ -48,29 +48,39 @@ export function makeRidges(hNear, farGrid, holes = []) {
     const far = []; extract(hs, W, H, STEP, mask, 400, (i, j) => [X0 + i * STEP, Y1 - j * STEP], far);
     for (const l of far) lines.push({ pts: chaikin(l), h: at }); } // вдали хватает одного сглаживания: вдвое меньше вершин
 
-  // каждый отрезок -- четыре вершины ленты; отрезки раскладываются по клеткам 8 км, чтобы невидимые отсекались
-  const tiles = new Map();
-  for (const { pts, h } of lines) { const P = pts.map(([X, Y, a]) => [X, h(X, Y), -Y, Math.log2(a)]);
-    for (let i = 0; i + 1 < P.length; i++) { const a = P[i], b = P[i + 1], key = Math.floor((a[0] + b[0]) / 16000) * 1000 + Math.floor((a[2] + b[2]) / 16000);
-      let t = tiles.get(key); if (!t) tiles.set(key, (t = [])); t.push(a, b); } }
-  const mat = new THREE.ShaderMaterial({ uniforms: U, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  const g = makeInk(lines, inkMaterial()); g.userData.lines = lines.length; return g;
+}
+
+// Тушь пером: линии -- ленты постоянной толщины в пикселях экрана. Тем же приёмом рисуются гребни, урез озера,
+// дороги и контуры участков на берегу. col -- цвет туши, w -- толщина относительно гребня, a -- густота.
+export function inkMaterial({ col = [0.012, 0.016, 0.03], w = 1, a = 1, lift = 2 } = {}) {
+  return new THREE.ShaderMaterial({ uniforms: { ...U, uC: { value: new THREE.Vector3(...col) }, uW: { value: w }, uA: { value: a }, uL: { value: lift } }, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     vertexShader: CURVE + /* glsl */`
-uniform vec2 uRes; uniform float uK; attribute vec3 aQ; attribute vec3 aSE; varying float vSide, vW, vAl;
+uniform vec2 uRes; uniform float uK, uW, uA, uL; attribute vec3 aQ; attribute vec3 aSE; varying float vSide, vW, vAl;
 void main(){ float aS=aSE.x, aE=aSE.y, aA=aSE.z; vec3 p=position, q=aQ; p.y-=curve(p); q.y-=curve(q);
   float dist=length(p-cameraPosition);
-  p+=normalize(cameraPosition-p)*(2.+dist*0.004); q+=normalize(cameraPosition-q)*(2.+length(q-cameraPosition)*0.004);
+  p+=normalize(cameraPosition-p)*(uL+dist*0.004); q+=normalize(cameraPosition-q)*(uL+length(q-cameraPosition)*0.004);
   vec4 cp=projectionMatrix*viewMatrix*vec4(p,1.), cq=projectionMatrix*viewMatrix*vec4(q,1.);
   if(cp.w<0.5 || cq.w<0.5){ gl_Position=vec4(2.,2.,2.,1.); vAl=0.; vW=1.; vSide=0.; return; }
   // вдали остаются только крупные хребты; отрог тает к началу (там на него «стекает» меньше склона)
   float need=log2(30.)+0.8*log2(1.+dist/3000.), sig=smoothstep(need, need+1., aA);
   // толщина -- не больше обводки силуэтов (post.js): штрих лишь подсказывает форму рельефа, а не рисует его заново
-  float wpx=uK*mix(1.5,1.0,smoothstep(400.,20000.,dist))*(0.6+0.4*sig);
+  float wpx=uK*uW*mix(1.5,1.0,smoothstep(400.,20000.,dist))*(0.6+0.4*sig);
   vec2 sp=cp.xy/cp.w*uRes, sq=cq.xy/cq.w*uRes, d=(sq-sp)*(aE>0.5?-1.:1.); d=d/max(length(d),1e-4);
   float hw=wpx*0.5+1.; cp.xy+=vec2(-d.y,d.x)*aS*hw*2./uRes*cp.w;
   gl_Position=cp; vSide=aS*hw; vW=wpx*0.5;
-  vAl=sig*mix(0.85,0.5,smoothstep(3000.,45000.,dist))*(1.-smoothstep(70000.,120000.,dist)); }`,
-    fragmentShader: /* glsl */`varying float vSide, vW, vAl;
-void main(){ float a=vAl*(1.-smoothstep(vW-0.6,vW+0.6,abs(vSide))); if(a<0.01) discard; gl_FragColor=vec4(0.012,0.016,0.03,a); ${END} }` });
+  vAl=uA*sig*mix(0.85,0.5,smoothstep(3000.,45000.,dist))*(1.-smoothstep(70000.,120000.,dist)); }`,
+    fragmentShader: /* glsl */`uniform vec3 uC; varying float vSide, vW, vAl;
+void main(){ float a=vAl*(1.-smoothstep(vW-0.6,vW+0.6,abs(vSide))); if(a<0.01) discard; gl_FragColor=vec4(uC,a); ${END} }` });
+}
+
+// lines: [{ pts: [[X, Y, значимость], ...], h: (X, Y) => высота }]; значимость 1e9 -- линия видна всегда
+export function makeInk(lines, mat) {
+  // каждый отрезок -- четыре вершины ленты; отрезки раскладываются по клеткам 8 км, чтобы невидимые отсекались
+  const tiles = new Map();
+  for (const { pts, h } of lines) { const P = pts.map(([X, Y, a]) => [X, h(X, Y), -Y, Math.log2(a)]);
+    for (let i = 0; i + 1 < P.length; i++) { const a = P[i], b = P[i + 1], key = Math.floor((a[0] + b[0]) / 16000) * 1000 + Math.floor((a[2] + b[2]) / 16000);
+      let t = tiles.get(key); if (!t) tiles.set(key, (t = [])); t.push(a, b); } }
   const g = new THREE.Group(); let segs = 0;
   for (const pts of tiles.values()) { const n = pts.length / 2, pos = new Float32Array(n * 12), q = new Float32Array(n * 12), se = new Float32Array(n * 12), idx = new Uint32Array(n * 6);
     for (let s = 0; s < n; s++) { const a = pts[s * 2], b = pts[s * 2 + 1];
@@ -80,6 +90,6 @@ void main(){ float a=vAl*(1.-smoothstep(vW-0.6,vW+0.6,abs(vSide))); if(a<0.01) d
     const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aQ', new THREE.BufferAttribute(q, 3)); geo.setAttribute('aSE', new THREE.BufferAttribute(se, 3)); geo.setIndex(new THREE.BufferAttribute(idx, 1));
     geo.computeBoundingSphere(); const sp = geo.boundingSphere, dd = Math.hypot(sp.center.x, sp.center.z) + 30000; sp.radius += (dd * dd) / 14866000 + 50;
     const m = new THREE.Mesh(geo, mat); m.renderOrder = 1; g.add(m); segs += n; }
-  g.userData.segs = segs; g.userData.lines = lines.length;
+  g.userData.segs = segs;
   return g;
 }

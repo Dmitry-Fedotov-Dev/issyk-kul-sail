@@ -78,6 +78,11 @@ export function makeAudio() {
     horn() { tone(220, 1.1, 'sawtooth', 0.16); tone(277, 1.1, 'sawtooth', 0.12); },
     // вылет с доски: «бдыщ» и «уиии» вверх-вниз, как в мультике
     whee(p = 1) { tone(160, 0.3, 'sine', 0.45 * p, 520); setTimeout(() => { tone(420, 0.55, 'triangle', 0.13 * p, 1500); setTimeout(() => tone(1500, 0.8, 'triangle', 0.11 * p, 260), 520); }, 90); },
+    // подзорная труба: латунь выдвигается (шорох по нарастающей и щелчок), тиканье наводки, находка -- звон
+    spy(on) { noise(on ? 500 : 1400, 1.4, 0.32, 0.07, 0, on ? 1600 : 450); setTimeout(() => tone(on ? 1900 : 1500, 0.03, 'triangle', 0.06), on ? 290 : 200); },
+    tick(f = 1200, v = 0.025) { tone(f, 0.025, 'triangle', v); },
+    spyKnown() { tone(1320, 0.12, 'sine', 0.07); },
+    spyFound(r = 1) { const n = [784, 988, 1175, 1568, 1976].slice(0, 2 + r); n.forEach((fq, i) => setTimeout(() => tone(fq, 0.35, 'sine', 0.11), i * 85)); setTimeout(() => noise(6000, 1.2, 0.5, 0.05, 0, 9000), 60); },
     chime() { tone(784, 0.25, 'sine', 0.14); setTimeout(() => tone(1175, 0.4, 'sine', 0.14), 110); },
     toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.75; return muted; },
   };

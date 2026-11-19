@@ -17,6 +17,29 @@ html,body{height:100%;margin:0;background:var(--lake);color:var(--ink);font-fami
 #speed small{font-size:13px;color:var(--dim);margin-left:5px}
 #pos{font-size:13px;margin-top:2px;letter-spacing:.03em;opacity:.9}
 #wear{font-size:12px;margin-top:2px;opacity:.9}#wear.bad{color:#ff8a7a}
+/* подзорная труба: круг окуляра 92% меньшей стороны, за ним темно; латунная оправа */
+#spy{position:fixed;inset:0;z-index:3;pointer-events:none;overflow:hidden}#spy[hidden]{display:none}
+#spyring{position:absolute;left:50%;top:50%;width:92vmin;height:92vmin;transform:translate(-50%,-50%);border-radius:50%;box-shadow:0 0 0 200vmax #04060a,inset 0 0 0 2px rgba(255,236,190,.55),inset 0 0 0 7px #7a5422,inset 0 0 0 9px #e8c27a,inset 0 0 26px 10px rgba(0,0,0,.55);animation:spyin .32s cubic-bezier(.2,.9,.3,1.2)}
+@keyframes spyin{from{width:150vmax;height:150vmax}}
+#spyring::after{content:'';position:absolute;inset:-14px;border-radius:50%;border:12px solid transparent;background:conic-gradient(from 210deg,#5e3f17,#e9c57e,#8a6128,#f3d79a,#6b4a1e,#d9ad62,#5e3f17) border-box;-webkit-mask:linear-gradient(#000 0 0) padding-box exclude,linear-gradient(#000 0 0);mask:linear-gradient(#000 0 0) padding-box exclude,linear-gradient(#000 0 0)}
+#spybr{position:absolute;transform:translate(-50%,-50%);transition:width .12s,height .12s}#spybr[hidden]{display:none}
+#spybr i{position:absolute;width:24%;height:24%;border:2px solid rgba(255,214,120,.95);filter:drop-shadow(0 0 3px rgba(0,0,0,.8))}
+#spybr i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0}#spybr i:nth-child(2){right:0;top:0;border-left:0;border-bottom:0}#spybr i:nth-child(3){left:0;bottom:0;border-right:0;border-top:0}#spybr i:nth-child(4){right:0;bottom:0;border-left:0;border-top:0}
+#spybr.far i{border-color:rgba(255,255,255,.45)}#spybr.lock i{border-color:#7dffb0;animation:lockp .5s ease-out}@keyframes lockp{0%{transform:scale(1.6);opacity:0}100%{transform:scale(1);opacity:1}}
+#spylab{position:absolute;transform:translateX(-50%);font:700 13px var(--ui);color:#fff;text-shadow:0 1px 6px #000,0 0 2px #000;white-space:nowrap;letter-spacing:.02em}#spylab[hidden]{display:none}
+#spyinfo{position:absolute;left:50%;top:calc(50% + 46vmin - 34px);transform:translateX(-50%);font:600 12px var(--ui);color:rgba(255,236,190,.9);letter-spacing:.08em;text-shadow:0 1px 4px #000}
+#spycnt{position:absolute;left:50%;top:calc(50% - 46vmin + 14px);transform:translateX(-50%);font:700 11px var(--ui);color:rgba(255,236,190,.8);letter-spacing:.12em;text-transform:uppercase}
+#spynew{position:absolute;left:50%;top:32%;transform:translateX(-50%);font:800 clamp(16px,3.4vmin,24px) var(--ui);color:#ffe9a8;text-shadow:0 2px 10px #000;opacity:0;white-space:nowrap}
+#spynew.go{animation:snew 2.6s ease-out}@keyframes snew{0%{opacity:0;transform:translate(-50%,10px) scale(.8)}12%{opacity:1;transform:translate(-50%,0) scale(1.08)}22%{transform:translate(-50%,0) scale(1)}80%{opacity:1}100%{opacity:0}}
+#spyflash{position:absolute;left:50%;top:50%;width:92vmin;height:92vmin;transform:translate(-50%,-50%);border-radius:50%;opacity:0;background:radial-gradient(circle,rgba(255,240,190,.0) 40%,rgba(255,230,160,.35) 100%)}
+#spyflash.go{animation:sfl .7s ease-out}#spyflash.rare{background:radial-gradient(circle,rgba(255,250,220,.25),rgba(255,200,90,.5) 100%)}@keyframes sfl{0%{opacity:1}100%{opacity:0}}
+#spyhelp{position:absolute;left:50%;bottom:calc(50% - 46vmin + 64px);transform:translateX(-50%);width:min(80vmin,440px);text-align:center;font:600 13px/1.45 var(--ui);color:#fff;text-shadow:0 1px 6px #000}#spyhelp[hidden]{display:none}
+#spyx,#spyzoom button{pointer-events:auto;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,220,150,.5);background:rgba(20,14,6,.7);color:#ffe2a0;font:700 20px var(--ui);cursor:pointer}
+#spyx{position:absolute;right:max(16px,env(safe-area-inset-right,0px));top:max(16px,env(safe-area-inset-top,0px))}
+#spyzoom{position:absolute;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(24px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
+body.spy #hint,body.spy #ts,body.spy #joy,body.spy #bhook{visibility:hidden}
+#atlas h3{margin:18px 0 6px;font-size:15px}.acat{font:600 11px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:8px 0 4px}
+.achips{display:flex;flex-wrap:wrap;gap:6px}.achips span{font-size:12px;padding:4px 8px;border-radius:10px;border:1px solid rgba(255,255,255,.15);color:var(--dim)}.achips span.on{color:#ffe2a0;border-color:rgba(255,214,120,.6);background:rgba(255,214,120,.08)}
 #tools{display:flex;gap:8px;margin-top:10px;pointer-events:auto}
 #tools button{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(7,26,58,.28);color:var(--ink);font-size:15px;line-height:1;cursor:pointer;padding:0;opacity:.75}
 #tools button:focus-visible,#ts:focus-visible{outline:2px solid #fff;outline-offset:2px}
@@ -174,7 +197,7 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
 <div id="lens"></div>
 <div id="game" hidden>
   <div id="speed" class="hud"><b id="kn">0.0</b><small>уз</small><div id="pos"></div><div id="wear"></div>
-    <div id="tools"><button id="bmenu" aria-label="Меню">☰</button><button id="bcam" aria-label="Сменить камеру">◉</button><button id="bfriends" aria-label="Друзья и приглашение">👥</button></div></div>
+    <div id="tools"><button id="bmenu" aria-label="Меню">☰</button><button id="bcam" aria-label="Сменить камеру">◉</button><button id="bfriends" aria-label="Друзья и приглашение">👥</button><button id="bspy" aria-label="Подзорная труба (Z)">🔭</button></div></div>
   <div id="race" class="hud" hidden><b id="rtime">0:00</b><div id="rinfo"></div></div>
   <div id="dialwrap" class="hud"><canvas id="dial" width="352" height="352"></canvas><div id="windtxt"></div></div>
   <div id="mark" class="hud" hidden><span id="markd"></span><i></i></div>
@@ -216,7 +239,10 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
     </div>
   </div>
 </div>
-<div id="journal" class="dlg" hidden><div class="panel"><h2>Журнал достижений</h2><div id="jlist"></div><div class="modes"><button class="btn" id="jclose">Закрыть</button></div></div></div>
+<div id="spy" hidden><div id="spyring"></div><div id="spyflash"></div><div id="spybr" hidden><i></i><i></i><i></i><i></i></div><div id="spylab" hidden></div>
+  <div id="spyinfo"></div><div id="spycnt"></div><div id="spynew"></div><div id="spyhelp" hidden>Наведите на судно, посёлок или вершину и задержите трубу — она опознает цель.<br>Колесо или два пальца — кратность, перетаскивание — обзор</div>
+  <button id="spyx" aria-label="Убрать трубу">✕</button><div id="spyzoom"><button id="spyin" aria-label="Больше">+</button><button id="spyout" aria-label="Меньше">−</button></div></div>
+<div id="journal" class="dlg" hidden><div class="panel"><h2>Журнал достижений</h2><div id="jlist"></div><div id="atlas"></div><div class="modes"><button class="btn" id="jclose">Закрыть</button></div></div></div>
 <div id="mapdlg" class="dlg" hidden><div class="panel"><h2>Место старта</h2><p id="mapinfo"></p><div id="mapwrap"><canvas id="mapcv"></canvas><button id="mzoom" hidden>Вся карта</button></div><p class="note">Можно выбрать любую точку озера. Или гору: посмотрим, что получится.</p><div class="modes"><button class="btn go" id="mclose">Готово</button><button class="btn" id="mreset">Вернуть Чолпон-Ату</button><button class="btn" id="mshare" hidden>Поделиться точкой<small>ссылка в мессенджер</small></button></div></div></div>
 <div id="fdlg" class="dlg" hidden><div class="panel"><h2>Друзья</h2><p class="note" id="fnote"></p>
   <div class="modes"><button class="btn go" id="fshare">Позвать друга<small>ссылка: откроет — и окажется рядом с вами</small></button></div>

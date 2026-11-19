@@ -51,7 +51,7 @@ export function installExtra(A) {
 
   // ---------- достижения ----------
   function ach(id) { if (done.has(id)) return; const a = ACH.find((x) => x[1] === id); if (!a) return; done.add(id); store.set('ach', [...done]); audio.chime(); toast('★ ' + a[2]); journal(); }
-  function journal() { const groups = { yacht: 'Яхта', kayak: 'Каяк', scull: 'Академическая одиночка', sup: 'SUP-доска', jetski: 'Гидроцикл', boat: 'Моторный катер', law: 'Закон и порядок', map: 'География' };
+  function journal() { const groups = { yacht: 'Яхта', kayak: 'Каяк', scull: 'Академическая одиночка', sup: 'SUP-доска', jetski: 'Гидроцикл', boat: 'Моторный катер', law: 'Закон и порядок', map: 'География', spy: 'Подзорная труба' };
     $('bjournal').textContent = `Журнал · ${done.size}/${ACH.length}`;
     $('jlist').innerHTML = Object.keys(groups).map((g) => `<h4>${groups[g]}</h4>` + ACH.filter((a) => a[0] === g).map((a) => `<div class="ja${done.has(a[1]) ? ' ok' : ''}"><b>${a[2]}</b><span>${a[3]}</span></div>`).join('')).join(''); }
 
