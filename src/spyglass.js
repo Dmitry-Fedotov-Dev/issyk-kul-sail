@@ -32,6 +32,9 @@ export function makeSpyglass({ G, camera, post, audio, store, ach, $, extra }) {
     const { W, H, X0, Y1, STEP } = G.far.userData.grid;
     PEAKS.forEach(([name, X, Y], k) => { if (X < X0 || X > X0 + (W - 1) * STEP || Y > Y1 || Y < Y1 - (H - 1) * STEP) return; let y = -1e9, bx = X, by = Y;
       for (const [dx, dy] of [[0, 0], [300, 0], [-300, 0], [0, 300], [0, -300], [200, 200], [-200, -200], [200, -200], [-200, 200]]) { const hh = G.h(X + dx, Y + dy); if (hh > y) { y = hh; bx = X + dx; by = Y + dy; } }
+      // точка OSM не на макушке нашего (сглаженного) рельефа -- метка садится на ближайшую макушку в радиусе 1,6 км
+      const top = (x, yy) => { const h0 = G.h(x, yy); for (let a = 0; a < 12; a++) for (const r of [250, 600]) if (G.h(x + r * Math.cos(a * 0.5236), yy + r * Math.sin(a * 0.5236)) > h0) return false; return true; };
+      if (!top(bx, by)) { let bd = 1e9; for (let dy = -1600; dy <= 1600; dy += 100) for (let dx = -1600; dx <= 1600; dx += 100) { const r = Math.hypot(dx, dy); if (r > 1600 || r >= bd) continue; const hh = G.h(X + dx, Y + dy); if (hh > y - 150 && top(X + dx, Y + dy)) { bd = r; bx = X + dx; by = Y + dy; } } if (bd < 1e9) y = G.h(bx, by); }
       if (y < 300) return; fixed.push({ id: 'pk:' + name, cat: 'Вершины', name: `${name} · ≈${(Math.round((y + 1601) / 50) * 50).toLocaleString('ru-RU')} м`, X: bx, Y: by, y, size: 700, rare: y + 1601 > 5000 ? 2 : 1, peak: true }); });
     const mid = RIVER.x.length >> 1;
     for (const [id, name, X, Y, size] of [['t_cholpon', 'Чолпон-Ата', 0, 1500, 900], ['t_balykchy', 'Балыкчы', -73700, -21000, 1500], ['t_karakol', 'Каракол', 107300, -17800, 1500], ['gorge', 'Ущелье Чон-Ак-Суу', RIVER.x[mid], RIVER.y[mid], 900]])
