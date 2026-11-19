@@ -7,6 +7,8 @@ import { makeNet, radiusOf, encNpc, followNpc } from './net.js';
 import { makeRiver } from './rivermode.js';
 import { RIVER } from './river.js';
 import { TRAILS, RIVERS } from './trails.js';
+import { HOUSES, TREES, ROADS, BEACHES } from './shoredata.js';
+import { i16 } from './shoreart.js';
 import { MAP } from './world.js';
 import { makeWake } from './fx.js';
 import { makeMark } from './world.js';
@@ -266,7 +268,14 @@ export function installExtra(A) {
     const nearBox = [(X0n - g.X0) / g.STEP, (g.Y1 - Y1n) / g.STEP, (X0n + (N - 1) * step - g.X0) / g.STEP, (g.Y1 - (Y1n - (N - 1) * step)) / g.STEP];
     const P = (X, Y) => [(X - g.X0) / g.STEP, (g.Y1 - Y) / g.STEP], rv = RIVER.x.length >> 1;
     const labels = [[0, 1500, 'Чолпон-Ата', 2], [-73700, -21000, 'Балыкчы', 2], [107300, -17800, 'Каракол', 2], [RIVER.x[rv], RIVER.y[rv], 'ущ. Чон-Ак-Суу', 1], [10000, -32000, 'озеро Иссык-Куль', 3], [-15000, 22000, 'хребет Кунгей Ала-Тоо', 3], [30000, -75000, 'хребет Терскей Ала-Тоо', 3]].map(([X, Y, t, k]) => [...P(X, Y), t, k]);
-    return (mapVec = { far, near, nearBox, trails: lines(TRAILS), rivers: lines(RIVERS), labels }); }
+    // берег Чолпон-Аты по OpenStreetMap: пляжи, дороги по классам, дома повёрнутыми прямоугольниками, деревья точками
+    const GX = (X) => (X - g.X0) / g.STEP, GY = (Y) => (g.Y1 - Y) / g.STEP, pts2 = (str) => { const n = str.split(',').map(Number), o = new Float32Array(n.length); for (let k = 0; k + 1 < n.length; k += 2) { o[k] = GX(n[k] * 2); o[k + 1] = GY(n[k + 1] * 2); } return o; };
+    const roads = [[], [], []]; for (const r of ROADS.split(';')) { const [c, rest] = r.split(':'); roads[+c].push(pts2(rest)); }
+    const beaches = BEACHES ? BEACHES.split(';').map(pts2) : [];
+    const Hh = i16(HOUSES), houses = []; for (let k = 0; k < Hh.length; k += 6) { const X = Hh[k] / 2, Y = Hh[k + 1] / 2, w = Hh[k + 2] / 20, d = Hh[k + 3] / 20, a = Hh[k + 5] / 10000, ca = Math.cos(a), sa = Math.sin(a), q = new Float32Array(8);
+      [[w, d], [-w, d], [-w, -d], [w, -d]].forEach(([u, v], m) => { q[m * 2] = GX(X + u * ca - v * sa); q[m * 2 + 1] = GY(Y + u * sa + v * ca); }); houses.push({ q, x: GX(X), y: GY(Y), c: (k * 2654435761 >>> 0) % 4, big: Hh[k + 4] >= 3 }); }
+    const Tt = i16(TREES), trees = new Float32Array((Tt.length / 4) * 3); for (let k = 0, m = 0; k < Tt.length; k += 4, m += 3) { trees[m] = GX(Tt[k] / 2); trees[m + 1] = GY(Tt[k + 1] / 2); trees[m + 2] = Tt[k + 2]; }
+    return (mapVec = { far, near, nearBox, trails: lines(TRAILS), rivers: lines(RIVERS), labels, roads, beaches, houses, trees }); }
   const mapWin = () => { const g = G.far.userData.grid, sw = g.W / mv.z, sh = g.H / mv.z; mv.cx = clamp(mv.cx, sw / 2, g.W - sw / 2); mv.cy = clamp(mv.cy, sh / 2, g.H - sh / 2); return { sx: mv.cx - sw / 2, sy: mv.cy - sh / 2, sw, sh }; };
   function drawMap() { mapRaf = 0; const g = G.far.userData.grid, cv = $('mapcv'), r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.max(1, Math.round((r.width || g.W) * dpr)), h = Math.round(w * g.H / g.W);
     if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
@@ -283,6 +292,17 @@ export function installExtra(A) {
     for (const o of vec.far) if (vis(o.bb)) { const sh0 = o.lv === 0; if (!sh0 && mv.z < 3 && Math.round(o.lv + 1601) % 1000) continue; /* издалека -- через 1000 м */ c.strokeStyle = sh0 ? 'rgba(8,24,52,.85)' : 'rgba(70,40,20,.42)'; c.lineWidth = (sh0 ? 1.4 : 0.8) * dpr; poly(o.p); }
     c.restore();
     if (nearOn) for (const o of vec.near) if (vis(o.bb)) { const asl = Math.round(o.lv + 1601), sh0 = o.lv === 0, maj = asl % 500 === 0; c.strokeStyle = sh0 ? 'rgba(8,24,52,.85)' : maj ? 'rgba(70,40,20,.5)' : 'rgba(70,40,20,.26)'; c.lineWidth = (sh0 ? 1.4 : maj ? 0.9 : 0.6) * dpr; poly(o.p); }
+    // берег по OSM: с 5x -- пляжи и главные дороги, с 9x -- улицы, с 14x -- дома, с 28x -- деревья и зонтики
+    const inView = (x, y, pad) => x > v.sx - pad && x < v.sx + v.sw + pad && y > v.sy - pad && y < v.sy + v.sh + pad;
+    if (mv.z >= 5) {
+      c.fillStyle = 'rgba(244,222,160,.9)'; c.strokeStyle = 'rgba(150,110,50,.55)'; c.lineWidth = 0.6 * dpr;
+      for (const p of vec.beaches) { if (!inView(p[0], p[1], 3)) continue; c.beginPath(); c.moveTo(X(p[0]), Y(p[1])); for (let q = 2; q < p.length; q += 2) c.lineTo(X(p[q]), Y(p[q + 1])); c.closePath(); c.fill(); c.stroke(); }
+      const RW = [2.6, 1.9, 1.2]; for (let rc = 2; rc >= 0; rc--) { if (rc === 2 && mv.z < 9) continue; const wv = RW[rc] * dpr * Math.min(1.8, Math.max(0.8, mv.z / 14));
+        for (const [col, ww] of [['rgba(80,55,30,.6)', wv + 1.4 * dpr], [rc === 0 ? '#ffe7a8' : '#fbf3de', wv]]) { c.strokeStyle = col; c.lineWidth = ww; for (const p of vec.roads[rc]) if (inView(p[0], p[1], 6)) poly(p); } } }
+    if (mv.z >= 14) { const RC = ['#3a6db4', '#2d8c68', '#b6413a', '#8b9097']; c.strokeStyle = 'rgba(20,25,35,.75)'; c.lineWidth = 0.6 * dpr;
+      for (const hh of vec.houses) { if (!inView(hh.x, hh.y, 0.2)) continue; const q = hh.q; c.fillStyle = hh.big ? '#e8e4da' : RC[hh.c]; c.beginPath(); c.moveTo(X(q[0]), Y(q[1])); for (let m = 2; m < 8; m += 2) c.lineTo(X(q[m]), Y(q[m + 1])); c.closePath(); c.fill(); c.stroke(); } }
+    if (mv.z >= 28) { const tr = vec.trees, rpx = (m) => Math.max(1.2 * dpr, (m / g.STEP) * k), TC = ['#2e5a1c', '#3d6e24', '#5d8f2c', '#1f4a2c', '#5b7a33', '#e2463a'], TR = [1.6, 3, 2.2, 2, 1.4, 1.2];
+      c.strokeStyle = 'rgba(15,30,10,.6)'; c.lineWidth = 0.5 * dpr; for (let m = 0; m < tr.length; m += 3) { if (!inView(tr[m], tr[m + 1], 0.05)) continue; const t = tr[m + 2]; c.fillStyle = TC[t]; c.beginPath(); c.arc(X(tr[m]), Y(tr[m + 1]), rpx(TR[t]), 0, 6.283); c.fill(); c.stroke(); } }
     if (mv.z >= 10) { c.setLineDash([5 * dpr, 3.5 * dpr]); c.strokeStyle = 'rgba(255,138,42,.9)'; c.lineWidth = 1.3 * dpr; for (const p of vec.trails) poly(p); c.setLineDash([]);
       c.strokeStyle = 'rgba(120,200,255,.85)'; c.lineWidth = 1 * dpr; for (const p of vec.rivers) poly(p); }
     // подписи: города -- всегда, ущелье -- ближе, озеро и хребты -- издалека
@@ -299,7 +319,7 @@ export function installExtra(A) {
   const redrawMap = () => { if (!mapRaf && !$('mapdlg').hidden) mapRaf = requestAnimationFrame(drawMap); };
   G.onTiles = () => { if (!$('mapdlg').hidden) redrawMap(); };
   // приблизить в f раз, удерживая точку экрана (px, py -- доли холста) на месте
-  function mapZoom(f, px, py) { const g = G.far.userData.grid, v = mapWin(), gx = v.sx + px * v.sw, gy = v.sy + py * v.sh; mv.z = clamp(mv.z * f, 1, 64);
+  function mapZoom(f, px, py) { const g = G.far.userData.grid, v = mapWin(), gx = v.sx + px * v.sw, gy = v.sy + py * v.sh; mv.z = clamp(mv.z * f, 1, 160);
     const sw = g.W / mv.z, sh = g.H / mv.z; mv.cx = gx - (px - 0.5) * sw; mv.cy = gy - (py - 0.5) * sh; redrawMap(); }
   function pickMap(ev) { const g = G.far.userData.grid, r = $('mapcv').getBoundingClientRect(), v = mapWin(), gx = v.sx + ((ev.clientX - r.left) / r.width) * v.sw, gy = v.sy + ((ev.clientY - r.top) / r.height) * v.sh;
     const X = g.X0 + gx * g.STEP, Y = g.Y1 - gy * g.STEP, h = G.h(X, Y), d = Math.hypot(X, Y) / 1000;

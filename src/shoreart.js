@@ -9,7 +9,7 @@ import { HOUSES, TREES, ROADS } from './shoredata.js';
 import { CURVE, END, ENV, GLSL_COMMON } from './world.js';
 import { makeInk, inkMaterial, INK_U } from './ridges.js';
 
-const i16 = (b64) => { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new Int16Array(u.buffer); };
+export const i16 = (b64) => { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new Int16Array(u.buffer); };
 // вид: 0 тополь, 1 круглая крона, 2 плодовое, 3 ель, 4 куст, 5 зонтик, 6 дом
 const TREE_SHAPE = [[0.3, 16, 4], [0.95, 9, 3], [0.95, 5.5, 2], [0.42, 13, 4], [1.7, 2.2, 1], [1.1, 2.6, 0.3]]; // ширина/высота, высота м, разброс м
 
@@ -80,14 +80,14 @@ void main(){
 }
 
 export function makeShoreArt(scene, h) {
-  const g = new THREE.Group(), H = i16(HOUSES), T = i16(TREES), nH = H.length / 5, nT = T.length / 4;
+  const g = new THREE.Group(), H = i16(HOUSES), T = i16(TREES), nH = H.length / 6, nT = T.length / 4;
   const geo = new THREE.PlaneGeometry(1, 1.06); geo.translate(0, 0.47, 0); // по высоте от -0.06 (низ эллипса) до 1
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const rows = [];
   for (let i = 0; i < nT; i++) { const X = T[i * 4] / 2, Y = T[i * 4 + 1] / 2, k = T[i * 4 + 2], s = T[i * 4 + 3] / 100, y = h(X, Y); if (k === 5 ? y < 0.25 : y < 0.8) continue;
     const [asp, hh, dv] = TREE_SHAPE[k], ht = (hh + (rnd() - 0.5) * 2 * dv) * s; rows.push([X, y - 0.25, Y, asp * ht, ht, k, rnd(), 0, 0]); }
-  for (let i = 0; i < nH; i++) { const X = H[i * 5] / 2, Y = H[i * 5 + 1] / 2, w = H[i * 5 + 2] / 10, d = H[i * 5 + 3] / 10, fl = H[i * 5 + 4], y = h(X, Y); if (y < 0.5) continue;
+  for (let i = 0; i < nH; i++) { const X = H[i * 6] / 2, Y = H[i * 6 + 1] / 2, w = H[i * 6 + 2] / 10, d = H[i * 6 + 3] / 10, fl = H[i * 6 + 4], y = h(X, Y); if (y < 0.5) continue;
     const face = Math.min(60, (w + d) * 0.55), wallH = fl * 3.1 + 0.8, roofH = fl <= 2 ? Math.min(5, Math.max(1.6, face * 0.32)) : 0, ht = wallH + roofH;
     rows.push([X, y - 0.8, Y, face / 2 * 2, ht, 6, rnd(), fl, roofH / ht]); }
   // участки по 1.5 км -- свои наборы экземпляров: что за спиной и вне кадра, не рисуется вовсе
