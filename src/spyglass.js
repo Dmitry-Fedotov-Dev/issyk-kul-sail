@@ -67,10 +67,12 @@ export function makeSpyglass({ G, camera, post, audio, store, ach, $, extra }) {
   function project(X, y, Y, W, H) { const d2 = (X - eye.x) ** 2 + (-Y - eye.z) ** 2; v3.set(X, y - d2 / R_EARTH, -Y); const dist = Math.sqrt(d2 + (y - eye.y) ** 2);
     const c = v3.clone().applyMatrix4(camera.matrixWorldInverse); if (c.z > -1) return null; v3.project(camera); return { x: (v3.x + 1) * W / 2, y: (1 - v3.y) * H / 2, dist }; }
   // закрыт ли рельефом: луч от глаза к цели (в «изогнутом» мире -- рельеф опускается так же, как цель)
-  function hidden(X, y, Y, dist) { const n = 28; for (let i = 1; i < n; i++) { const t = i / n; if (t * dist > dist - 400) break; const x = eye.x + (X - eye.x) * t, zz = eye.z + (-Y - eye.z) * t, d = t * dist;
-      const line = eye.y + (y - dist * dist / R_EARTH - eye.y) * t, ground = Math.max(0, G.h(x, -zz)) - d * d / R_EARTH; if (ground > line + 2) return true; } return false; }
+  // последние 10% пути не проверяем, допуск растёт с дальностью: точка вершины в OSM и макушка сглаженного рельефа
+  // расходятся на сотни метров, и соседний гребень того же массива не должен «закрывать» саму вершину
+  function hidden(X, y, Y, dist) { const n = 28; for (let i = 1; i < n; i++) { const t = i / n; if (t > 0.9 || t * dist > dist - 400) break; const x = eye.x + (X - eye.x) * t, zz = eye.z + (-Y - eye.z) * t, d = t * dist;
+      const line = eye.y + (y - dist * dist / R_EARTH - eye.y) * t, ground = Math.max(0, G.h(x, -zz)) - d * d / R_EARTH; if (ground > line + 15 + d * 0.003) return true; } return false; }
   // дальномер: где луч из центра упирается в рельеф (или в воду)
-  function range() { camera.getWorldDirection(v3); let d = 30; for (let i = 0; i < 90; i++, d *= 1.09) { const x = eye.x + v3.x * d, y = eye.y + v3.y * d, z = eye.z + v3.z * d, drop = d * d / R_EARTH;
+  function range(dn = 0) { camera.getWorldDirection(v3); if (dn) { v3.y -= dn; v3.normalize(); } let d = 30; for (let i = 0; i < 90; i++, d *= 1.09) { const x = eye.x + v3.x * d, y = eye.y + v3.y * d, z = eye.z + v3.z * d, drop = d * d / R_EARTH;
       if (y - drop < Math.max(0, G.h(x, -z))) return d; if (d > 150000) break; } return null; }
 
   function place(dt, b) {
@@ -112,9 +114,9 @@ export function makeSpyglass({ G, camera, post, audio, store, ach, $, extra }) {
       if (score < 1 && (!best || score < best.score) && !hidden(X, y, Y, dist)) best = { t, p, px, dist, score, X, Y, y }; }
     if (keep && (!best || best.score > keep.score * 0.5)) best = keep;
     const br = $('spybr'), lab = $('spylab');
-    if (!best) { s.lost = (s.lost || 0) + dt; if (s.lost > 0.35) { s.cand = null; s.prog = 0; br.hidden = true; if (!s.lock) lab.hidden = true; } // мгновенная потеря цели прощается
+    if (!best) { s.lost = (s.lost || 0) + dt; if (s.lost > 0.35) { s.cand = null; s.prog = 0; if (!s.lock) { lab.hidden = true; br.hidden = false; br.className = 'far'; Object.assign(br.style, { left: `${W / 2}px`, top: `${H / 2}px`, width: '34px', height: '34px' }); } } // мгновенная потеря прощается; пока ищем -- бледные уголки в центре
       // известной цели нет -- труба не молчит: через секунду зажатия -- высота и дальность того места, куда смотрим
-      if (s.holdT > 1.1 && !s.lock) { const d = range(); if (d) { camera.getWorldDirection(v3); const x = eye.x + v3.x * d, z = eye.z + v3.z * d, hh = G.h(x, -z);
+      if (s.holdT > 1.1 && !s.lock) { let d = range(); for (let k = 1; !d && k <= 6; k++) d = range(k * 0.004); if (d) { camera.getWorldDirection(v3); const x = eye.x + v3.x * d, z = eye.z + v3.z * d, hh = G.h(x, -z);
         br.hidden = false; br.className = 'far'; Object.assign(br.style, { left: `${W / 2}px`, top: `${H / 2}px`, width: '34px', height: '34px' });
         lab.hidden = false; lab.style.left = `${W / 2}px`; lab.style.top = `${H / 2 + 25}px`; lab.textContent = hh > 3 ? `без названия · ≈${(Math.round((hh + 1601) / 50) * 50).toLocaleString('ru-RU')} м · ${km(d)}` : `вода · ${km(d)}`; } } }
     else { s.lost = 0;
