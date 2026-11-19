@@ -71,14 +71,38 @@ export function makeAudio() {
   // ---- параплан ----
   // Вариометр как у настоящего прибора: набор -- короткие писки, тем чаще и выше, чем сильнее; спуск сильнее 2.5 м/с --
   // низкий гудок. Поток: гул по воздушной скорости, в болтанку -- рывками; хлопок ткани при подсложении.
-  let vNext = 0, sinkO = null, winchO = null;
-  function vario(v, on = true) { if (!ctx || ctx.state !== 'running') return; const t = ctx.currentTime;
-    if (on && v > 0.12 && t >= vNext) { const f = Math.min(1500, 640 + v * 150), per = 1 / Math.min(9, 2.2 + v * 1.4), d = per * 0.48;
-      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'square'; o.frequency.setValueAtTime(f, t); o.frequency.linearRampToValueAtTime(f * 1.04, t + d);
-      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t + 0.008); g.gain.setValueAtTime(0.06, t + d - 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-      o.connect(lp); lp.connect(g); g.connect(master); o.start(t); o.stop(t + d + 0.02); vNext = t + per; }
-    if (!sinkO) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sawtooth'; o.frequency.value = 260; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 700; g.gain.value = 0; o.connect(lp); lp.connect(g); g.connect(master); o.start(); sinkO = { o, g }; }
-    const sk = on && v < -2.5; set(sinkO.g.gain, sk ? Math.min(0.05, 0.02 + (-v - 2.5) * 0.008) : 0, 0.08); if (sk) set(sinkO.o.frequency, Math.max(140, 300 + (v + 2.5) * 25), 0.1); }
+  // Вариометр -- музыкой, а не писком: мягкие синтезаторные колокольчики в реверберации, по одной ноте из аккорда.
+  // В подъёме -- мажор (maj7, add9, 6/9, лидийский), в нисходящем потоке -- минор (m7, m9, sus). Каждый вход в поток --
+  // новая тональность и новая последовательность аккордов; чем сильнее поток -- тем чаще и выше ноты.
+  let winchO = null, mus = null;
+  const UP_CH = [[0, 4, 7, 11, 14], [0, 4, 7, 9, 14], [0, 4, 6, 11, 16], [0, 2, 7, 11, 16], [0, 4, 7, 14, 18]], UP_PROG = [[0, 5, 9, 7], [0, 9, 5, 7], [0, 7, 9, 5], [0, 5, 0, 7], [0, 4, 9, 5]];
+  const DN_CH = [[0, 3, 7, 10, 14], [0, 3, 7, 10, 17], [0, 5, 7, 10, 15], [0, 3, 7, 14]], DN_PROG = [[0, 8, 5, 7], [0, 5, 8, 10], [0, 10, 8, 7], [0, 3, 8, 5]];
+  const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12), pick = (a) => a[Math.floor(Math.random() * a.length)];
+  function musBus() { if (mus) return mus; const ir = ctx.createBuffer(2, ctx.sampleRate * 3, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3.2); }
+    const rev = ctx.createConvolver(); rev.buffer = ir; const wet = ctx.createGain(); wet.gain.value = 0.55; const dry = ctx.createGain(); dry.gain.value = 0.6; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3800;
+    const echo = ctx.createDelay(1); echo.delayTime.value = 0.37; const fb = ctx.createGain(); fb.gain.value = 0.32; echo.connect(fb); fb.connect(echo);
+    lp.connect(dry); lp.connect(rev); lp.connect(echo); echo.connect(rev); rev.connect(wet); dry.connect(master); wet.connect(master);
+    mus = { in: lp, mode: null, chordI: 0, notes: 0, next: 0, key: 60, prog: null, chs: null, last: -1 }; return mus; }
+  function harmony(up) { const m = mus; m.key = (up ? 57 : 50) + Math.floor(Math.random() * 9); m.prog = pick(up ? UP_PROG : DN_PROG).slice(); if (Math.random() < 0.5) m.prog.reverse();
+    m.chs = m.prog.map(() => pick(up ? UP_CH : DN_CH)); m.chordI = 0; m.notes = 0; m.last = -1; }
+  function bell(f, t, vol, len, bright) { const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), g2 = ctx.createGain();
+    o.type = 'sine'; o2.type = bright ? 'triangle' : 'sine'; o.frequency.value = f; o2.frequency.value = f * 2.001; o.detune.value = (Math.random() - 0.5) * 8;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.012 + Math.random() * 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    g2.gain.setValueAtTime(vol * 0.18, t); g2.gain.exponentialRampToValueAtTime(0.0001, t + len * 0.35);
+    o.connect(g); o2.connect(g2); g.connect(mus.in); g2.connect(mus.in); o.start(t); o2.start(t); o.stop(t + len + 0.05); o2.stop(t + len + 0.05); }
+  function vario(v, on = true) { if (!ctx || ctx.state !== 'running') return; const m = musBus(), t = ctx.currentTime;
+    const mode = !on ? null : v > 0.25 ? 'up' : v < -1.9 ? 'dn' : null;
+    if (mode !== m.mode) { if (mode && (!m.mode || mode !== m.mode)) { harmony(mode === 'up'); m.next = t + 0.05; } m.mode = mode; }
+    if (!mode || t < m.next) return;
+    const up = mode === 'up', a = up ? Math.min(1, v / 3) : Math.min(1, (-v - 1.9) / 3), ch = m.chs[m.chordI], root = m.key + m.prog[m.chordI];
+    // нота аккорда, не та же, что прошлая; в подъёме -- вверх по октавам с силой потока
+    let k; do k = Math.floor(Math.random() * ch.length); while (k === m.last && ch.length > 1); m.last = k;
+    const oct = up ? 12 * Math.floor(Math.random() * (1 + a * 1.8)) : -12 * (Math.random() < 0.4 ? 1 : 0), f = mtof(root + ch[k] + oct);
+    bell(f, t, (up ? 0.05 : 0.045) + 0.04 * a, up ? 1.8 + Math.random() * 1.6 : 2.6, up);
+    if (m.notes % 4 === 0) bell(mtof(root - 12), t, up ? 0.035 : 0.05, up ? 3.2 : 4, false); // бас -- корень аккорда
+    m.notes++; if (m.notes % (up ? 6 : 4) === 0) m.chordI = (m.chordI + 1) % m.prog.length;
+    const gap = up ? 0.62 - 0.38 * a : 0.95 - 0.3 * a; m.next = t + gap * (Math.random() < 0.18 ? 0.5 : 1) * (0.9 + Math.random() * 0.2); }
   function airflow(V, turb = 0, flap = 0, on = true) { if (!ctx || ctx.state !== 'running') return; const a = on ? V : 0, j = 1 + turb * 0.5 * Math.sin(ctx.currentTime * 23) * Math.sin(ctx.currentTime * 7.3);
     set(L.low.g.gain, Math.min(0.5, (0.02 + a * a * 0.0021) * j)); set(L.low.fl.frequency, 150 + a * 15); if (L.low.pan.pan) set(L.low.pan.pan, 0);
     set(L.mid.g.gain, Math.min(0.32, a * a * 0.0012 * j)); set(L.mid.fl.frequency, 380 + a * 40); set(L.whistle.g.gain, Math.min(0.1, Math.max(0, a - 12) ** 2 * 0.004), 0.25);
