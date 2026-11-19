@@ -242,7 +242,7 @@ void main(){ vec3 N=normalize(vN); float h=vH;
     if(dK>0.){ vec3 ink=vec3(0.07,0.08,0.12); float ip=0.;
       ip=max(ip, (1.-smoothstep(0.6,1.6,abs(fzw-0.5)/max(fwidth(fzw),1e-4)))*step(0.02,fz));                // контур леса
       ip=max(ip, (1.-smoothstep(0.6,1.6,abs(gz-0.5)/max(fwidth(gz),1e-4)))*step(0.02,lc.g)*0.8);             // контур ледника
-      float tK=1.-smoothstep(3.,7.,px); if(tK>0. && fM>0.5){ vec2 cc=floor(vP.xz/32.), fp=fract(vP.xz/32.)-0.5-(vec2(hash(cc),hash(cc+3.))-0.5)*0.4; float dd=length(fp)*32.;
+      float tK=(1.-smoothstep(3.,7.,px))*(1.-step(-15000.,vP.x)*step(vP.x,11000.)*step(-7000.,vP.z)*step(vP.z,2500.)); if(tK>0. && fM>0.5){ vec2 cc=floor(vP.xz/32.), fp=fract(vP.xz/32.)-0.5-(vec2(hash(cc),hash(cc+3.))-0.5)*0.4; float dd=length(fp)*32.;
         float tr=1.-smoothstep(6.-px,6.+px,dd); pcol=mix(pcol, pcol*vec3(0.62,0.75,0.72), tr*tK); ip=max(ip, (1.-smoothstep(0.,px*1.3,abs(dd-6.)))*tK*0.7); } // кроны точками
       float rz=sl0+(vnoise(vP.xz*0.02)-0.5)*0.22, fwR=max(fwidth(rz),1e-4), rM=smoothstep(0.52-fwR,0.52+fwR,rz)*smoothstep(500.,900.,h)*(1.-wh);
       pcol=mix(pcol, mix(shd,sunC*1.35,tone)*vec3(0.6,0.56,0.64), rM*0.85); ip=max(ip, (1.-smoothstep(0.6,1.6,abs(rz-0.52)/fwR))*smoothstep(500.,900.,h)*(1.-wh)); // скалы

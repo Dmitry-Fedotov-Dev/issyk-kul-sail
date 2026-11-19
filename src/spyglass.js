@@ -56,9 +56,9 @@ export function makeSpyglass({ G, camera, post, audio, store, ach, $, extra }) {
     document.body.classList.add('spy'); $('spy').hidden = false; audio.spy && audio.spy(true); counter();
     if (!store.get('spyHelp')) { store.set('spyHelp', 1); $('spyhelp').hidden = false; setTimeout(() => { $('spyhelp').hidden = true; }, 6500); } }
   // опознание -- только пока зажат палец или кнопка мыши (без сдвига): через полсекунды выезжают уголки
-  function holdStart() { if (!s.on) return; s.hold = true; s.holdT = 0; s.prog = 0; s.lock = null; s.cand = null; s.tick = 0; }
+  function holdStart() { if (!s.on) return; s.hold = true; s.holdT = 0; s.prog = 0; s.lock = null; s.cand = null; s.tick = 0; s.lost = 0; s.show = 0; $('spybr').hidden = true; $('spylab').hidden = true; $('spylab').textContent = ''; }
   function holdEnd() { if (!s.hold) return; s.hold = false; s.show = s.lock ? 2.2 : 0; if (!s.lock) { $('spybr').hidden = true; $('spylab').hidden = true; } }
-  function close() { if (!s.on) return; s.on = false; s.hold = false; s.show = 0; camera.near = 0.5; camera.updateProjectionMatrix(); document.body.classList.remove('spy'); $('spy').hidden = true; $('spybr').hidden = true; $('spylab').hidden = true; if (post && post.setSpy) post.setSpy(0, 0); audio.spy && audio.spy(false); }
+  function close() { if (!s.on) return; s.on = false; s.hold = false; s.show = 0; G.player.model.root.visible = true; camera.near = 0.5; camera.updateProjectionMatrix(); document.body.classList.remove('spy'); $('spy').hidden = true; $('spybr').hidden = true; $('spylab').hidden = true; if (post && post.setSpy) post.setSpy(0, 0); audio.spy && audio.spy(false); }
   function pan(dx, dy) { const fov = fovRad(), k = fov / Math.max(240, window.innerHeight); s.yaw -= dx * k; s.pitch = Math.max(-0.35, Math.min(0.6, s.pitch + dy * k)); s.panV += Math.hypot(dx, dy) * k; s.still = 0; }
   function zoomBy(f) { const z0 = s.zoomT; s.zoomT = Math.max(2, Math.min(24, s.zoomT * f)); for (const d of [4, 8, 12, 16, 20]) if ((z0 - d) * (s.zoomT - d) < 0) { audio.tick && audio.tick(1400 + d * 30); s.f = Math.max(s.f, 0.55); } s.still = 0; }
   const fovRad = () => 2 * Math.atan(Math.tan((56 * Math.PI) / 360) / s.zoom);
@@ -87,7 +87,9 @@ export function makeSpyglass({ G, camera, post, audio, store, ach, $, extra }) {
     camera.position.copy(eye); camera.up.set(0, 1, 0); camera.lookAt(eye.x + Math.sin(yaw) * cp, eye.y + Math.sin(pit), eye.z - Math.cos(yaw) * cp); camera.rotateZ(-b.phi * 0.12);
     // ближняя плоскость отодвинута: своя палуба в окуляр не видна, а точность глубины на 40 км -- метры, а не 190 м
     // (иначе дальняя и ближняя сетки рельефа «спорят» и на южном берегу всё мерцает)
-    camera.near = 20; camera.fov = (fovRad() * 180) / Math.PI; if (camera.view && camera.view.enabled) camera.clearViewOffset(); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+    G.player.model.root.visible = false; // своя лодка в окуляр не попадает (и не режется ближней плоскостью)
+    // ближняя плоскость -- как можно дальше (точность глубины вдали), но не ближе воды у нижнего края кадра
+    const low = Math.max(0.01, fovRad() / 2 - pit); camera.near = Math.max(0.5, Math.min(20, (0.6 * Math.max(1, eye.y)) / Math.tan(low))); camera.fov = (fovRad() * 180) / Math.PI; if (camera.view && camera.view.enabled) camera.clearViewOffset(); camera.updateProjectionMatrix(); camera.updateMatrixWorld();
     if (post && post.setSpy) post.setSpy(s.a, Math.min(1.4, Math.abs(s.f)));
     hud(dt, amp);
   }
@@ -98,20 +100,28 @@ export function makeSpyglass({ G, camera, post, audio, store, ach, $, extra }) {
     if (!s.hold) { if (s.show > 0) { s.show -= dt; if (s.show <= 0) { br0.hidden = true; lab0.hidden = true; s.lock = null; } else lab0.style.opacity = String(Math.min(1, s.show / 0.6)); } return; }
     s.holdT += dt; lab0.style.opacity = '1'; if (s.holdT < 0.5) return; // полсекунды тишины: случайное касание ничего не показывает
     const W = window.innerWidth, H = window.innerHeight, Rpx = Math.min(W, H) * 0.46, f = (H / 2) / Math.tan(fovRad() / 2);
-    let best = null;
+    let best = null, keep = null; const cid = s.cand && s.cand.t.id;
     for (const t of targets()) { let X, Y, y; if (t.obj) { t.obj.getWorldPosition(v3); X = v3.x; Y = -v3.z; y = v3.y + (t.size > 20 ? t.size * 0.15 : 1.2); } else { X = t.X; Y = t.Y; y = t.y; }
       const dist = Math.hypot(X - eye.x, -Y - eye.z); if (dist < 25 || dist > (t.peak ? 110000 : 14000)) continue;
       const p = project(X, y, Y, W, H); if (!p) continue; const off = Math.hypot(p.x - W / 2, p.y - H / 2); if (off > Rpx * 0.95) continue;
       const px = (t.size / dist) * f; // размер цели в окуляре, пикселей
       const score = off / Math.max(30, Math.min(px * 0.6, Rpx * 0.3));
-      if (score < (t.peak ? 0.6 : 1) && (!best || score < best.score) && !hidden(X, y, Y, dist)) best = { t, p, px, dist, score, X, Y, y }; }
+      // захват держится: цель, которую уже наводят, остаётся, пока не уйдёт из прицела заметно (иначе от дрожи рук
+      // ближайшая из соседних вершин меняется каждый кадр и наводка сбрасывается)
+      if (t.id === cid && score < 1.6 && !hidden(X, y, Y, dist)) keep = { t, p, px, dist, score, X, Y, y };
+      if (score < 1 && (!best || score < best.score) && !hidden(X, y, Y, dist)) best = { t, p, px, dist, score, X, Y, y }; }
+    if (keep && (!best || best.score > keep.score * 0.5)) best = keep;
     const br = $('spybr'), lab = $('spylab');
-    if (!best) { s.cand = null; s.prog = Math.max(0, s.prog - dt * 2); br.hidden = true; if (!s.lock) lab.hidden = true; }
-    else {
+    if (!best) { s.lost = (s.lost || 0) + dt; if (s.lost > 0.35) { s.cand = null; s.prog = 0; br.hidden = true; if (!s.lock) lab.hidden = true; } // мгновенная потеря цели прощается
+      // известной цели нет -- труба не молчит: через секунду зажатия -- высота и дальность того места, куда смотрим
+      if (s.holdT > 1.1 && !s.lock) { const d = range(); if (d) { camera.getWorldDirection(v3); const x = eye.x + v3.x * d, z = eye.z + v3.z * d, hh = G.h(x, -z);
+        br.hidden = false; br.className = 'far'; Object.assign(br.style, { left: `${W / 2}px`, top: `${H / 2}px`, width: '34px', height: '34px' });
+        lab.hidden = false; lab.style.left = `${W / 2}px`; lab.style.top = `${H / 2 + 25}px`; lab.textContent = hh > 3 ? `без названия · ≈${(Math.round((hh + 1601) / 50) * 50).toLocaleString('ru-RU')} м · ${km(d)}` : `вода · ${km(d)}`; } } }
+    else { s.lost = 0;
       const same = s.cand && s.cand.t.id === best.t.id && s.cand.t.name === best.t.name; s.cand = best; if (!same) { s.prog = 0; s.lock = null; s.tick = 0; }
       const small = best.px < 13; // не разглядеть: надо больше кратности
       const steady = Math.max(0, 1 - amp / 0.006) * Math.max(0, 1 - s.panV * 25);
-      if (!small && !s.lock) { s.prog = Math.min(1, s.prog + dt * (0.6 + 1.4 * steady)); const q = Math.floor(s.prog * 6); if (q > s.tick) { s.tick = q; audio.tick && audio.tick(800 + q * 160, 0.03); } }
+      if (!small && !s.lock) { s.prog = Math.min(1, s.prog + dt * (1.1 + 0.9 * steady)); const q = Math.floor(s.prog * 6); if (q > s.tick) { s.tick = q; audio.tick && audio.tick(800 + q * 160, 0.03); } }
       if (s.prog >= 1 && !s.lock) lockOn(best);
       const sz = Math.max(26, Math.min(Rpx * 0.7, best.px * 1.15)) * (s.lock ? 1 : 1 + 0.9 * (1 - s.prog));
       br.hidden = false; br.className = s.lock ? 'lock' : small ? 'far' : ''; Object.assign(br.style, { left: `${best.p.x}px`, top: `${best.p.y}px`, width: `${sz}px`, height: `${sz}px` });
@@ -141,5 +151,5 @@ export function makeSpyglass({ G, camera, post, audio, store, ach, $, extra }) {
       return got.map((t) => `<span class="on">${t.name}</span>`).join('') + `<span>ещё ${l.length - got.length} — ищите в трубу</span>`; };
     el.innerHTML = `<h3>Атлас подзорной трубы · ${all.filter((t) => found.has(t.id)).length}/${all.length}</h3>` + Object.entries(cats).map(([c, l]) => `<div class="acat">${c}</div><div class="achips">${chips(c, l)}</div>`).join(''); }
 
-  return { _s: s, targets, holdStart, holdEnd, get on() { return s.on; }, open, close, toggle() { if (s.on) close(); else open(); }, pan, zoomBy, place, renderAtlas };
+  return { _s: s, _hidden: (X, y, Y) => hidden(X, y, Y, Math.hypot(X - eye.x, -Y - eye.z)), targets, holdStart, holdEnd, get on() { return s.on; }, open, close, toggle() { if (s.on) close(); else open(); }, pan, zoomBy, place, renderAtlas };
 }

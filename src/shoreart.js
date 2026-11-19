@@ -79,6 +79,20 @@ void main(){
   gl_FragColor=vec4(applyFog(col, length(vW-cameraPosition), vW.y),1.);` + END + '}' });
 }
 
+function shadowMaterial() {
+  return new THREE.ShaderMaterial({ uniforms: { ...ENV, uRes: INK_U.uRes }, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    vertexShader: CURVE + /* glsl */`uniform vec3 uSun; uniform vec2 uRes; attribute vec3 aN; varying vec2 vU; varying float vF;
+void main(){ vec3 c=(instanceMatrix*vec4(0.,0.,0.,1.)).xyz; float sx=length(instanceMatrix[0].xyz), sy=length(instanceMatrix[1].xyz), dist=length(cameraPosition-c);
+  if(sy*projectionMatrix[1][1]*0.5*uRes.y/max(dist,1.)<2.5){ gl_Position=vec4(2.,2.,2.,1.); return; }
+  vec3 n=normalize(aN), sd=normalize(vec3(-uSun.x,0.,-uSun.z)+1e-4); vec3 t1=normalize(sd-n*dot(sd,n)), t2=cross(n,t1);
+  float L=clamp(sy*0.55*length(uSun.xz)/max(uSun.y,0.12), sx*0.7, sx*3.2);           // длина тени -- от высоты солнца
+  vec3 p=c+n*0.12+t1*(position.y*L+L*0.5-sx*0.25)+t2*position.x*sx*0.95;
+  vU=position.xy*2.; vF=1.-smoothstep(5000.,14000.,dist);
+  p.y-=curve(p); gl_Position=projectionMatrix*viewMatrix*vec4(p,1.); }`,
+    fragmentShader: /* glsl */`uniform float uSunI, uStorm, uDay; varying vec2 vU; varying float vF;
+void main(){ float d=length(vU), a=(1.-smoothstep(0.55,1.,d))*0.32*uSunI*(1.-uStorm)*smoothstep(0.2,0.6,uDay)*vF; if(a<0.01) discard; gl_FragColor=vec4(0.08,0.1,0.18,a); }` });
+}
+
 export function makeShoreArt(scene, h) {
   const g = new THREE.Group(), H = i16(HOUSES), T = i16(TREES), nH = H.length / 6, nT = T.length / 4;
   const geo = new THREE.PlaneGeometry(1, 1.06); geo.translate(0, 0.47, 0); // по высоте от -0.06 (низ эллипса) до 1
@@ -96,6 +110,13 @@ export function makeShoreArt(scene, h) {
   for (const tr of tiles.values()) { const tg = geo.clone(), mesh = new THREE.InstancedMesh(tg, mat, tr.length), aK = new Float32Array(tr.length * 4);
     tr.forEach((r, i) => { pos.set(r[0], r[1], -r[2]); scl.set(r[3], r[4], 1); m4.compose(pos, q, scl); mesh.setMatrixAt(i, m4); aK.set([r[5], r[6] * 100, r[7], r[8]], i * 4); });
     tg.setAttribute('aK', new THREE.InstancedBufferAttribute(aK, 4)); mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 60; sprites.add(mesh); }
+  // тени: плоский овал на склоне под каждым предметом, вытянут от солнца (в полдень короткий), гаснет ночью и в шторм.
+  // Без них спрайты будто висят над землёй. Свой набор экземпляров на участок, рисуется после рельефа, глубину не пишет
+  const smat = shadowMaterial(), N = new THREE.Vector3(), sgeo = new THREE.PlaneGeometry(1, 1);
+  for (const tr of tiles.values()) { const mesh = new THREE.InstancedMesh(sgeo.clone(), smat, tr.length), aN = new Float32Array(tr.length * 3);
+    tr.forEach((r, i) => { pos.set(r[0], r[1] + (r[5] === 6 ? 0.8 : 0.25), -r[2]); scl.set(r[3], r[4], 1); m4.compose(pos, q, scl); mesh.setMatrixAt(i, m4);
+      const e = 3, X = r[0], Y = r[2]; N.set(h(X - e, Y) - h(X + e, Y), 2 * e, -(h(X, Y - e) - h(X, Y + e))).normalize(); aN.set([N.x, N.y, N.z], i * 3); });
+    mesh.geometry.setAttribute('aN', new THREE.InstancedBufferAttribute(aN, 3)); mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 60; mesh.renderOrder = 1; sprites.add(mesh); }
   g.add(sprites);
   // ---- тушь: урез (двойной: берег тёмным, полоса прибоя на воде светлым) и дороги
   const lines = (lv, x0, x1, y0, y1, st) => { const nx = Math.round((x1 - x0) / st), ny = Math.round((y1 - y0) / st), v = new Float32Array((nx + 1) * (ny + 1));
