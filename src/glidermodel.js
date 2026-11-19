@@ -104,7 +104,7 @@ export function makeGlider(pal = [0xff6a1a, 0x1d3f8f, 0x16243a], suit = 0x22303f
   const top = new THREE.Mesh(geos[0], mTop), bot = new THREE.Mesh(geos[1], mBot); for (const m of [top, bot]) { m.castShadow = true; m.frustumCulled = false; wingG.add(m); }
   // ---- стропы: каскад ----
   // точки крепления на нижней поверхности: ряды A, B, C, D по нервюрам через одну ячейку; тормозные -- на задней кромке
-  const ROWS = [{ s: 0.06, col: 0xc98a7a, rz: -0.07 }, { s: 0.3, col: 0xcdb98a, rz: -0.02 }, { s: 0.55, col: 0x8fa5bf, rz: 0.03 }, { s: 0.76, col: 0x98b59c, rz: 0.07 }]; // приглушённые цвета рядов
+  const ROWS = [{ s: 0.07, col: 0x8a4a3c, rz: -0.06 }, { s: 0.36, col: 0x7d6a3e, rz: 0 }, { s: 0.66, col: 0x3e5470, rz: 0.06 }]; // минимальный набор: ряды A, B, C (тёмные, как настоящие стропы)
   const ribs = []; for (let j = 0; j < NCOL; j += 4) { const u = (j / (NCOL - 1)) * 2 - 1; if (Math.abs(u) > 0.02 && Math.abs(u) < 0.995) ribs.push(j); }
   const rowK = (s) => { let k = 0; while (k < NROW - 1 && sSpace(k) < s) k++; return k; };
   const segs = []; // [от, до] -- ссылки на точки: {v: индекс вершины низа} или {node}
@@ -112,23 +112,22 @@ export function makeGlider(pal = [0xff6a1a, 0x1d3f8f, 0x16243a], suit = 0x22303f
   const risers = {}; // верх свободных концов (в осях подвески)
   for (const sx of [-1, 1]) {
     ROWS.forEach((R, ri) => { const rt = { p: V3(sx * (0.2 + ri * 0.012), 0.48, R.rz) }; risers[`${sx}${ri}`] = rt;
-      const pts = ribs.filter((j) => Math.sign((j / (NCOL - 1)) * 2 - 1) === sx).map((j) => ({ v: j * NROW + rowK(R.s) }));
-      if (sx < 0) pts.reverse(); // от центра к законцовке
-      const ups = []; for (let i = 0; i < pts.length; i += 3) { const kids = pts.slice(i, i + 3), n = node(kids, rt, 0.3); ups.push(n); for (const k of kids) segs.push([k, n, R.col]); }
-      const mains = []; for (let i = 0; i < ups.length; i += 2) { const kids = ups.slice(i, i + 2), n = node(kids, rt, 0.55); mains.push(n); for (const k of kids) segs.push([k, n, R.col]); }
-      for (const m of mains) segs.push([m, rt, R.col]); });
+      // каскад 4 -> 2 -> 1: четыре точки на куполе (по размаху своей половины), два узла, одна основная стропа к свободному концу
+      const pts = [0.12, 0.38, 0.62, 0.86].map((uu) => { const j = Math.round(((sx * uu + 1) / 2) * (NCOL - 1)); return { v: j * NROW + rowK(R.s) }; });
+      const ups = [node(pts.slice(0, 2), rt, 0.35), node(pts.slice(2, 4), rt, 0.35)]; ups.forEach((n, i) => { for (const k of pts.slice(i * 2, i * 2 + 2)) segs.push([k, n, R.col]); });
+      const main = node(ups, rt, 0.55); for (const k of ups) segs.push([k, main, R.col]); segs.push([main, rt, R.col]); });
     // тормозные: задняя кромка внешних двух третей размаха -> узлы -> основная -> ручка
     const hand = { p: V3(sx * 0.3, 0.6, 0.12) }; risers[`${sx}b`] = hand;
-    const te = []; for (let j = 0; j < NCOL; j += 3) { const u = (j / (NCOL - 1)) * 2 - 1; if (Math.sign(u) === sx && Math.abs(u) > 0.22 && Math.abs(u) < 0.995) te.push({ v: j * NROW + NROW - 1 }); }
-    const bu = []; for (let i = 0; i < te.length; i += 4) { const kids = te.slice(i, i + 4), n = node(kids, hand, 0.25); bu.push(n); for (const k of kids) segs.push([k, n, 0xd9a07a]); }
-    const bm = node(bu, hand, 0.55); for (const k of bu) segs.push([k, bm, 0xd9a07a]); segs.push([bm, hand, 0xd9a07a]); }
+    const te = [0.3, 0.52, 0.72, 0.92].map((uu) => ({ v: Math.round(((sx * uu + 1) / 2) * (NCOL - 1)) * NROW + NROW - 1 }));
+    const bu = [node(te.slice(0, 2), hand, 0.3), node(te.slice(2, 4), hand, 0.3)]; bu.forEach((n, i) => { for (const k of te.slice(i * 2, i * 2 + 2)) segs.push([k, n, 0xc8642a]); });
+    const bm = node(bu, hand, 0.55); for (const k of bu) segs.push([k, bm, 0xc8642a]); segs.push([bm, hand, 0xc8642a]); }
   const lp = new Float32Array(segs.length * 6), lc = new Float32Array(segs.length * 6);
   segs.forEach((sg, i) => { const c = new THREE.Color(sg[2]); for (let q = 0; q < 2; q++) { lc[i * 6 + q * 3] = c.r; lc[i * 6 + q * 3 + 1] = c.g; lc[i * 6 + q * 3 + 2] = c.b; } });
   const lgeo = new THREE.BufferGeometry(); lgeo.setAttribute('position', new THREE.BufferAttribute(lp, 3)); lgeo.setAttribute('color', new THREE.BufferAttribute(lc, 3));
-  const lines = new THREE.LineSegments(lgeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false })); lines.frustumCulled = false; pivot.add(lines);
+  const lines = new THREE.LineSegments(lgeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false })); lines.renderOrder = 3; lines.frustumCulled = false; pivot.add(lines); // после воды (иначе озеро ложится поверх), без записи глубины -- без жирной обводки
   // свободные концы (ленты) и ручки клевант
   const web = mat(0x1d1f24, 0.8), strap = [], toggles = [];
-  for (const sx of [-1, 1]) { for (let ri = 0; ri < 4; ri++) { const m = new THREE.Mesh(G_LIMB, mat(ROWS[ri].col, 0.7)); m.castShadow = true; pivot.add(m); strap.push({ m, sx, ri }); }
+  for (const sx of [-1, 1]) { for (let ri = 0; ri < 3; ri++) { const m = new THREE.Mesh(G_LIMB, mat(ROWS[ri].col, 0.7)); m.castShadow = true; pivot.add(m); strap.push({ m, sx, ri }); }
     const tg = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.012, 6, 14), mat(0xff8a00, 0.5)); pivot.add(tg); toggles.push(tg);
     const kb = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.008, 6, 12), mat(0xc9ced6, 0.25, { metalness: 0.9 })); kb.position.set(sx * 0.2, 0.0, 0); kb.rotation.y = Math.PI / 2; pivot.add(kb); }
   // ---- пилот ----
@@ -175,7 +174,7 @@ export function makeGlider(pal = [0xff6a1a, 0x1d3f8f, 0x16243a], suit = 0x22303f
         p[n * 3] = x; p[n * 3 + 1] = y; p[n * 3 + 2] = z; }
       geos[side].attributes.position.needsUpdate = true; if (frame % 2 === 0) geos[side].computeVertexNormals(); }
     // свободные концы: акселератор тянет передние ряды вниз и чуть вперёд
-    for (const R in risers) { if (R.endsWith('b')) continue; const ri = +R.slice(-1), sx = +R.slice(0, -1); risers[R].p.set(sx * (0.92 + ri * 0.01), 1.12 - (g.bar || 0) * (ri === 0 ? 0.13 : ri === 1 ? 0.08 : 0), ROWS[ri].rz - (g.bar || 0) * 0.03 * (3 - ri)); } // к свободным концам Дымка
+    for (const R in risers) { if (R.endsWith('b')) continue; const ri = +R.slice(-1), sx = +R.slice(0, -1); risers[R].p.set(sx * (0.92 + ri * 0.01), 1.12 - (g.bar || 0) * (ri === 0 ? 0.13 : ri === 1 ? 0.08 : 0), ROWS[ri].rz - (g.bar || 0) * 0.03 * (2 - ri)); } // к свободным концам Дымка
     for (const sx of [-1, 1]) { const b = sx < 0 ? bL : bR; risers[`${sx}b`].p.set(sx * 0.95, 0.75 - 0.55 * b, 0.12); }
     // узлы каскада: среднее своих строп, подтянутое к свободному концу
     for (const n of nodes) { tw.set(0, 0, 0); for (const k of n.kids) tw.add(k.v !== undefined ? vp(k.v) : k.p); tw.multiplyScalar(1 / n.kids.length); n.p.copy(tw).lerp(n.toward.p, n.t); }
