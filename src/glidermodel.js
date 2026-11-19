@@ -158,7 +158,7 @@ export function makeGlider(pal = [0xff6a1a, 0x1d3f8f, 0x16243a], suit = 0x22303f
   const setEmo = (k) => { const S = sheet[k] || sheet.content; sm2.map = S.tex; spr.scale.set(S.W * PXM, S.H * PXM, 1); spr.center.set(0.5, 1 - S.seatY / S.H); emoNow = k; };
   setEmo('content'); root.add(spr); pilot.visible = false;
   const tv = V3(0, 0, 0), tw = V3(0, 0, 0), sh = V3(0, 0, 0), el = V3(0, 0, 0), hd = V3(0, 0, 0), vp = (v) => tv.set(pos[1][v * 3], pos[1][v * 3 + 1], pos[1][v * 3 + 2]);
-  let frame = 0; const PINV = new THREE.Matrix4();
+  let frame = 0, stand = 0; const PINV = new THREE.Matrix4();
   // ---- форма в кадре ----
   function shape(g, t, full) {
     const up = clamp(g.wingUp ?? 1, 0, 1), fl = 0.25 + 0.75 * up, cs = g.colSide || 0, cf = g.col || 0, fr = g.front || 0, st = g.stall ? 1 : 0, flut = (g.turb || 0) * 0.03 + cf * 0.04 + (g.gustFx || 0) * 0.07, bL = g.L || 0, bR = g.R || 0;
@@ -190,7 +190,8 @@ export function makeGlider(pal = [0xff6a1a, 0x1d3f8f, 0x16243a], suit = 0x22303f
   return {
     root, pivot, canopy: top,
     update(g, dt, t, near = true) { frame++; const standing = g.mode === 'landed' || g.mode === 'launch' || (g.mode === 'tow' && (g.wingUp ?? 1) < 1);
-      root.position.set(g.X, g.Z + (standing ? 1.0 : 0.15), -g.Y); root.rotation.set(0, -g.th, -(g.phi || 0) * 0.92);
+      stand += ((standing ? 1 : 0) - stand) * Math.min(1, dt * 3.5); // из стойки в подвеску -- за полсекунды, без скачка
+      root.position.set(g.X, g.Z + 0.15 + 0.85 * stand, -g.Y); root.rotation.set(0, -g.th, -(g.phi || 0) * 0.92);
       const upW = clamp(g.wingUp ?? 1, 0, 1), th = g.mode === 'air' ? 0 : Math.max(0, -(g.pitch || 0));
       pivot.rotation.set(-(g.pitch || 0), 0, (g.mode === 'air' ? 0 : (g.wingOff || 0) * 0.5) + (g.phi || 0) * 0.08);
       wingG.rotation.x = -th * (1 - upW * 0.6); wingG.position.y = -(1 - upW) * 1.1; lines.rotation.copy(wingG.rotation); lines.position.copy(wingG.position);
@@ -200,7 +201,7 @@ export function makeGlider(pal = [0xff6a1a, 0x1d3f8f, 0x16243a], suit = 0x22303f
       shape(g, t, near || frame % 4 === 0);
       const emo = g.col || g.front || g.stall || g.spin || (g.gustFx || 0) > 0.55 ? 'surprised' : g.mode === 'launch' || g.mode === 'tow' ? 'curious' : g.mode === 'landed' ? (g.landed && g.landed.q === 'soft' ? 'joy' : 'content')
         : g.vario > 0.8 ? 'joy' : g.vario < -2.4 ? 'sad' : 'content'; if (emo !== emoNow) setEmo(emo);
-      sm2.rotation = -(g.phi || 0) * 0.35; spr.position.set(0, standing ? -0.85 : 0.0 + Math.sin(t * 2.3) * 0.03, 0); },
+      sm2.rotation = -(g.phi || 0) * 0.35; spr.position.set(0, -0.85 * stand + (1 - stand) * Math.sin(t * 2.3) * 0.03, 0); },
     fp(on) { spr.visible = !on; },
   };
 }

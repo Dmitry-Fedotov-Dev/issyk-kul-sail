@@ -112,7 +112,7 @@ export function makeParaMode(A) {
     show(true); G.player = P; G.race = null; G.race2 = null; G.rv = null; R = null; F = null; lift.length = 0; air.list.length = 0; W.trail.reset(); BR.run = 0; BR.total = 0; BR.mult = 1; air.setSky(G.preset); G.clockK = 0.12;
     if (G.clock === undefined || G.clock < 10.5 || G.clock > 16.5) G.clock = 12; // летают днём: термики в силе
     document.body.classList.add('para'); document.body.classList.toggle('feel', !inst); document.body.classList.remove('motor'); $('ts').textContent = 'аксель'; $('mark').hidden = true; $('brief').hidden = true;
-    G.mode = 'para'; A.showGame(true); A.resetView(); G.cam = G.cam === 1 ? 0 : G.cam; G.modeT = 0; hold.L = hold.R = hold.B = hold.F = 0; }
+    G.mode = 'para'; ctInit = false; A.showGame(true); A.resetView(); G.cam = G.cam === 1 ? 0 : G.cam; G.modeT = 0; hold.L = hold.R = hold.B = hold.F = 0; }
   const sunK = () => (G.wx ? G.wx.sun : 1) * smooth(0.05, 0.45, SUN.y);
   function upwind() { return Math.atan2(-G.wind.sx, -G.wind.sy); } // курс против ветра
   function winchAt(X, Y) { let a = upwind(); for (let k = 0; k < 8; k++) { const t = a + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35, x = X + Math.sin(t) * 1000, y = Y + Math.cos(t) * 1000; if (G.h(x, y) > 2) { a = t; break; } }
@@ -237,7 +237,7 @@ export function makeParaMode(A) {
       else if (t === 'release') { audio.thump(0.4); toast(ev.why === 'weaklink' ? 'Лок-аут: слабое звено лопнуло!' : `Отцепка на ${Math.round(ev.agl)} м`); if (ev.agl > 350) ach('p_tow'); audio.winch(false); }
       else if (t === 'inflate') audio.rustle(1);
       else if (t === 'wingDown') { audio.rustle(0.7); toast(`Крыло завалилось. ${TOUCH ? '«аксель»' : 'Пробел'} — ещё раз`); }
-      else if (t === 'takeoff') { audio.rustle(0.6); toast('Взлёт!'); ach('p_foot'); }
+      else if (t === 'takeoff') { audio.rustle(0.6); audio.gust && audio.gust(1.1); flash('Взлёт!'); ach('p_foot'); lift0 = 1; BR.slow = 0.7; } // момент отрыва: короткое замедление, порыв в ушах, камера отъезжает
       else if (t === 'touch') landed(e, ev); }
     if (e.spOk && G.t - e.spOk > 2.5) { if (!g.front) ach('p_spiral'); e.spOk = 0; }
     g.events.length = 0; }
@@ -329,15 +329,21 @@ export function makeParaMode(A) {
     if ((g.air.ridge || 0) > 0.5 && g.agl < 450 && g.vario > -0.2) { F.ridgeT += dt; if (F.ridgeT > 120) ach('p_ridge'); } else F.ridgeT = Math.max(0, F.ridgeT - dt * 0.5); }
 
   // ---------- камера ----------
-  function cam(dt) { const g = P.g, root = P.model.root;
+  // камера ведёт точку обзора и дистанцию плавно (пружиной), а взлёт -- событие: отъезд назад и вверх, шире обзор
+  const CT = new THREE.Vector3(), CV = new THREE.Vector3(); let ctInit = false, camD = 15, lift0 = 0, ctTo = new THREE.Vector3();
+  function cam(dt) { const g = P.g, root = P.model.root; if (lift0 > 0) lift0 = Math.max(0, lift0 - dt / 2.2);
     G.camYaw += wrapPi((g.mode === 'landed' ? G.camYaw + dt * 0.15 : g.th) - G.camYaw) * Math.min(1, dt * 1.5); const yaw = G.camYaw + G.orbit, fx = Math.sin(yaw), fz = -Math.cos(yaw);
     G.shake = Math.max(0, G.shake - dt * 1.6); const tq = (g.turb || 0) * 0.12 + gust * 0.2, sh = G.shake * G.shake, jx = (Math.random() - 0.5) * sh * 0.4 + Math.sin(G.t * 3.1) * Math.sin(G.t * 1.7) * tq, jy = (Math.random() - 0.5) * sh * 0.4 + Math.sin(G.t * 2.3 + 1) * tq * 0.7; // воздух живой: камеру покачивает болтанкой и порывами
     P.model.fp(G.cam === 1);
     if (G.cam === 1) { C3.set(0, 0.92, 0.2); root.localToWorld(C3); camera.position.copy(C3); camera.quaternion.copy(root.quaternion); camera.rotateY(-G.orbit); camera.rotateX(0.32 - G.orbitP * 0.8); camera.rotateZ(jx * 0.05); camera.fov = clamp(78 * G.zoom, 35, 100); }
     else { const top = G.cam === 2, d = (top ? 75 : 15 + g.V * 0.25) * G.zoom, el = clamp((top ? 0.55 : 0.14) + G.orbitP, -0.35, 1.45), ce = Math.cos(el), se = Math.sin(el);
-      const tx = g.X, ty = g.Z + (g.mode === 'air' || g.mode === 'tow' ? 0.6 + 2.6 * smooth(0.2, 0.9, G.zoom) : 1.5), tz = -g.Y; // вблизи камера смотрит на пилота, издали -- на всё крыло
-      camera.position.set(tx - fx * d * ce + jx, ty + d * se + jy, tz - fz * d * ce); const gy = Math.max(0, G.h(camera.position.x, -camera.position.z)) + 2.5; if (camera.position.y < gy) camera.position.y = gy;
-      camera.lookAt(tx, ty, tz); if (!top) camera.rotateZ(-(g.phi || 0) * (inst ? 0.22 : 0.38) * Math.cos(G.orbit) + jx * 0.04); camera.fov += ((top ? 50 : 60) - camera.fov) * Math.min(1, dt * 3); }
+      ctTo.set(g.X, g.Z + (g.mode === 'air' || g.mode === 'tow' ? 0.6 + 2.6 * smooth(0.2, 0.9, G.zoom) : 1.5), -g.Y); // вблизи камера смотрит на пилота, издали -- на всё крыло
+      if (!ctInit || CT.distanceTo(ctTo) > 60) { CT.copy(ctTo); CV.set(0, 0, 0); ctInit = true; } // переключение места -- сразу
+      else { const k = 9, z = 2 * Math.sqrt(k); CV.addScaledVector(ctTo.clone().sub(CT), k * dt).multiplyScalar(Math.max(0, 1 - z * dt)); CT.addScaledVector(CV, dt); CT.lerp(ctTo, Math.min(1, dt * 1.2)); } // критически задемпфированная пружина
+      const pulse = Math.sin(Math.min(1, lift0) * Math.PI) * (lift0 > 0 ? 1 : 0); camD += (d * (1 + 0.35 * pulse) - camD) * Math.min(1, dt * 2.5);
+      const tx = CT.x, ty = CT.y, tz = CT.z, dd = camD, el2 = el + 0.12 * pulse, ce2 = Math.cos(el2), se2 = Math.sin(el2);
+      camera.position.set(tx - fx * dd * ce2 + jx, ty + dd * se2 + jy, tz - fz * dd * ce2); const gy = Math.max(0, G.h(camera.position.x, -camera.position.z)) + 2.5; if (camera.position.y < gy) camera.position.y = gy;
+      camera.lookAt(tx, ty, tz); if (!top) camera.rotateZ(-(g.phi || 0) * (inst ? 0.22 : 0.38) * Math.cos(G.orbit) + jx * 0.04); camera.fov += ((top ? 50 : 60 + 9 * pulse) - camera.fov) * Math.min(1, dt * 3); }
     if (camera.view && camera.view.enabled) camera.clearViewOffset(); camera.updateProjectionMatrix(); }
 
   // ---------- приборы ----------
