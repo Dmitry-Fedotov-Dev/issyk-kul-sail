@@ -7,6 +7,7 @@ import { makeSpray, makeWake, WAKE_LIGHT } from './fx.js';
 import { makeAudio } from './audio.js';
 import { installExtra } from './extra.js';
 import { makeSpyglass } from './spyglass.js';
+import { makeShoreArt } from './shoreart.js';
 import { makePost, postSupported } from './post.js';
 import { RIVER_HOLES } from './rivermode.js';
 import { makeRidges, setRidgeRes } from './ridges.js';
@@ -80,6 +81,7 @@ async function init() {
   await loadStep(56, 'Наливаем озеро…');
   const water = makeWater(tex, 1); scene.add(water.mesh);
   const before = new Set(scene.children), shore = makeShore(h, scene), shoreObjs = scene.children.filter((o) => !before.has(o));
+  const shoreArt = makeShoreArt(scene, hA); // берег Чолпон-Аты по OpenStreetMap: дома, аллеи, сады, зонтики, тушь уреза и дорог
   const hb = (x, y) => Math.max(hA(x, y), shore.pierH(x, y)); // дно + причал: то, обо что можно удариться
   const wind = new Wind(PRESETS.santash, hA), waves = new Waves();
   const spray = makeSpray(); scene.add(spray.mesh);
@@ -89,7 +91,7 @@ async function init() {
   const rivals = [], ensureRivals = () => { if (!rivals.length) rivals.push(mk({ hull: 0xf4f3ee, accent: '#1f6fd0', text: 'KGZ 21' }, 'Ала-Тоо', 0.95), mk({ hull: 0xe9c33c, accent: '#20242b', text: 'KGZ 4' }, 'Манас', 0.9), mk({ hull: 0x2f8f5a, accent: '#f4f3ee', text: 'KGZ 33' }, 'Чайка', 0.86)); };
   const marks = { W: makeMark(0xff7a1a), L: makeMark(0xffd21f), pin: makeMark(0xff3b30), com: makeMark(0x2f7de2) };
   for (const k in marks) { marks[k].visible = false; scene.add(marks[k]); }
-  G = { lake, mapObjs: [nearT, far, ...shoreObjs], ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
+  G = { shoreArt, lake, mapObjs: [nearT, far, ...shoreObjs], ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
     cam: 0, camYaw: 0, orbit: 0, orbitP: 0, zoom: 1, orbitV: 0, shake: 0, hintT: 0, free: null, toastT: 0, frame: 0, slow: 0 };
   if (!PRESETS[G.preset]) G.preset = 'santash';
   X = installExtra({ mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),

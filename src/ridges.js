@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { CURVE, END, MAP } from './world.js';
 
 const U = { uRes: { value: new THREE.Vector2(1280, 720) }, uK: { value: 1 } };
+export const INK_U = U; // размер кадра в пикселях -- и для спрайтов берега (shoreart.js)
 export function setRidgeRes(w, h) { U.uRes.value.set(w, h); U.uK.value = Math.max(0.75, h / 720); }
 
 // гребни на регулярной сетке высот hs (W x H, шаг step м); mask -- какие клетки рассматривать
