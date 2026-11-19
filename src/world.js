@@ -461,6 +461,34 @@ void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
 }
 
 // ---------- берег: тополя, дома, пансионаты, причал яхт-клуба ----------
+function poplarMaterial() {
+  return new THREE.ShaderMaterial({ defines: { ...QUALITY_DEFS[0] }, uniforms: { ...ENV },
+    vertexShader: CURVE + `uniform vec3 uSun; varying vec2 vU; varying vec3 vC, vW; varying float vSide, vFront, vE;
+void main(){ vec3 c=(instanceMatrix*vec4(0.,0.,0.,1.)).xyz; float sx=length(instanceMatrix[0].xyz), sy=length(instanceMatrix[1].xyz);
+  vec3 d=cameraPosition-c; vec2 h=normalize(d.xz+1e-4); vec3 r=vec3(h.y,0.,-h.x); // вправо от зрителя, по горизонтали
+  vec3 p=c+r*position.x*sx+vec3(0.,position.y*sy,0.);
+  vU=uv; vW=p; vSide=dot(r,uSun); vFront=dot(vec3(h.x,0.,h.y),uSun);
+  #ifdef USE_INSTANCING_COLOR
+  vC=instanceColor;
+  #else
+  vC=vec3(0.2,0.35,0.15);
+  #endif
+  // основание конуса в перспективе: полуось эллипса = радиус * синус угла, под которым смотрим сверху
+  vE=clamp(0.5*sx*abs(d.y)/max(length(d),1.)/sy, 0.012, 0.075);
+  p.y-=curve(p); gl_Position=projectionMatrix*viewMatrix*vec4(p,1.); }`,
+    fragmentShader: GLSL_COMMON + `varying vec2 vU; varying vec3 vC, vW; varying float vSide, vFront, vE;
+void main(){ float x=(vU.x-0.5)*2., y=-0.08+vU.y*1.08, yb=0.04, t=(y-yb)/(1.-yb);
+  float hw=pow(max(1.-t,0.),0.82); bool crown=t>=0. && abs(x)<hw, base=t<0. && x*x+pow((yb-y)/vE,2.)<1.;
+  if(!crown && !base) discard;
+  float w=crown ? hw : 1., nx=clamp(x/max(w,1e-3),-1.,1.), nz=sqrt(1.-nx*nx);           // нормаль конуса по ширине
+  float L=0.5+0.5*(nx*vSide+nz*max(vFront,-0.3)+0.25*uSun.y);
+  vec3 col=vC*(0.55+1.35*L)*(0.86+0.28*vnoise(vec2(vU.x*7.,vU.y*34.)+vC.xy*91.));      // листва пятнами
+  if(base) col*=0.62;                                                                     // низ кроны в тени
+  else col*=mix(0.7,1.,smoothstep(0.,0.12,t));
+  col*=mix(0.08,1.,uDay)*mix(1.,0.75,uStorm);
+  gl_FragColor=vec4(applyFog(col, length(vW-cameraPosition), vW.y),1.);` + END + '}' });
+}
+
 export function makeShore(h, scene) {
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
@@ -471,8 +499,11 @@ export function makeShore(h, scene) {
 
   // пирамидальные тополя -- силуэт иссык-кульского берега
   const pop = scatter(4200, 90000, (X, Y, y) => y > 1.8 && y < 170 && rnd() < (0.25 + town(X, Y)) * (y < 60 ? 1 : 0.35));
-  const pg = new THREE.CylinderGeometry(0.25, 1.7, 1, 6); pg.translate(0, 0.5, 0);
-  inst(pg, lam(0xffffff), pop, (p) => { const s = 0.7 + rnd() * 0.8; dummy.position.set(p[0], p[1] - 0.5, -p[2]); dummy.scale.set(s * 1.5, (11 + rnd() * 10) * s, s * 1.5); dummy.rotation.set(0, rnd() * 6, 0); col.setHSL(0.27 + rnd() * 0.06, 0.42 + rnd() * 0.2, 0.11 + rnd() * 0.08); });
+  // Тополь -- плоский спрайт, всегда повёрнутый к зрителю (вокруг вертикали), с силуэтом конуса: боковины сходятся
+  // к верхушке, низ -- дуга эллипса, как основание конуса в перспективе (чем выше смотрим, тем круглее). Объём --
+  // освещением «как у конуса» по ширине. Два треугольника на дерево вместо 24 у прежнего 3D-конуса.
+  const pg = new THREE.PlaneGeometry(1, 1.08); pg.translate(0, 0.46, 0); // по высоте: от -0.08 (низ эллипса) до 1 (верхушка)
+  inst(pg, poplarMaterial(), pop, (p) => { const s = 0.7 + rnd() * 0.8; dummy.position.set(p[0], p[1] - 0.5, -p[2]); dummy.scale.set(s * 1.5 * 3.4, (11 + rnd() * 10) * s, 1); dummy.rotation.set(0, 0, 0); col.setHSL(0.27 + rnd() * 0.06, 0.42 + rnd() * 0.2, 0.11 + rnd() * 0.08); });
   // причал яхт-клуба: идём от точки старта на север до берега
   let py = 0; while (h(0, py) < -1.6 && py < 3000) py += 4;
   const pier = new THREE.Group(), wood = lam(0xa8845c), L = 150;
