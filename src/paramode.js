@@ -12,6 +12,7 @@ import { Air, Glider, aiPilot, aiLand, WING } from './para.js';
 import { makeGlider } from './glidermodel.js';
 import { makeClouds, makeBirds, makeCylinder, makeWinch, makeWindsock, makeTarget, makeShadow, makeTowLine, makeAirDust, makeTrail, makeVector } from './paramodel.js';
 import { MODEL } from './craftmodels.js';
+import { playToon } from './paratoon.js';
 import { SUN } from './world.js';
 import { clamp, smooth, wrapPi, DEG } from './sim.js';
 
@@ -127,7 +128,9 @@ export function makeParaMode(A) {
     F.z0 = g.Z; P.leg = 0; P.time = 0;
     // в небе ещё трое местных: они кружат в термиках -- по ним видно, где подъём
     const focus = [{ X, Y }]; air.seed(focus, sunK()); rivals.forEach((e, i) => { if (i > 2) { e.model.root.visible = false; e.active = false; return; } placeAI(e, X + (i - 1) * 900, Y + 1200 + i * 400, 450 + i * 120); e.free = true; e.active = true; });
-    G.camYaw = g.th; coachStart(); }
+    G.camYaw = g.th; coachStart();
+    // мультфильм-инструктаж перед каждым свободным полётом; мир стоит, пока он идёт
+    G.freeze = true; playToon({ audio, TOUCH, onDone: () => { G.freeze = false; input.left = input.right = input.bar = input.flare = input.ease = false; } }); }
   function placeAI(e, X, Y, agl) { const z = Math.max(0, G.h(X, Y)) + agl; e.g.reset(X, Y, z, Math.random() * 6.28, 'air'); e.mem = {}; e.leg = 0; e.time = 0; e.done = false; e.out = null; e.model.root.visible = true; e.wp = null; }
   function startRace() { begin(); coach = null; coachDraw(); const S = AIRPORT, g = P.g; R = mkTask(); R.t = -45; R.over = false; R.beep = 99;
     const z = Math.max(0, G.h(S.X, S.Y)) + 480; g.reset(S.X - 300, S.Y - 250, z, upwind(), 'air');
@@ -143,7 +146,7 @@ export function makeParaMode(A) {
       let len = 0, x = S.X, y = S.Y; for (const t of pick) { len += Math.hypot(t[1] - x, t[2] - y); x = t[1]; y = t[2]; } len += Math.hypot(goal.X - x, goal.Y - y);
       const eff = len - 1200 - n * 800 - 300, sc = Math.abs(eff - 5500) + Math.random() * 400; if (!best || sc < best.sc) best = { sc, len, eff, tps: pick }; }
     const tps = best.tps.map((t) => ({ name: t[0], X: t[1], Y: t[2], R: 400 })); return { S, rS: 1200, tps, goal, len: best.eff }; }
-  function stop() { if (!on) return; on = false; coach = null; if ($('p_coach')) $('p_coach').hidden = true; if (briefHtml !== null) { $('brief').querySelector('p').innerHTML = briefHtml; } $('brief').hidden = true; show(false); for (const r of rivals) r.model.root.visible = false; document.body.classList.remove('para'); G.clockK = 1; audio.vario(0, false); audio.airflow(0, 0, 0, false); audio.winch(false); $('ts').textContent = 'шкот'; R = null; F = null; }
+  function stop() { if (!on) return; on = false; G.freeze = false; const tn = document.getElementById('toon'); if (tn) tn.remove(); coach = null; if ($('p_coach')) $('p_coach').hidden = true; if (briefHtml !== null) { $('brief').querySelector('p').innerHTML = briefHtml; } $('brief').hidden = true; show(false); for (const r of rivals) r.model.root.visible = false; document.body.classList.remove('para'); G.clockK = 1; audio.vario(0, false); audio.airflow(0, 0, 0, false); audio.winch(false); $('ts').textContent = 'шкот'; R = null; F = null; }
 
   // ---------- управление игрока ----------
   // Держите клеванту дольше -- тянете глубже: короткое нажатие -- поправка курса, удержание -- вираж около 30°,
