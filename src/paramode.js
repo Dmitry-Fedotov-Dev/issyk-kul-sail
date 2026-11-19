@@ -67,7 +67,7 @@ function drawRose(cv, fromDeg) { const x = cv.getContext('2d'), Wd = cv.width, H
 
 export function makeParaMode(A) {
   const { G, scene, camera, $, store, toast, audio, TOUCH, input } = A;
-  let inst = store.get('paraInst') === 1, gust = 0, uAvg = 0, uPrev = 0, gustHit = 0, mood = 0; // inst -- приборы; по умолчанию полёт «на чувствах»
+  let inst = store.get('paraInst') !== 0, gust = 0, uAvg = 0, uPrev = 0, gustHit = 0, mood = 0; // inst -- приборы (компас, высота, вариометр); по умолчанию включены, I -- скрыть
   let helpOn = store.get('paraHelp') !== 0, near = null, bT = 0; // подсказки: видимый воздух, след, вектор, радар потоков
   let on = false, P = null, air = null, rivals = [], R = null, F = null, built = false, W = null, field = null, prevPlayer = null;
   const hold = { L: 0, R: 0, B: 0, F: 0, dL: false, dR: false, lastL: -9, lastR: -9, pl: false, pr: false };

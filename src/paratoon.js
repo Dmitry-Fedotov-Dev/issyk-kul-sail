@@ -104,7 +104,7 @@ export function playToon({ audio, TOUCH, onDone }) {
       key(330, 300, '↓', fl, 70); if (k >= 1) { bubble(px + 30, py - 120, 'МЯГКО!', '#e9f8de'); for (let i = 0; i < 6; i++) { const a = i + t * 3; x.fillStyle = '#ffd447'; x.beginPath(); x.arc(px + Math.cos(a) * 70, py - 40 + Math.sin(a) * 30, 6, 0, 6.283); x.fill(); } }
       caption(K('Летите к метке «поле» — там крест на пляже. Развернитесь против ветра. В двух метрах над землёй нажмите ↓ — крыло затормозит, и касание будет мягким.', 'Летите к метке «поле» — там крест на пляже. Развернитесь против ветра. У самой земли коснитесь обеих половин экрана — касание будет мягким.')); } },
     { t: 99, draw(t) { sunburst(W / 2, 330, t); banner('ГОТОВЫ? ПОЕХАЛИ!', 48); pilot(W / 2, 330 + wobble(t * 3, 5), 2.2, { thumb: true });
-      x.save(); x.font = "700 20px Georgia,serif"; x.fillStyle = INK; x.textAlign = 'center'; x.fillText(K('H — полосы воздуха · I — приборы · R — новый старт', 'Удачного полёта!'), W / 2, 540); x.restore(); } },
+      x.save(); x.font = "700 20px Georgia,serif"; x.fillStyle = INK; x.textAlign = 'center'; x.fillText(K('H — полосы воздуха · I — скрыть приборы · R — новый старт', 'Удачного полёта!'), W / 2, 540); x.restore(); } },
   ];
 
   // ---------- плёнка ----------
