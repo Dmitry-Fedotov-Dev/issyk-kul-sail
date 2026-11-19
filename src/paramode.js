@@ -127,10 +127,12 @@ export function makeParaMode(A) {
   function startFree(at) { begin(); const g = P.g; F = { t: 0, gain: 0, ridgeT: 0, colT: 0, landT: 0, how: '', maxZ: 0, z0: 0, res: null, again: at };
     let X = AIRPORT.X, Y = AIRPORT.Y, how = 'winch';
     const site = SITES[store.get('paraSite')] || SITES.airport; F.site = site;
-    if (!at) { const h = findHill(site); X = h.X; Y = h.Y; how = 'foot'; F.grad = h.grad; }
-    else { X = at.X; Y = at.Y; const e = 60, gx = (G.h(X + e, Y) - G.h(X - e, Y)) / (2 * e), gy = (G.h(X, Y + e) - G.h(X, Y - e)) / (2 * e); how = !at.land ? 'boat' : Math.hypot(gx, gy) > 0.16 ? 'foot' : 'winch'; F.grad = [gx, gy]; }
+    if (!at && store.get('paraSite') === 'winch') { how = 'winch'; F.site = { name: 'буксир на полосе аэродрома' }; } // лебёдка тянет с полосы
+    else if (!at) { const h = findHill(site); X = h.X; Y = h.Y; how = 'foot'; F.grad = h.grad; }
+    else { X = at.X; Y = at.Y; const e = 60, gx = (G.h(X + e, Y) - G.h(X - e, Y)) / (2 * e), gy = (G.h(X, Y + e) - G.h(X, Y - e)) / (2 * e); how = !at.land ? 'airdrop' : Math.hypot(gx, gy) > 0.16 ? 'foot' : 'winch'; F.grad = [gx, gy]; }
     F.how = how; const gz = Math.max(0, G.h(X, Y));
     if (how === 'winch') { const w = winchAt(X, Y); g.reset(X, Y, gz, w.th, 'tow'); g.startTow({ X: w.X, Y: w.Y, Z: Math.max(0, G.h(w.X, w.Y)), max: 420 }); W.winch.visible = true; W.winch.position.set(w.X, Math.max(0, G.h(w.X, w.Y)), -w.Y); W.winch.rotation.y = -w.th; toast(`Лебёдка: ${at ? at.label : AIRPORT.name}. Держите крыло по тросу`); }
+    else if (how === 'airdrop') { const z = 500 + Math.random() * 1500; g.reset(X, Y, z, upwind() + Math.PI, 'air'); W.winch.visible = false; toast(`Над озером, ${Math.round(z)} м над водой — до берега дотянете?`); } // над озером -- сразу в воздухе
     else if (how === 'boat') { const th = upwind(); g.reset(X, Y, 0.5, th, 'tow'); g.startTow({ X: X + Math.sin(th) * 160, Y: Y + Math.cos(th) * 160, Z: 0, vx: Math.sin(th) * 9, vy: Math.cos(th) * 9, max: 300 }); W.winch.visible = false; W.boat.root.visible = true; toast('Буксировка за катером. Держите крыло по тросу'); }
     else { const [gx, gy] = F.grad, down = Math.atan2(-gx, -gy), into = upwind(), th = Math.abs(wrapPi(into - down)) < 0.6 ? into : down; g.reset(X, Y, gz, th, 'launch'); g.startLaunch(); W.winch.visible = false; toast(`Старт: ${F.site.name}, ${Math.round(gz + 1601)} м`); }
     F.z0 = g.Z; P.leg = 0; P.time = 0;
