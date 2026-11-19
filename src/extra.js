@@ -191,10 +191,13 @@ export function installExtra(A) {
 
   // ---------- сплав ----------
   function startRiver() { leaveModes(); G.mode = 'river'; G.race = null; setPlayer('kayak'); if (!river) river = makeRiver(scene, G.far.userData.heightAt); river.show(true);
-    flow.at = river.flowAt; flow.surf = river.surf; flow.rough = river.rough; const p = river.startPose(); A.placeBoat(G.player, p.X, p.Y, p.th, 1.5); G.player.b.y = p.z; G.player.b.base = p.z; show(G.player, true);
+    river.regen(); flow.at = river.flowAt; flow.surf = river.surf; flow.rough = river.rough; const p = river.startPose(); A.placeBoat(G.player, p.X, p.Y, p.th, 1.5); G.player.b.y = p.z; G.player.b.base = p.z; show(G.player, true);
     A.showGame(true); A.setRivals(false); $('race').hidden = false; $('brief').hidden = true; G.camYaw = p.th; A.resetView(); G.rv = { t: 0, hits: 0, over: false, cool: 0 }; G.modeT = 0;
     toast(`${river.name}: ${Math.round(river.len / 10) * 10} м, перепад ${Math.round(river.drop)} м`); }
-  function stepRiver(dt, b) { const rv = G.rv, pr = river.progress(b.X, b.Y); river.tick(G.t); rv.pr = pr; rv.cool -= dt; if (!rv.over) rv.t += dt;
+  const ZTXT = { 'струя': 'Струя — несёт!', 'улово': 'Улово — течение назад', 'шивера': 'Шивера — болтает', 'бочка': 'Бочка! Гребите сильнее', 'тиховодье': 'Тиховодье' };
+  function stepRiver(dt, b) { const rv = G.rv, pr = river.progress(b.X, b.Y);
+    rv.holeT = pr.zone === 'бочка' ? (rv.holeT || 0) + dt : 0; if (rv.holeT > 5) { rv.holeT = 0; const d = river.down(b.X, b.Y); b.X += d.x * 7; b.Y += d.y * 7; b.vx += d.x * 2; b.vy += d.y * 2; toast('Бочка отпустила!'); audio.splash(0.6); } // застрял -- вал выплёвывает вниз
+    if (pr.zone !== rv.zone) { rv.zone = pr.zone; rv.zT = (rv.zT || 0); if (G.t - rv.zT > 1.2 && rv.t > 1) { rv.zT = G.t; toast(ZTXT[pr.zone]); if (pr.zone === 'бочка') { G.shake = Math.max(G.shake, 0.4); audio.splash(0.5); } } } river.tick(G.t); rv.pr = pr; rv.cool -= dt; if (!rv.over) rv.t += dt;
     const hit = !b.capsized && river.hitRock(b);
     // камень всегда выталкивает лодку и гасит встречную скорость (она соскальзывает вбок); «касание» считается не чаще раза в секунду
     if (hit) { b.X += hit.nx * hit.pen; b.Y += hit.ny * hit.pen; const vn = b.vx * hit.nx + b.vy * hit.ny; if (vn < 0) { b.vx -= 1.2 * vn * hit.nx; b.vy -= 1.2 * vn * hit.ny; } }
@@ -475,7 +478,7 @@ export function installExtra(A) {
     hud() { const R = G.race2, P = G.player;
       if (R) { const c = P.course[Math.min(P.leg, P.course.length - 1)], fw = (e) => (e.b ? (e.b.X - R.S.X) * R.dir.x + (e.b.Y - R.S.Y) * R.dir.y : -5e3), all = [...R.all, ...onlineRows(R, false)].sort((a, b) => (b.leg - a.leg) || (fw(b) - fw(a)));
         txt('rtime', A.fmt(R.over ? P.time : R.t)); txt('rinfo', R.t < 0 ? 'до старта' : `${c.label} ${Math.hypot(c.X - P.b.X, c.Y - P.b.Y).toFixed(0)} м · ${all.indexOf(P) + 1}/${all.length}`); }
-      else if (G.rv) { const pr = G.rv.pr; txt('rtime', A.fmt(G.rv.t)); txt('rinfo', pr ? `до финиша ${Math.max(0, river.len - pr.s).toFixed(0)} м · уклон ${(pr.slope * 100).toFixed(0)}% · камней: ${G.rv.hits}` : ''); } },
+      else if (G.rv) { const pr = G.rv.pr; txt('rtime', A.fmt(G.rv.t)); txt('rinfo', pr ? `${pr.zone} · до финиша ${Math.max(0, river.len - pr.s).toFixed(0)} м · уклон ${(pr.slope * 100).toFixed(0)}% · камней: ${G.rv.hits}` : ''); } },
     hint(b, T) { const id = b.kind, key = TOUCH ? `«${SPECS[id].key}»` : 'пробел';
       const jk = TOUCH && b.spec.cls === 'motor' ? 'джойстик' : key;
       if (b.capsized) return [b.righting || b.noRight > 0 ? '' : { kayak: `Оверкиль! Держите ${key} — эскимосский переворот`, scull: `Перевернулись. Держите ${key} — забираемся в лодку`, sup: `Упали с доски. Держите ${key} — забираемся обратно`, jetski: `Сбросило. Держите ${jk} — забираемся на гидроцикл`, boat: `Держите ${jk}` }[id], true];
