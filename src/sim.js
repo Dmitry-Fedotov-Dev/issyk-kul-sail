@@ -120,6 +120,10 @@ export const BOAT = {
 };
 const W = { x: 0, y: 0, speed: 0, dir: 0 }, WS = { h: 0, sx: 0, sz: 0 };
 
+// Ближайшая точка с глубиной не меньше need: кольца вокруг лодки. Нужна, когда склон дна ведёт в мелкую «ямку»
+// (бухта, ложбина за косой), где по уклону на глубину не выйти и лодка застряла бы навсегда.
+export function deepTarget(terrainH, X, Y, need) { for (let r = 15; r < 6000; r *= 1.25) for (let k = 0; k < 32; k++) { const a = (k / 32) * 6.2832, x = X + Math.sin(a) * r, y = Y + Math.cos(a) * r; if (-terrainH(x, y) > need) return { X: x, Y: y }; } return null; }
+
 export class Boat {
   constructor() { this.events = []; this.skill = 1; this.reset(0, 0, 0); }
   reset(X, Y, th) {
@@ -223,7 +227,7 @@ export class Boat {
     if (Math.abs(this.phi) > 60 * DEG) { this.capsized = true; this.rightHold = 0; this.righting = 0; ev.push({ type: 'capsize' }); }
 
     this.X += this.vx * dt; this.Y += this.vy * dt; this.u = u; this.vs = vs;
-    if (terrainH && -terrainH(this.X, this.Y) < B.draft) { this.aground = true; this.agT = 0; ev.push({ type: 'aground', speed: this.speed }); }
+    if (terrainH && -terrainH(this.X, this.Y) < B.draft) { this.aground = true; this.agT = 0; this.agTgt = null; ev.push({ type: 'aground', speed: this.speed }); }
   }
 
   stepCapsized(dt, inp, u, vs, fx, fy, rx, ry) {
@@ -246,9 +250,11 @@ export class Boat {
     this.agT += dt; this.vx = this.vy = 0; this.r = 0; this.power = 0;
     this.phi += (0.25 * Math.sign(this.phi || 1) - this.phi) * Math.min(1, 2 * dt); this.p = 0;
     if (this.agT < 1.2) return;
-    const e = 6, gx = terrainH(this.X + e, this.Y) - terrainH(this.X - e, this.Y), gy = terrainH(this.X, this.Y + e) - terrainH(this.X, this.Y - e);
-    const n = Math.hypot(gx, gy) || 1, dx = -gx / n, dy = -gy / n;
-    this.X += dx * 5 * dt; this.Y += dy * 5 * dt;
+    // по уклону дна; не снялись за 4 с -- прямо к ближайшей достаточной глубине
+    if (this.agT > 4 && !this.agTgt) this.agTgt = deepTarget(terrainH, this.X, this.Y, BOAT.draft + 2);
+    let dx, dy; if (this.agTgt) { const ex = this.agTgt.X - this.X, ey = this.agTgt.Y - this.Y, d = Math.hypot(ex, ey) || 1; dx = ex / d; dy = ey / d; }
+    else { const e = 6, gx = terrainH(this.X + e, this.Y) - terrainH(this.X - e, this.Y), gy = terrainH(this.X, this.Y + e) - terrainH(this.X, this.Y - e), n = Math.hypot(gx, gy) || 1; dx = -gx / n; dy = -gy / n; }
+    const vs = this.agTgt ? 10 : 5; this.X += dx * vs * dt; this.Y += dy * vs * dt; // к найденной глубине -- быстрее: отмель бывает широкой
     this.th = wrapPi(this.th + clamp(wrapPi(Math.atan2(dx, dy) - this.th), -1.2 * dt, 1.2 * dt));
     if (-terrainH(this.X, this.Y) > BOAT.draft + 1.4) { this.aground = false; this.phi = 0; this.events.push({ type: 'refloat' }); }
   }
