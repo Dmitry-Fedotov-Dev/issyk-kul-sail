@@ -24,7 +24,7 @@ const km = (m) => (m >= 1000 ? `${(m / 1000).toFixed(m >= 10000 ? 0 : 1)} км` 
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 const CSS = `
-body.para #speed,body.para #wear{display:none}
+body.para #speed>b,body.para #speed>small,body.para #pos,body.para #wear{display:none}body.para #speed{top:136px}body.para.feel #speed{top:14px}body.para #tools{margin-top:0} /* кнопки (меню, камера, друзья, труба) остаются под приборами */
 body.para.feel #phud,body.para.feel #p_var,body.para.feel #p_brk,body.para.feel #dialwrap{display:none}
 #p_mood{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .6s,background .6s}
 body.para #brief{left:50%;right:auto;top:50%;bottom:auto;transform:translate(-50%,-50%);width:min(340px,86vw)}body.para #brief canvas{width:100%;height:auto}
