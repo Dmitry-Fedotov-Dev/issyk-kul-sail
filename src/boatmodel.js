@@ -168,6 +168,8 @@ export function makeBoat(opts = {}) {
   const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.062, MH, 10), spar); mast.position.set(0, MH / 2 + MB, MZ); tilt.add(mast);
   const boomG = new THREE.Group(); boomG.position.set(0, 1.95, MZ); tilt.add(boomG);
   const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 3.45, 8), spar); boom.rotation.x = Math.PI / 2; boom.position.z = 1.74; boomG.add(boom);
+  // взятый риф: опущенная часть грота свёрнута и подвязана вдоль гика
+  const reefRoll = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 3.2, 10), new THREE.MeshStandardMaterial({ color: 0xeceff2, roughness: 0.8 })); reefRoll.rotation.x = Math.PI / 2; reefRoll.position.set(0, 0.1, 1.7); reefRoll.visible = false; boomG.add(reefRoll);
   for (const sd of [-1, 1]) { const sp = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.018, 0.62, 6), spar); sp.rotation.z = Math.PI / 2; sp.rotation.y = -sd * 0.28; sp.position.set(sd * 0.3, 6.1, MZ + 0.08); tilt.add(sp); }
   // стоячий такелаж
   const cp = (sd) => V(sd * 1.04, sheer(0.42), MZ + 0.32), tip = (sd) => V(sd * 0.6, 6.1, MZ + 0.17);
@@ -227,10 +229,11 @@ export function makeBoat(opts = {}) {
     vane.rotation.y = -b.awa + Math.PI; // остриём к ветру
     shp.setXYZ(0, Math.sin(b.boom) * 2.9, 1.9, MZ + Math.cos(b.boom) * 2.9); shp.setXYZ(1, 0, sheer(0.8) - 0.3, zAt(0.8)); shp.needsUpdate = true;
     ft += dt * (14 + b.aws * 1.6);
-    const luff = b.capsized ? 0 : b.luff, side = b.boom >= 0 ? 1 : -1, pw = clamp(b.aws / 9, 0.25, 1.2);
+    const luff = b.capsized ? 0 : b.luff, side = b.boom >= 0 ? 1 : -1, pw = clamp(b.aws / 9, 0.25, 1.2), hf = b.reef === undefined ? 1 : b.reef; // hf -- доля высоты грота (риф)
+    reefRoll.visible = hf < 0.97; if (reefRoll.visible) { const rr = 0.05 + 0.13 * Math.sqrt(1 - hf); reefRoll.scale.set(rr, 1, rr); reefRoll.position.y = 0.04 + rr; }
     const camber = (0.115 * (1 - luff) + 0.02) * side;
     for (let j = 0; j < NV; j++) { const v = j / (NV - 1), ang = b.boom * (1 + 0.28 * v), ch = 3.35 * Math.pow(1 - v, 0.72) * (1 + 0.1 * Math.sin(Math.PI * v)) + 0.14; // серп по задней шкаторине
-      const sx = Math.sin(ang), cz = Math.cos(ang), y = 1.98 + v * 8.9;
+      const sx = Math.sin(ang), cz = Math.cos(ang), y = 1.98 + v * 8.9 * hf;
       for (let i = 0; i < NU; i++) { const u = i / (NU - 1), d = u * ch;
         const bel = camber * ch * Math.sin(Math.PI * Math.pow(u, 0.8)) * pw + luff * 0.14 * ch * u * Math.sin(ft + u * 7 + v * 9);
         mp.setXYZ(j * NU + i, sx * d + cz * bel, y, MZ + 0.06 + cz * d - sx * bel); } }

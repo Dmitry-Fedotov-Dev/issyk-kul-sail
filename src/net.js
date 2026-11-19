@@ -25,10 +25,10 @@ export const radiusOf = (b) => (b.kind ? b.hl * 0.85 : 2.6);
 const r2 = (v, n = 2) => +v.toFixed(n);
 // состояние рук и снастей одной строкой чисел -- одинаково для игрока и для NPC, которых хозяин ведёт за всех
 export function encA(b) { return b.kind ? (b.spec.cls === 'motor' ? [b.capsized ? 1 : 0, r2(b.rudder), r2(b.thr)] : [b.capsized ? 1 : 0, 0, b.strokes, r2(b.brace), b.st ? (b.st.side === 'L' ? 1 : b.st.side === 'B' ? 2 : 0) : b.lastSide === 'L' ? 1 : 0])
-  : [b.capsized ? 1 : 0, r2(b.rudder), r2(b.boom), r2(b.awa), r2(b.aws, 1), r2(b.luff)]; }
+  : [b.capsized ? 1 : 0, r2(b.rudder), r2(b.boom), r2(b.awa), r2(b.aws, 1), r2(b.luff), r2(b.reef === undefined ? 1 : b.reef)]; }
 export function applyA(b, a, p) { b.capsized = !!a[0]; b.rudder = a[1] || 0;
   if (b.kind) { if (b.spec.cls === 'motor') b.thr = a[2] || 0; else { b.brace = a[3] || 0; if (a[2] !== p.sk) { p.sk = a[2]; b.lastSide = a[4] === 1 ? 'L' : 'R'; b.st = { side: a[4] === 1 ? 'L' : a[4] === 2 ? 'B' : 'R', t: 0, T: b.spec.drive, q: 1 }; b.endT = 0; } } }
-  else { b.boom = a[2] || 0; b.awa = a[3] || 0; b.aws = a[4] || 5; b.luff = a[5] || 0; } }
+  else { b.boom = a[2] || 0; b.awa = a[3] || 0; b.aws = a[4] || 5; b.luff = a[5] || 0; b.reef = a[6] || 1; } } // a[6] -- риф: другим видно опущенный грот
 // NPC в сети: [X, Y, th, phi, vx, vy, номер полёта, vx, vy, vz полёта, ...руки]; e.fseq/e.fv ставит удар (knock)
 export const encNpc = (e) => { const b = e.b, f = e.fv || [0, 0, 0]; return [r2(b.X, 1), r2(b.Y, 1), r2(b.th, 3), r2(b.phi, 3), r2(b.vx), r2(b.vy), e.fseq || 0, r2(f[0]), r2(f[1]), r2(f[2]), ...(e.phys === false ? [b.capsized ? 1 : 0, r2(b.rudder), r2(e.v || 0)] : encA(b))]; };
 // кукла NPC: тянем к присланному положению, между пакетами -- по скорости (s -- свежий массив от хозяина)

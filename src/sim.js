@@ -185,9 +185,11 @@ export class Boat {
     const alpha = Math.max(0, absA - Math.abs(this.boom)), aDeg = alpha / DEG;
     this.alpha = alpha; this.luff = 1 - smooth(3, 11, aDeg);
     const ce = Math.pow(Math.max(0, Math.cos(this.phi)), 1.2) * this.skill * (1 - 0.35 * (this.wearA || 0)) * (1 - 0.4 * (this.brkA || 0)); // растянутый парус тянет хуже, рваный -- совсем плохо
-    // риф: в шторм экипаж уменьшает парус -- выше 11.5 м/с вымпельного ветра площадь падает так, что тяга не растёт
-    // (но не меньше пятой части паруса); быстро, за доли секунды -- иначе шквал кладёт лодку раньше рифа
-    const reefT = Math.max(0.2, Math.min(1, (11.5 / Math.max(aws, 1e-3)) ** 2)); this.reef = this.reef === undefined ? reefT : this.reef + (reefT - this.reef) * Math.min(1, dt * 3); // на старте -- сразу под текущий ветер
+    // риф: площадь грота (reef -- доля паруса, 1 -- весь). Игрок берёт риф сам ползунком: reefSet -- 0..0.75, экипаж
+    // опускает или поднимает грот за пару секунд. У кого ползунка нет (соперники, автомат тестов) -- рифятся сами:
+    // выше 11.5 м/с вымпельного ветра площадь падает так, что тяга не растёт (но не меньше пятой части паруса)
+    const man = this.reefSet !== undefined, reefT = man ? 1 - this.reefSet : Math.max(0.2, Math.min(1, (11.5 / Math.max(aws, 1e-3)) ** 2));
+    this.reef = this.reef === undefined ? reefT : this.reef + (reefT - this.reef) * Math.min(1, dt * (man ? 0.7 : 3)); // на старте -- сразу как надо
     const q = 0.5 * B.rhoAir * aws * aws * B.sail * this.reef * ce, hx = ax / aws, hy = ay / aws;
     // нормаль паруса (подветренная сторона) -- выбирает знак подъёмной силы
     const sb = this.boom >= 0 ? 1 : -1, cb = Math.cos(Math.abs(this.boom)), snb = Math.sin(Math.abs(this.boom));

@@ -124,6 +124,11 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
 .ja{display:flex;gap:10px;align-items:baseline;padding:4px 0 4px 22px;position:relative;font-size:13px;color:var(--dim)}.ja b{flex:0 0 190px;font-weight:600}.ja::before{content:"";position:absolute;left:3px;top:9px;width:9px;height:9px;border:1.5px solid var(--dim);border-radius:50%}
 .ja.ok{color:var(--ink)}.ja.ok::before{background:var(--buoy);border-color:var(--buoy)}
 #mapwrap{position:relative;margin:8px 0}#mapcv{width:100%;display:block;border-radius:8px;cursor:crosshair;touch-action:none}#mzoom{position:absolute;right:8px;top:8px;padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.4);background:rgba(7,26,58,.75);color:var(--ink);font:600 12px var(--ui);cursor:pointer}#mzoom[hidden]{display:none}#mapinfo{margin:0;font-size:14px}.note{font-size:12px;color:var(--dim);margin:0 0 12px}
+/* риф: вертикальный ползунок справа; вверху -- весь парус, вниз -- риф глубже */
+#reef{position:fixed;right:max(16px,env(safe-area-inset-right,0px));top:190px;display:flex;flex-direction:column;align-items:center;gap:6px;z-index:2;pointer-events:auto;color:var(--ink);text-shadow:0 1px 8px rgba(0,18,50,.8);font:600 11px var(--ui);letter-spacing:.06em;text-transform:uppercase}
+#reef[hidden]{display:none}#reef small{font-size:9px;opacity:.7}
+#reefr{writing-mode:vertical-lr;-webkit-appearance:slider-vertical;appearance:slider-vertical;width:34px;height:clamp(90px,calc(100vh - 470px),170px);accent-color:var(--buoy);cursor:pointer;touch-action:none;margin:0}
+@media (max-height:520px){#reef{right:auto;left:max(16px,env(safe-area-inset-left,0px));top:auto;bottom:calc(20px + env(safe-area-inset-bottom,0px))}#reefr{height:110px}}
 #bhook{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(150px + env(safe-area-inset-bottom,0px));width:72px;height:72px;border-radius:50%;border:2px solid var(--buoy);background:rgba(7,26,58,.45);color:var(--ink);font:700 13px var(--ui);letter-spacing:.06em;text-transform:uppercase;cursor:pointer;pointer-events:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;z-index:2;padding:0;box-shadow:0 2px 12px rgba(0,10,30,.4)}
 #bhook[hidden],#brepair[hidden]{display:none}#bhook small{font-size:10px;opacity:.7;letter-spacing:0}body.touchdev #bhook small{display:none}#bhook.on{background:rgba(255,138,42,.6)}
 /* ресурс на нуле: кнопка у края экрана плавно разгорается и гаснет */
@@ -187,6 +192,7 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
   <svg id="ring" class="hud" viewBox="0 0 120 120" hidden><circle cx="60" cy="60" r="50" fill="rgba(7,26,58,.45)" stroke="rgba(255,255,255,.25)" stroke-width="6"/><circle id="ringarc" cx="60" cy="60" r="50" fill="none" stroke="#ff8a2a" stroke-width="6" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="314" transform="rotate(-90 60 60)"/></svg>
   <button id="ts" aria-label="Травить шкот">шкот</button>
   <div id="joy" aria-label="Джойстик: руль и газ"><i></i></div>
+  <div id="reef" hidden><div id="reeft">риф 0%</div><input id="reefr" type="range" min="0" max="75" step="5" value="0" aria-label="Риф: доля опущенного грота"><small>парус</small></div>
   <button id="bhook" hidden aria-label="Абордажный крюк"><b id="bhookt">крюк</b><small>F</small></button>
   <button id="brepair" hidden><b>Ресурс 0%</b>Восстановить в гонке<small id="brepairs"></small></button>
 </div>

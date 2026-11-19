@@ -97,7 +97,7 @@ async function init() {
   const rivals = [], ensureRivals = () => { if (!rivals.length) rivals.push(mk({ hull: 0xf4f3ee, accent: '#1f6fd0', text: 'KGZ 21' }, 'Ала-Тоо', 0.95), mk({ hull: 0xe9c33c, accent: '#20242b', text: 'KGZ 4' }, 'Манас', 0.9), mk({ hull: 0x2f8f5a, accent: '#f4f3ee', text: 'KGZ 33' }, 'Чайка', 0.86)); };
   const marks = { W: makeMark(0xff7a1a), L: makeMark(0xffd21f), pin: makeMark(0xff3b30), com: makeMark(0x2f7de2) };
   for (const k in marks) { marks[k].visible = false; scene.add(marks[k]); }
-  G = { hRaw, lake, mapObjs: [nearT, far, ...shoreObjs], ts: TS, world: TS === 1 ? 'lake' : 'mini', ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
+  G = { yacht: player, hRaw, lake, mapObjs: [nearT, far, ...shoreObjs], ts: TS, world: TS === 1 ? 'lake' : 'mini', ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
     cam: 0, camYaw: 0, orbit: 0, orbitP: 0, zoom: 1, orbitV: 0, shake: 0, hintT: 0, free: null, toastT: 0, frame: 0, slow: 0 };
   if (!PRESETS[G.preset]) G.preset = 'santash';
   X = installExtra({ mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
@@ -124,6 +124,8 @@ function applyPreset() {
   const k = p.sky; ENV.uCover.value = k.cover; ENV.uCirrus.value = k.cirrus; ENV.uStorm.value = k.storm; ENV.uCloudScale.value = k.scale; ENV.uSunI.value = k.sun;
   ENV.uHor.value.set(...k.hor); scene.fog.color.setRGB(...k.hor); sunL.intensity = 3.1 * k.sun; hemi.intensity = 1.9 * (1 - 0.35 * k.storm);
   G.wx = k; dayCycle(0);
+  // риф под погоду: в сильный ветер яхта выходит с рифом (Улан -- ~75%), дальше -- ползунок в руках игрока
+  setReef(Math.round(Math.min(0.75, Math.max(0, 1 - (11.5 / (p.speed * 1.15 + 2)) ** 2)) * 20) / 20, true);
   renderer.toneMappingExposure = 1.08 + 0.17 * k.sun * (1 - k.storm); // ясный день ярче
   updateEnv(G.sky); G.spray.uniforms.uLight.value = 0.35 + 0.65 * k.sun;
   store.set('preset', G.preset);
@@ -320,6 +322,12 @@ function finishRace() {
   setTimeout(() => { if (G.race === R) $('result').hidden = false; }, 1600);
 }
 
+// ---------- риф ----------
+// Ползунок (и клавиши [ ]) ставит риф 0-75% шагом 5%: доля опущенного грота. Каждый шаг -- трещотка стопора и скрип троса
+function setReef(v, quiet) { const b = G.yacht.b, old = b.reefSet || 0; v = clamp(Math.round(v * 20) / 20, 0, 0.75); b.reefSet = v;
+  const el = $('reefr'); if (el && +el.value !== Math.round(v * 100)) el.value = Math.round(v * 100); $('reeft').textContent = `риф ${Math.round(v * 100)}%`;
+  if (!quiet && v !== old) audio.reef(Math.round(Math.abs(v - old) * 20)); }
+{ const el = $('reefr'); el.addEventListener('input', () => setReef(+el.value / 100)); for (const n of ['pointerdown', 'touchstart']) el.addEventListener(n, (e) => { e.stopPropagation(); audio.start(); }, { passive: true }); }
 // ---------- ввод ----------
 const KEY = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'ease', ArrowDown: 'ease', KeyS: 'ease' };
 window.addEventListener('keydown', (e) => {
@@ -330,6 +338,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Звук выключен' : 'Звук включён');
   else if (e.code === 'Escape' && G.mode !== 'menu') toMenu();
   else if (e.code === 'KeyF' && G.mode !== 'menu') X.hookPress();
+  else if ((e.code === 'BracketRight' || e.code === 'BracketLeft') && G.mode !== 'menu' && !G.player.b.kind) setReef((G.yacht.b.reefSet || 0) + (e.code === 'BracketRight' ? 0.05 : -0.05));
   else if (e.code === 'KeyR' && G.mode === 'race') startRace(); else if (e.code === 'KeyR' && G.mode === 'free') startFree();
 });
 window.addEventListener('keyup', (e) => { if (KEY[e.code]) { input[KEY[e.code]] = false; e.preventDefault(); } });
@@ -483,6 +492,7 @@ function loop(now) {
   sunL.target.position.set(b.X, b.base || 0, -b.Y); sunL.position.set(b.X + LIGHT.x * 30, (b.base || 0) + LIGHT.y * 30, -b.Y + LIGHT.z * 30);
   audio.update(b);
   if (G.mode !== 'menu') updateHud(dt, b, sp);
+  { const on = G.mode !== 'menu' && !b.kind; const el = $('reef'); if (el.hidden === on) el.hidden = !on; }
   // адаптивное разрешение -- ДО отрисовки: смена размера очищает холст, после неё был бы пустой кадр
   fpsT += dt; fpsN++; if (fpsT > 2) { const fps = fpsN / fpsT; fpsT = 0; fpsN = 0; qHold--;
     if (qMode !== 'auto') { /* человек выбрал сам -- не трогаем ни ступень, ни разрешение */ }
@@ -671,6 +681,7 @@ function updateHud(dt, b, sp) {
   if (b.kind) { const q = X.hint(b, T); h = q[0]; alert = q[1]; }
   else if (b.capsized) { h = b.righting ? '' : (TOUCH ? 'Держите «шкот» — поднимаем лодку' : 'Держите пробел — поднимаем лодку'); alert = true; }
   else if (b.aground) { h = 'Мель — лодку стаскивает на глубину'; alert = true; }
+  else if (heel > 36 && (b.reefSet || 0) < 0.5 && b.tws > 11) { h = TOUCH ? 'Сильно кренит — возьмите риф ползунком справа или держите «шкот»' : 'Сильно кренит — возьмите риф: ] (или травите шкот пробелом)'; alert = true; }
   else if (heel > 36) { h = TOUCH ? 'Кренит — держите «шкот»' : 'Кренит — пробел, травить шкот'; alert = true; }
   else if (R && R.ocs) { h = 'Фальстарт — вернитесь за линию'; alert = true; }
   else if (R && R.t > 3 && G.player.leg === 0 && al(R, b) > 6) { h = 'Старт не взят — вернитесь и пройдите между красным и синим знаком'; alert = true; }

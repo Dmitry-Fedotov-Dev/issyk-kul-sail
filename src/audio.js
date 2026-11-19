@@ -78,6 +78,9 @@ export function makeAudio() {
     horn() { tone(220, 1.1, 'sawtooth', 0.16); tone(277, 1.1, 'sawtooth', 0.12); },
     // вылет с доски: «бдыщ» и «уиии» вверх-вниз, как в мультике
     whee(p = 1) { tone(160, 0.3, 'sine', 0.45 * p, 520); setTimeout(() => { tone(420, 0.55, 'triangle', 0.13 * p, 1500); setTimeout(() => tone(1500, 0.8, 'triangle', 0.11 * p, 260), 520); }, 90); },
+    // риф: трещотка стопора, скрип троса и хлопок паруса -- на каждый шаг ползунка
+    reef(n = 1) { for (let i = 0; i < Math.min(4, n + 1); i++) setTimeout(() => tone(2300 + Math.random() * 500, 0.025, 'square', 0.04), i * 45);
+      noise(1700 + Math.random() * 500, 7, 0.16, 0.07, 0, 850); setTimeout(() => noise(380, 0.9, 0.22, 0.09, 0, 160), 70); },
     chime() { tone(784, 0.25, 'sine', 0.14); setTimeout(() => tone(1175, 0.4, 'sine', 0.14), 110); },
     toggleMute() { muted = !muted; if (master) master.gain.value = muted ? 0 : 0.75; return muted; },
   };
