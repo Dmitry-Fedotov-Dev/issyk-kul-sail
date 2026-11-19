@@ -192,7 +192,10 @@ export class Glider {
     // вариометр: полная скорость набора, сглаженная как у прибора
     this.vario += (this.vz - this.vario) * Math.min(1, dt * 2.2); this.varioS += (this.vz - this.varioS) * Math.min(1, dt * 0.08);
     // ---- касание ----
-    const g = air.ground(this.X, this.Y); if (this.Z <= g) this.touch(g, air);
+    const g = air.ground(this.X, this.Y);
+    // первые секунды после отрыва крыло держит над склоном (подъём от ног и от склона), пока земля не уйдёт вниз
+    if (this.toT > 0) { this.toT -= dt; if (this.Z < g + 0.8) { this.Z = g + 0.8; this.vz = Math.max(this.vz, 0); } }
+    if (this.Z <= g) this.touch(g, air);
   }
   touch(g, air) { const vzI = -this.vz, gs = this.speed, water = air.h(this.X, this.Y) < 0, e = 25;
     const sl = Math.hypot(air.h(this.X + e, this.Y) - air.h(this.X - e, this.Y), air.h(this.X, this.Y + e) - air.h(this.X, this.Y - e)) / (2 * e);
@@ -208,14 +211,14 @@ export class Glider {
     this.Z = A.g; this.vario = 0; this.vz = 0;
     if (!this.launchGo) { this.speed = 0; if (ctl.go) { this.launchGo = true; this.events.push({ type: 'inflate' }); } return; }
     if (this.wingUp < 1) { this.wingUp = Math.min(1, this.wingUp + dt * (0.45 + 0.08 * Math.max(0, head)));
-      this.wingOff += (cross * 0.12 + (this.r() - 0.5) * 0.9 + (this.wingOff * 0.6) - ((ctl.tR || 0) - (ctl.tL || 0)) * 1.9) * dt; // крыло уходит вбок -- тянем клеванту с той же стороны
+      this.wingOff += (cross * 0.05 + (this.r() - 0.5) * 0.5 - this.wingOff * 0.6 - ((ctl.tR || 0) - (ctl.tL || 0)) * 1.9) * dt; // крыло уходит вбок -- тянем клеванту с той же стороны
       if (Math.abs(this.wingOff) > 1) { this.wingUp = 0; this.wingOff = 0; this.launchGo = false; this.events.push({ type: 'wingDown' }); } this.pitch = -1.5 + 1.5 * this.wingUp; this.phi = this.wingOff * 0.5; return; }
     // разбег
     this.run = Math.min(6, this.run + dt * 2.2); this.phi += (-this.phi) * dt * 3; this.wingOff *= Math.exp(-dt * 2);
     this.th = wrapPi(this.th + ((ctl.tR || 0) - (ctl.tL || 0)) * 0.6 * dt);
     const fx = Math.sin(this.th), fy = Math.cos(this.th); this.X += fx * this.run * dt; this.Y += fy * this.run * dt; const g2 = air.ground(this.X, this.Y);
     const as = this.run + Math.max(0, head); this.pitch = 0.1 * Math.sin(this.t * 9); this.Z = g2; this.speed = this.run;
-    if (as > 7.6 || (this.Z - air.ground(this.X + fx * 6, this.Y + fy * 6) > 1.2 && as > 5.4)) { this.mode = 'air'; this.V = Math.max(8.5, as); this.vz = 0.5; this.Z += 0.3; this.pitch = 0; this.events.push({ type: 'takeoff' }); } }
+    if (this.run > 3 && (as > 7.6 || (this.Z - air.ground(this.X + fx * 6, this.Y + fy * 6) > 1.2 && as > 5.4))) { this.toT = 3; this.mode = 'air'; this.V = Math.max(8.5, as); this.vz = 0.5; this.Z += 0.3; this.pitch = 0; this.events.push({ type: 'takeoff' }); } }
   // буксировка лебёдкой (или катером): трос тянет к якорю, набор 2.5-3.5 м/с; крен от троса -- «лок-аут», слабое звено рвётся
   stepTow(dt, ctl, A, air) { const T = this.tow; T.t += dt; if (T.vx) { T.X += T.vx * dt; T.Y += T.vy * dt; }
     const dx = T.X - this.X, dy = T.Y - this.Y, hd = Math.hypot(dx, dy), brg = Math.atan2(dx, dy), ang = Math.atan2(this.Z - T.Z, hd);

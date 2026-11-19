@@ -37,7 +37,13 @@ body.para #brief{left:50%;right:auto;top:50%;bottom:auto;transform:translate(-50
 #p_brk i{display:block;width:10px;height:70px;border-radius:5px;background:rgba(7,26,58,.35);border:1px solid rgba(255,255,255,.2);position:relative;overflow:hidden}
 #p_brk i b{position:absolute;left:0;right:0;top:0;background:#ff8a2a}#p_brk i.k b{top:auto;bottom:0;background:#7fd0ff}
 #p_brk span{font-size:10px;color:var(--dim);writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.08em}
+@media (max-width:760px){#p_coach{right:auto;left:50%;top:auto;transform:translateX(-50%);bottom:calc(118px + env(safe-area-inset-bottom,0px))}}
 body.touchdev #p_brk{bottom:calc(122px + env(safe-area-inset-bottom,0px))}
+#p_coach{position:fixed;right:max(16px,env(safe-area-inset-right,0px));top:190px;width:min(330px,calc(100vw - 32px));box-sizing:border-box;padding:14px 18px 12px;pointer-events:auto;text-shadow:none;z-index:6}
+#p_coach .n{font:700 11px var(--ui);letter-spacing:.14em;text-transform:uppercase;color:var(--buoy)}#p_coach h3{margin:4px 0 6px;font-size:20px;font-weight:700}
+#p_coach p{margin:0;font-size:14px;line-height:1.45;color:#dfe9f7}#p_coach kbd{display:inline-block;min-width:22px;padding:1px 6px;border-radius:6px;border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.12);font:700 13px var(--ui);text-align:center;color:#fff}
+#p_coach .row{display:flex;justify-content:space-between;align-items:center;margin-top:10px}#p_coach .dots i{display:inline-block;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);margin-right:5px}#p_coach .dots i.on{background:var(--buoy)}#p_coach .dots i.ok{background:var(--ok)}
+#p_coach button{font:600 12px var(--ui);color:var(--dim);background:none;border:0;cursor:pointer;padding:4px 0}#p_coach.ok{border-color:var(--ok)}#p_coach.ok h3::after{content:' ✓';color:var(--ok)}
 #p_cloud{position:fixed;inset:0;background:#e9eef3;opacity:0;pointer-events:none;transition:opacity .4s}
 #p_flash{position:fixed;left:50%;top:30%;transform:translateX(-50%);font:800 clamp(22px,5vmin,40px) var(--ui);color:#fff;text-shadow:0 2px 14px rgba(0,0,0,.6);opacity:0;pointer-events:none;white-space:nowrap}
 #p_flash.go{animation:pflash 2.2s ease-out}@keyframes pflash{0%{opacity:0;transform:translateX(-50%) scale(.6)}12%{opacity:1;transform:translateX(-50%) scale(1.06)}25%{transform:translateX(-50%) scale(1)}75%{opacity:1}100%{opacity:0}}
@@ -72,7 +78,7 @@ export function makeParaMode(A) {
     const hud = document.createElement('div'); hud.id = 'phudwrap'; hud.hidden = true;
     hud.innerHTML = `<div id="p_cloud"></div><div id="phud" class="hud"><div id="p_alt"><b>0</b><small>м</small><div class="s" id="p_agl"></div><div class="s" id="p_spd"></div><div id="p_st"></div></div></div>
       <div id="p_var" class="hud"><div class="bar"><u></u><i></i><s></s></div><div><b>0.0</b><small>м/с</small><div class="avg"></div></div></div>
-      <div id="p_brk" class="hud"><i><b></b></i><i class="k"><b></b></i><i><b></b></i><span>Л · аксель · П</span></div><div id="p_flash" class="hud"></div>`;
+      <div id="p_brk" class="hud"><i><b></b></i><i class="k"><b></b></i><i><b></b></i><span>Л · аксель · П</span></div><div id="p_flash" class="hud"></div><div id="p_coach" class="panel" hidden></div>`;
     $('game').appendChild(hud);
     field = findField(); air = new Air(G.h, G.wind, 11);
     W = { clouds: makeClouds(scene), birds: makeBirds(scene), winch: makeWinch(), sockA: makeWindsock(), sockF: makeWindsock(), target: makeTarget(), shadow: makeShadow(), tow: makeTowLine(), boat: MODEL.boat({}), cyl: [] };
@@ -96,38 +102,46 @@ export function makeParaMode(A) {
     show(true); G.player = P; G.race = null; G.race2 = null; G.rv = null; R = null; F = null; lift.length = 0; air.list.length = 0; air.setSky(G.preset); G.clockK = 0.12;
     if (G.clock === undefined || G.clock < 10.5 || G.clock > 16.5) G.clock = 12; // летают днём: термики в силе
     document.body.classList.add('para'); document.body.classList.remove('motor'); $('ts').textContent = 'аксель'; $('mark').hidden = true; $('brief').hidden = true;
-    G.mode = 'para'; A.showGame(true); brief(); A.resetView(); G.cam = G.cam === 1 ? 0 : G.cam; G.modeT = 0; hold.L = hold.R = hold.B = hold.F = 0; }
+    G.mode = 'para'; A.showGame(true); A.resetView(); G.cam = G.cam === 1 ? 0 : G.cam; G.modeT = 0; hold.L = hold.R = hold.B = hold.F = 0; }
   const sunK = () => (G.wx ? G.wx.sun : 1) * smooth(0.05, 0.45, SUN.y);
   function upwind() { return Math.atan2(-G.wind.sx, -G.wind.sy); } // курс против ветра
   function winchAt(X, Y) { let a = upwind(); for (let k = 0; k < 8; k++) { const t = a + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35, x = X + Math.sin(t) * 1000, y = Y + Math.cos(t) * 1000; if (G.h(x, y) > 2) { a = t; break; } }
     return { X: X + Math.sin(a) * 1000, Y: Y + Math.cos(a) * 1000, th: a }; }
+  // склон для старта с разбега над аэродромом: крутизна 20-45%, вниз -- к озеру и по возможности против ветра
+  function findHill() { let best = null; const up = upwind();
+    for (let r = 600; r <= 4500; r += 150) for (let a = -1.4; a <= 1.4; a += 0.1) { const X = AIRPORT.X + Math.sin(a) * r, Y = AIRPORT.Y + Math.cos(a) * r, e = 40;
+      const gx = (G.h(X + e, Y) - G.h(X - e, Y)) / (2 * e), gy = (G.h(X, Y + e) - G.h(X, Y - e)) / (2 * e), sl = Math.hypot(gx, gy); if (sl < 0.2 || sl > 0.6 || G.h(X, Y) < 60) continue;
+      const down = Math.atan2(-gx, -gy), ahead = G.h(X, Y) - G.h(X + Math.sin(down) * 80, Y + Math.cos(down) * 80), far = G.h(X, Y) - Math.max(G.h(X + Math.sin(down) * 500, Y + Math.cos(down) * 500), G.h(X + Math.sin(down) * 300, Y + Math.cos(down) * 300) + 25); const behind = G.h(X - Math.sin(down) * 300, Y - Math.cos(down) * 300) - G.h(X, Y); if (ahead < 12 || far < 90 || behind < 60) continue; // середина склона: выше ещё есть гора -- там держит динамика
+      const sc = r / 1000 + Math.abs(wrapPi(down - up)) * 1.2 + Math.abs(wrapPi(down - Math.PI)) * 0.5; if (!best || sc < best.sc) best = { sc, X, Y, grad: [gx, gy] }; }
+    return best || { X: AIRPORT.X, Y: AIRPORT.Y + 2500, grad: [0, 0.2] }; }
   function startFree(at) { begin(); const g = P.g; F = { t: 0, gain: 0, ridgeT: 0, colT: 0, landT: 0, how: '', maxZ: 0, z0: 0, res: null, again: at };
     let X = AIRPORT.X, Y = AIRPORT.Y, how = 'winch';
-    if (at) { X = at.X; Y = at.Y; const e = 60, gx = (G.h(X + e, Y) - G.h(X - e, Y)) / (2 * e), gy = (G.h(X, Y + e) - G.h(X, Y - e)) / (2 * e); how = !at.land ? 'boat' : Math.hypot(gx, gy) > 0.16 ? 'foot' : 'winch'; F.grad = [gx, gy]; }
+    if (!at) { const h = findHill(); X = h.X; Y = h.Y; how = 'foot'; F.grad = h.grad; }
+    else { X = at.X; Y = at.Y; const e = 60, gx = (G.h(X + e, Y) - G.h(X - e, Y)) / (2 * e), gy = (G.h(X, Y + e) - G.h(X, Y - e)) / (2 * e); how = !at.land ? 'boat' : Math.hypot(gx, gy) > 0.16 ? 'foot' : 'winch'; F.grad = [gx, gy]; }
     F.how = how; const gz = Math.max(0, G.h(X, Y));
     if (how === 'winch') { const w = winchAt(X, Y); g.reset(X, Y, gz, w.th, 'tow'); g.startTow({ X: w.X, Y: w.Y, Z: Math.max(0, G.h(w.X, w.Y)), max: 420 }); W.winch.visible = true; W.winch.position.set(w.X, Math.max(0, G.h(w.X, w.Y)), -w.Y); W.winch.rotation.y = -w.th; toast(`Лебёдка: ${at ? at.label : AIRPORT.name}. Держите крыло по тросу`); }
     else if (how === 'boat') { const th = upwind(); g.reset(X, Y, 0.5, th, 'tow'); g.startTow({ X: X + Math.sin(th) * 160, Y: Y + Math.cos(th) * 160, Z: 0, vx: Math.sin(th) * 9, vy: Math.cos(th) * 9, max: 300 }); W.winch.visible = false; W.boat.root.visible = true; toast('Буксировка за катером. Держите крыло по тросу'); }
-    else { const [gx, gy] = F.grad, down = Math.atan2(-gx, -gy), into = upwind(), th = Math.abs(wrapPi(into - down)) < 1.2 ? into : down; g.reset(X, Y, gz, th, 'launch'); g.startLaunch(); W.winch.visible = false; toast(`Старт со склона, ${Math.round(gz + 1601)} м. ${TOUCH ? 'Кнопка «аксель»' : 'Пробел'} — поднять крыло`); }
+    else { const [gx, gy] = F.grad, down = Math.atan2(-gx, -gy), into = upwind(), th = Math.abs(wrapPi(into - down)) < 0.6 ? into : down; g.reset(X, Y, gz, th, 'launch'); g.startLaunch(); W.winch.visible = false; toast(`Старт со склона над аэродромом, ${Math.round(gz + 1601)} м`); }
     F.z0 = g.Z; P.leg = 0; P.time = 0;
     // в небе ещё трое местных: они кружат в термиках -- по ним видно, где подъём
     const focus = [{ X, Y }]; air.seed(focus, sunK()); rivals.forEach((e, i) => { if (i > 2) { e.model.root.visible = false; e.active = false; return; } placeAI(e, X + (i - 1) * 900, Y + 1200 + i * 400, 450 + i * 120); e.free = true; e.active = true; });
-    G.camYaw = g.th; }
+    G.camYaw = g.th; coachStart(); }
   function placeAI(e, X, Y, agl) { const z = Math.max(0, G.h(X, Y)) + agl; e.g.reset(X, Y, z, Math.random() * 6.28, 'air'); e.mem = {}; e.leg = 0; e.time = 0; e.done = false; e.out = null; e.model.root.visible = true; e.wp = null; }
-  function startRace() { begin(); const S = AIRPORT, g = P.g; R = mkTask(); R.t = -45; R.over = false; R.beep = 99;
+  function startRace() { begin(); coach = null; coachDraw(); const S = AIRPORT, g = P.g; R = mkTask(); R.t = -45; R.over = false; R.beep = 99;
     const z = Math.max(0, G.h(S.X, S.Y)) + 480; g.reset(S.X - 300, S.Y - 250, z, upwind(), 'air');
     rivals.forEach((e, i) => { placeAI(e, S.X + Math.cos(i * 1.6) * 500, S.Y + Math.sin(i * 1.6) * 500, 420 + i * 30); e.active = true; e.free = false; });
     R.all = [P, ...rivals]; for (const e of R.all) { e.leg = 0; e.time = 0; e.inS = true; e.out = null; e.done = false; }
     air.seed([S, ...R.tps, R.goal], sunK());
     const top = air.sky.base + 250; W.cyl = [makeCylinder(scene, S.X, S.Y, R.rS, -50, top, 0xffffff), ...R.tps.map((t) => makeCylinder(scene, t.X, t.Y, t.R, -50, top, 0xff8a2a)), makeCylinder(scene, R.goal.X, R.goal.Y, R.goal.R, -50, top, 0x58d68d)];
     W.winch.visible = false; G.camYaw = g.th; R.T0 = G.t;
-    toast(`Маршрут ${km(R.len)}: ${R.tps.map((t) => t.name).join(' → ')} → пляж. Окно старта через 45 с`); flash('Гонка по маршруту'); }
+    brief(); toast(`Маршрут ${km(R.len)}: ${R.tps.map((t) => t.name).join(' → ')} → пляж. Окно старта через 45 с`); flash('Гонка по маршруту'); }
   function mkTask() { const S = AIRPORT, goal = { ...field, R: 300, name: 'цель' }; let best = null;
     // один-два пункта; длина «по цилиндрам» около 5.5 км -- гонка минут на 8-12
     for (let k = 0; k < 80; k++) { const n = Math.random() < 0.45 ? 2 : 1, pick = []; while (pick.length < n) { const t = TPS[Math.floor(Math.random() * TPS.length)]; if (!pick.includes(t)) pick.push(t); }
       let len = 0, x = S.X, y = S.Y; for (const t of pick) { len += Math.hypot(t[1] - x, t[2] - y); x = t[1]; y = t[2]; } len += Math.hypot(goal.X - x, goal.Y - y);
       const eff = len - 1200 - n * 800 - 300, sc = Math.abs(eff - 5500) + Math.random() * 400; if (!best || sc < best.sc) best = { sc, len, eff, tps: pick }; }
     const tps = best.tps.map((t) => ({ name: t[0], X: t[1], Y: t[2], R: 400 })); return { S, rS: 1200, tps, goal, len: best.eff }; }
-  function stop() { if (!on) return; on = false; if (briefHtml !== null) { $('brief').querySelector('p').innerHTML = briefHtml; } $('brief').hidden = true; show(false); for (const r of rivals) r.model.root.visible = false; document.body.classList.remove('para'); G.clockK = 1; audio.vario(0, false); audio.airflow(0, 0, 0, false); audio.winch(false); $('ts').textContent = 'шкот'; R = null; F = null; }
+  function stop() { if (!on) return; on = false; coach = null; if ($('p_coach')) $('p_coach').hidden = true; if (briefHtml !== null) { $('brief').querySelector('p').innerHTML = briefHtml; } $('brief').hidden = true; show(false); for (const r of rivals) r.model.root.visible = false; document.body.classList.remove('para'); G.clockK = 1; audio.vario(0, false); audio.airflow(0, 0, 0, false); audio.winch(false); $('ts').textContent = 'шкот'; R = null; F = null; }
 
   // ---------- управление игрока ----------
   // Держите клеванту дольше -- тянете глубже: короткое нажатие -- поправка курса, удержание -- вираж около 30°,
@@ -154,7 +168,7 @@ export function makeParaMode(A) {
       if (d < 18 && d > 0.1) { const k = (18 - d) / d * 0.5 * dt * 2; a.X -= dx * k; a.Y -= dy * k; b.X += dx * k; b.Y += dy * k; if (i === 0 && d < 10 && (G.t - (P.near || 0)) > 3) { P.near = G.t; toast(`Близко к ${act[j].name}!`); } } }
     g.base = g.Z; g.y = g.Z; g.aws = g.V; g.awa = 0; g.tws = 0;
     events(P); for (const e of rivals) e.g.events.length = 0;
-    if (R) race(dt); else if (F) freeStep(dt);
+    if (R) race(dt); else if (F) { freeStep(dt); coachStep(dt); }
     // модели
     for (const e of act) e.model.update(e.g, dt, G.t);
     W.clouds.update(air, G.t); W.birds.update(air, G.t); { const a = air.windAt(AIRPORT.X, AIRPORT.Y, Math.max(0, G.h(AIRPORT.X, AIRPORT.Y)) + 6, {}), f = air.windAt(field.X, field.Y, Math.max(0, G.h(field.X, field.Y)) + 6, {}); W.sockA.update(a.wx, a.wy, G.t); W.sockF.update(f.wx, f.wy, G.t); }
@@ -236,6 +250,32 @@ export function makeParaMode(A) {
     $('rs').textContent = `Маршрут ${km(R.len)} · ${P.time ? `время ${fmt(P.time)}` : `до цели ${km(P.out || remaining(P))}`}${R.rec ? ' · личный рекорд' : R.best ? ` · рекорд ${fmt(R.best)}` : ''}${R.land ? ` · ${R.land.head.toLowerCase()}` : ''}`;
     $('rt').innerHTML = all.map((e, i) => `<tr class="${e === P ? 'me' : ''}"><td>${i + 1}</td><td>${esc(e.name)}</td><td>${e.time ? fmt(e.time) : e.out !== null && e.out !== undefined ? `сел, ${km(e.out)} до цели` : e.leg ? `в воздухе, ${km(remaining(e))}` : 'не стартовал'}</td></tr>`).join(''); $('result').hidden = false; }
 
+  // ---------- инструктор: первые полёты по шагам ----------
+  const K = (d, t) => (TOUCH ? t : d);
+  const STEPS = [
+    { h: 'Взлёт с разбега', p: () => K('Нажмите <kbd>Пробел</kbd> — крыло поднимется над головой, пилот сам побежит вниз по склону и оторвётся от земли.', 'Нажмите кнопку <kbd>аксель</kbd> внизу экрана — крыло поднимется над головой, пилот сам побежит вниз по склону и оторвётся от земли.'), ok: (g) => g.mode === 'air' },
+    { h: 'Отлетите от склона', p: () => 'Вы в воздухе! Пока летите прямо — склон рядом, поворачивать к нему опасно. Подождите, пока под вами станет 40 метров (цифра «над землёй» слева вверху).', ok: (g) => g.agl > 40 },
+    { h: 'Повороты', p: () => K('Держите <kbd>←</kbd> — поворот влево, <kbd>→</kbd> — вправо. Чем дольше держите, тем круче вираж. Отпустили — летит прямо. Развернитесь на четверть круга.', 'Держите палец на левой половине экрана — поворот влево, на правой — вправо. Чем дольше держите, тем круче вираж. Отпустили — летит прямо. Развернитесь на четверть круга.'), ok: (g, c) => c.turn > 1.57 },
+    { h: 'Как подняться выше', p: () => `Мотора нет: крыло всё время понемногу снижается — столбик слева синий. Подняться можно только в восходящем потоке: вдоль склона, на который дует ветер, и под растущими облаками. Попали в поток — пищит вариометр и столбик зелёный: ${K('держите <kbd>←</kbd> или <kbd>→</kbd>', 'держите палец слева или справа')} и кружите на этом месте. Наберите 30 м.`, ok: () => (F.run || 0) > 30 },
+    { h: 'Посадка', p: () => `Летите к оранжевой точке на компасе справа вверху — это поле с крестом на пляже. Перед землёй развернитесь против ветра (белая стрелка на компасе), а в 2–3 метрах над землёй ${K('нажмите <kbd>↓</kbd>', 'коснитесь обеих половин экрана')} — крыло затормозит, и касание будет мягким.`, ok: (g) => g.mode === 'landed' },
+  ];
+  let coach = null;
+  function coachStart() { coach = store.get('paraCoach') ? null : { i: 0, turn: 0, okT: 0 }; coachDraw(); }
+  function coachDraw() { const el = $('p_coach'); if (!coach) { el.hidden = true; return; } el.hidden = false; const i = Math.min(coach.i, STEPS.length - 1), st = STEPS[i];
+    el.className = 'panel' + (coach.okT > 0 ? ' ok' : '');
+    el.innerHTML = coach.i >= STEPS.length ? '<div class="n">обучение пройдено</div><h3>Вы умеете летать!</h3><p>Дальше — термики под облаками, высота и гонка по маршруту. Подсказки по ходу полёта останутся внизу экрана.</p><div class="row"><span></span><button id="p_cx">закрыть</button></div>'
+      : `<div class="n">шаг ${i + 1} из ${STEPS.length}</div><h3>${st.h}</h3><p>${st.p()}</p><div class="row"><span class="dots">${STEPS.map((_, k) => `<i class="${k < i ? 'ok' : k === i ? 'on' : ''}"></i>`).join('')}</span><button id="p_cx">${i === 3 ? 'пропустить шаг' : 'скрыть обучение'}</button></div>`;
+    $('p_cx').onclick = (e) => { e.stopPropagation(); if (!coach) return; if (coach.i === 3) { coach.i++; coachDraw(); return; } store.set('paraCoach', 1); coach = null; coachDraw(); };
+    $('p_cx').onpointerdown = (e) => e.stopPropagation(); }
+  function coachStep(dt) { if (!coach) return; const g = P.g;
+    if (coach.i >= STEPS.length) { coach.endT = (coach.endT || 0) + dt; if (coach.endT > 7) { coach = null; coachDraw(); } return; }
+    if (g.mode === 'air') coach.turn += Math.abs(g.yawRate || 0) * dt;
+    if (coach.okT > 0) { coach.okT -= dt; if (coach.okT <= 0) { coach.i++; if (coach.i >= STEPS.length) store.set('paraCoach', 1); coachDraw(); } return; }
+    // посадка раньше времени (не нашли подъём) -- шаг про подъём не обязателен
+    if (coach.i < 3 && g.mode === 'landed') { if (!coach.fail) { coach.fail = true; const el = $('p_coach'); el.className = 'panel'; el.innerHTML = `<div class="n">не страшно</div><h3>Сели раньше времени</h3><p>Так бывает: склон рядом. Нажмите ${K('<kbd>R</kbd>', '«ещё раз» в окне посадки')} — после взлёта летите прямо, пока под вами не станет 40 метров.</p>`; } return; }
+    if (coach.i < 4 && g.mode === 'landed') coach.i = 4;
+    if (STEPS[coach.i].ok(g, coach)) { coach.okT = 1.4; audio.chime(); coachDraw(); } }
+
   // ---------- свободный полёт: журнал ----------
   function freeStep(dt) { const g = P.g; F.t += dt; if (g.mode !== 'air') return;
     if (g.vario > 0.3) F.run = (F.run || 0) + g.vz * dt; else if (g.vario < -0.6) F.run = Math.max(0, (F.run || 0) - dt * 3);
@@ -295,6 +335,7 @@ export function makeParaMode(A) {
     else if (g.air && g.air.U > g.V + 0.5 && g.bar < 0.5) h = `Ветер сильнее крыла — держите ${key} (акселератор)`;
     else if (T < 14) h = TOUCH ? 'Держать слева/справа — клеванта (дольше — круче) · двойное касание — в пол · обе — тормоз · «аксель»' : '← → клеванты (дольше — круче, двойное — в пол) · ↓ обе · пробел — акселератор';
     else if (vAvg < -1.2 && T > 30 && G.frame % 600 < 300) h = 'Ищите поток: под растущими облаками, над склонами к солнцу, где кружат птицы и пилоты';
+    if (coach && !alert) h = '';
     if (h !== hintKey) { hintKey = h; const el = $('hint'); el.hidden = !h; el.textContent = h; el.className = 'hud' + (alert ? ' alert' : ''); } }
   // компас «курс вверх»: ветер, следующий пункт, ассистент термиков (где был подъём на последних кругах)
   function drawDial(g) { const cv = dial(), dc = cv.getContext('2d'), Wd = 352, c = Wd / 2, Rr = 142; dc.clearRect(0, 0, Wd, Wd);
