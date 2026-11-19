@@ -323,6 +323,7 @@ window.addEventListener('keydown', (e) => {
   if (KEY[e.code]) { input[KEY[e.code]] = true; e.preventDefault(); return; }
   if (!G || e.repeat) return;
   if (e.code === 'KeyZ' && G.mode !== 'menu') SPY.toggle();
+  else if (e.code === 'KeyE' && SPY && SPY.on) SPY.holdStart(); // E -- зажать с клавиатуры
   else if (e.code === 'Escape' && SPY && SPY.on) SPY.close();
   else if (e.code === 'KeyC') { G.cam = (G.cam + 1) % 3; resetView(); }
   else if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Звук выключен' : 'Звук включён');
@@ -330,7 +331,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyF' && G.mode !== 'menu') X.hookPress();
   else if (e.code === 'KeyR' && G.mode === 'race') startRace(); else if (e.code === 'KeyR' && G.mode === 'free') startFree();
 });
-window.addEventListener('keyup', (e) => { if (KEY[e.code]) { input[KEY[e.code]] = false; e.preventDefault(); } });
+window.addEventListener('keyup', (e) => { if (e.code === 'KeyE' && SPY && SPY.on) SPY.holdEnd(); if (KEY[e.code]) { input[KEY[e.code]] = false; e.preventDefault(); } });
 window.addEventListener('blur', () => { input.left = input.right = input.ease = false; input.joy = null; });
 if (TOUCH) document.body.classList.add('touchdev');
 // касание левой половины экрана -- руль влево, правой -- вправо; несколько пальцев учитываются по отдельности
@@ -342,18 +343,18 @@ const syncTouch = () => { let l = false, r = false; for (const v of held.values(
 const resetView = () => { G.orbit = 0; G.orbitP = 0; G.zoom = 1; };
 canvas.addEventListener('pointerdown', (e) => { if (!G || G.mode === 'menu') return; audio.start(); e.preventDefault();
   if (SPY && SPY.on) { ptr.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, look: true, t: performance.now() }); try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* без захвата */ }
-    if (ptr.size === 2) { const [a, c] = [...ptr.values()]; pinch = Math.hypot(a.x - c.x, a.y - c.y); } return; } // в трубе: палец -- обзор, два -- кратность, руля нет
+    if (ptr.size === 2) { const [a, c] = [...ptr.values()]; pinch = Math.hypot(a.x - c.x, a.y - c.y); SPY.holdEnd(); } else SPY.holdStart(); return; } // в трубе: палец -- обзор, два -- кратность, руля нет
   const mouse = e.pointerType === 'mouse'; ptr.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, look: mouse, t: performance.now() });
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* захват недоступен -- обзор просто кончится, когда палец уйдёт с холста */ }
   if (ptr.size === 2) { const [a, c] = [...ptr.values()]; pinch = Math.hypot(a.x - c.x, a.y - c.y); for (const q of ptr.values()) q.look = true; held.clear(); syncTouch(); }
   else if (!mouse && !document.body.classList.contains('motor')) { held.set(e.pointerId, e.clientX < window.innerWidth / 2 ? 'left' : 'right'); syncTouch(); } });
 canvas.addEventListener('pointermove', (e) => { const q = ptr.get(e.pointerId); if (!q || !G) return; const dx = e.clientX - q.x, dy = e.clientY - q.y; q.x = e.clientX; q.y = e.clientY;
   if (ptr.size === 2) { const [a, c] = [...ptr.values()], d = Math.hypot(a.x - c.x, a.y - c.y); if (pinch > 0) { if (SPY && SPY.on) SPY.zoomBy(d / Math.max(pinch, 1)); else G.zoom = clamp(G.zoom * pinch / Math.max(d, 1), 0.45, 3.2); } pinch = d; return; }
-  if (SPY && SPY.on) { SPY.pan(dx, dy); return; }
+  if (SPY && SPY.on) { if (Math.hypot(e.clientX - q.x0, e.clientY - q.y0) > 9) { SPY.holdEnd(); SPY.pan(dx, dy); } return; } // сдвинул -- это обзор, а не зажатие
   // палец сдвинулся -- это обзор, а не руль
   if (!q.look && Math.hypot(e.clientX - q.x0, e.clientY - q.y0) > 14) { q.look = true; if (held.delete(e.pointerId)) syncTouch(); }
   if (q.look) { const k = 5.5 / Math.max(window.innerHeight, 320); G.orbit = wrapPi(G.orbit + dx * k); G.orbitP = clamp(G.orbitP + dy * k, -0.22, 1.35); } });
-for (const n of ['pointerup', 'pointercancel']) window.addEventListener(n, (e) => { const q = ptr.get(e.pointerId); ptr.delete(e.pointerId); if (ptr.size < 2) pinch = 0; if (held.delete(e.pointerId)) syncTouch();
+for (const n of ['pointerup', 'pointercancel']) window.addEventListener(n, (e) => { const q = ptr.get(e.pointerId); ptr.delete(e.pointerId); if (SPY && SPY.on && q) SPY.holdEnd(); if (ptr.size < 2) pinch = 0; if (held.delete(e.pointerId)) syncTouch();
   if (q && n === 'pointerup' && G && Math.hypot(e.clientX - q.x0, e.clientY - q.y0) < 8 && performance.now() - q.t < 300) { const now = performance.now(); if (now - lastTap < 320) { resetView(); lastTap = 0; } else lastTap = now; } });
 canvas.addEventListener('wheel', (e) => { if (!G || G.mode === 'menu') return; e.preventDefault(); if (SPY && SPY.on) { SPY.zoomBy(Math.exp(-e.deltaY * 0.0016)); return; } G.zoom = clamp(G.zoom * Math.exp(e.deltaY * 0.0012), 0.45, 3.2); }, { passive: false });
 { const el = $('ts'), set = (v) => (e) => { e.preventDefault(); e.stopPropagation(); input.ease = v; el.classList.toggle('on', v); };
