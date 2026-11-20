@@ -48,6 +48,14 @@ body.spy #hint,body.spy #ts,body.spy #joy,body.spy #bhook{visibility:hidden}
 #dial{width:118px;height:118px;display:block}
 #windtxt{font-size:12px;margin-top:-2px;opacity:.9}
 #hint{left:50%;bottom:26px;transform:translateX(-50%);font-size:15px;max-width:min(560px,calc(100vw - 32px));text-align:center;box-sizing:border-box;padding:7px 14px;border-radius:999px}
+#dstat{left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);display:flex;gap:10px;align-items:center;padding:5px 12px;border-radius:999px;font:600 13px var(--ui);white-space:nowrap}
+#dstat .hearts{display:flex;gap:3px}#dstat .hearts i{width:13px;height:12px;display:block;background:rgba(255,255,255,.25);clip-path:polygon(50% 100%,0 40%,0 15%,15% 0,35% 0,50% 18%,65% 0,85% 0,100% 15%,100% 40%)}
+#dstat .hearts i.f{background:#ff5a7a}#dstat .hearts i.h{background:linear-gradient(90deg,#ff5a7a 50%,rgba(255,255,255,.25) 50%)}
+#dstat .hearts.up{animation:dpulse .4s}#dstat .hearts.dn{animation:dshake .4s}@keyframes dpulse{50%{transform:scale(1.25)}}@keyframes dshake{25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+#dstat .bar{width:44px;height:7px;border-radius:4px;background:rgba(255,255,255,.2);overflow:hidden;position:relative}#dstat .bar u{display:block;height:100%;background:#ffb347}#dstat .bar.wet u{background:#6cc8ff}
+#dstat .bar.food::before{content:'🍗';position:absolute;left:-17px;top:-5px;font-size:11px}#dstat .bar.wet::before{content:'💧';position:absolute;left:-15px;top:-5px;font-size:11px}#dstat .bar{margin-left:16px}
+#dstat .cnt{color:#ffe9a8}#dstat .buff{color:#ffd24a;font-size:11px;text-transform:uppercase;letter-spacing:.05em}#dstat .sad{color:#9fc4ff;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+body:not(.foot) #dstat{display:none}
 #hint.alert{background:rgba(150,20,14,.72);font-weight:600;text-shadow:none}
 #toast{left:50%;top:20%;transform:translateX(-50%);font-size:24px;font-weight:600;letter-spacing:.01em;opacity:0;transition:opacity .35s;text-align:center;white-space:nowrap}
 #race{left:50%;top:14px;transform:translateX(-50%);text-align:center}
@@ -212,6 +220,7 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
   <div id="wanted" class="hud" hidden></div>
   <div id="toast" class="hud"></div>
   <div id="hint" class="hud" hidden></div>
+  <div id="dstat" class="hud" hidden></div>
   <svg id="ring" class="hud" viewBox="0 0 120 120" hidden><circle cx="60" cy="60" r="50" fill="rgba(7,26,58,.45)" stroke="rgba(255,255,255,.25)" stroke-width="6"/><circle id="ringarc" cx="60" cy="60" r="50" fill="none" stroke="#ff8a2a" stroke-width="6" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="314" transform="rotate(-90 60 60)"/></svg>
   <button id="ts" aria-label="Травить шкот">шкот</button>
   <div id="joy" aria-label="Джойстик: руль и газ"><i></i></div>
@@ -233,6 +242,8 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
       <div class="chips" id="crafts"></div>
       <p class="lbl">Ветер</p>
       <div class="chips" id="winds"></div>
+      <p class="lbl">Время суток</p>
+      <div class="chips" id="tod"></div>
       <p class="lbl">Графика</p>
       <div class="chips" id="gfx"></div>
       <div class="modes">

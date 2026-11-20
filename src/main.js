@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TRAILS, RIVERS } from './trails.js';
 import { makeMinimap, rangeTxt } from './minimap.js';
 import { makeFootMode, paraAdapter, boatAdapter } from './footmode.js';
+import { makeFinds } from './finds.js';
 import { makeBeach } from './beach.js';
 import { Boat, Wind, Waves, PRESETS, DEG, KN, clamp, wrapPi, smooth, pointOfSail, aiControl } from './sim.js';
 import { DEM } from './demdata.js';
@@ -107,7 +108,8 @@ async function init() {
     setPreset: (id) => { if (PRESETS[id]) { G.preset = id; applyPreset(); } }, para: () => PG });
   SPY = makeSpyglass({ G, camera, post, audio, store, ach: X.ach, $, extra: X }); SPY.renderAtlas(); // подзорная труба (spyglass.js)
   G.beach = makeBeach({ G, scene, camera, audio, toast }); // живой берег: отдыхающие, торговцы, ночные костры (beach.js)
-  FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach }); // пеший Дымок (footmode.js)
+  G.finds = makeFinds({ G, scene, camera, beach: G.beach, audio, toast, store, ach: X.ach, onTake: (k) => FT && FT.found(k) }); // находки на кромке воды (finds.js)
+  FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach, store, ach: X.ach, finds: G.finds }); // пеший Дымок (footmode.js)
   $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey();
   G.pro = !!store.get('pro'); $('bpro').classList.toggle('on', G.pro);
   G.hMesh = (x, y) => { const v = demT.userData.meshH(x, y); return v === null ? hA(x, y) : v; }; // высота видимой земли -- для персонажей
@@ -210,7 +212,11 @@ function buildMenu() {
     for (const c of $('gfx').children) c.setAttribute('aria-pressed', c.dataset.id === qMode); };
   for (const id in GFX) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'g_' + id; b.innerHTML = `<b>${GFX[id]}</b>`; b.onclick = () => setGfx(id); $('gfx').appendChild(b); }
   setGfx(store.get('gfx') || 'auto');
-  $('bfree').onclick = () => { audio.start(); if (X.sel === 'para') PG.startFree(X.startAt); else startFree(); };
+  // время суток старта: утро -- пусто и тихо, день -- толпа и торговцы, закат -- мягкий свет, ночь -- костры
+  const TOD = { morning: ['Утро', 7.5], day: ['День', 13], sunset: ['Закат', 19.3], night: ['Ночь', 22.3] }, setTod = (id) => { G.tod = TOD[id] ? id : 'day'; store.set('tod', G.tod); for (const c of $('tod').children) c.setAttribute('aria-pressed', c.dataset.id === G.tod); };
+  for (const id in TOD) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${TOD[id][0]}</b>`; b.onclick = () => setTod(id); $('tod').appendChild(b); }
+  setTod(store.get('tod') || 'day'); G.todHour = () => TOD[G.tod][1];
+  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if (X.sel === 'para') PG.startFree(X.startAt); else startFree(); };
   $('brace').onclick = () => { audio.start(); X.compete(); };
   $('ragain').onclick = () => { if (PG && PG.on) PG.again(); else if (G.mode === 'river') { $('result').hidden = true; $('briver').click(); } else X.compete(); }; $('rmenu').onclick = () => toMenu();
 }
@@ -347,7 +353,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyC') { G.cam = (G.cam + 1) % 3; resetView(); }
   else if (e.code === 'KeyF' && G.mode !== 'menu' && (FT.on || (PG && PG.on))) footKey();
   else if (e.code === 'KeyG' && G.mode === 'free' && !(PG && PG.on)) footKey();
-  else if (e.code === 'KeyE' && FT && FT.on) { if (G.beach && G.beach.interact(G.beachHint)) FT.happy(); else FT.interact(); }
+  else if (e.code === 'KeyE' && FT && FT.on) { const r = G.beach && G.beach.interact(G.beachHint); if (r) FT.social(r); else FT.interact(); }
   else if (e.code === 'KeyP' && G.mode !== 'menu' && !(PG && PG.on)) togglePro();
   else if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Звук выключен' : 'Звук включён');
   else if (e.code === 'Escape' && G.mode !== 'menu') toMenu();
@@ -516,6 +522,8 @@ function loop(now) {
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
   if (G.beach) G.beachHint = G.beach.update(dt, FT && FT.on ? FT.state : null);
+  if (G.finds && G.mode !== 'menu') G.finds.update(dt, FT && FT.on && !FT.state.swim && FT.state.st !== 'dis' ? FT.state : null, G.beach.dayN, FT ? FT.magnet : 1.2);
+  beachSound(dt, b);
   sunL.target.position.set(b.X, b.base || 0, -b.Y); sunL.position.set(b.X + LIGHT.x * 30, (b.base || 0) + LIGHT.y * 30, -b.Y + LIGHT.z * 30);
   if (FT && FT.on) { audio.vario(0, false); audio.airflow(0, 0, 0, false); } else if (PG && PG.on) PG.sound(dt); else audio.update(b);
   if (G.mode !== 'menu') updateHud(dt, b, sp);
@@ -693,6 +701,15 @@ function drawTell(b, c) { const t = G.t, ux = Math.sin(b.boom), uy = Math.cos(b.
   tape(-1, b.ttW, '#58d68d', 0); tape(1, b.ttL, '#ff6b5b', 2.1); }
 let hintKey = '', hintT = 0;
 // спешиться / вернуться: снаряд подключается адаптером (параплан -- после посадки, лодка -- у самого берега)
+// звук пляжа: слушатель -- Дымок или лодка; до кромки воды меряем кольцами раз в полсекунды
+let bsT = 0, bsP = null;
+function beachSound(dt, b) { if (!G.beach || G.mode === 'menu') return; bsT -= dt; const foot = FT && FT.on;
+  if (!foot && (PG && PG.on)) { audio.beach({ on: false }); return; }
+  const X = foot ? FT.state.X : b.X, Y = foot ? FT.state.Y : b.Y;
+  if (bsT <= 0 || !bsP) { bsT = 0.5; const wet = G.h(X, Y) < 0; let water = 99;
+    for (let r = 3; r <= 45 && water > 90; r += 6) for (let a = 0; a < 8; a++) { const hh = G.h(X + Math.cos(a * 0.785) * r, Y + Math.sin(a * 0.785) * r); if ((hh < 0) !== wet) { water = r; break; } }
+    bsP = Object.assign(G.beach.sound(X, Y), { water, day: Math.min(1, Math.max(0, ENV.uDay.value)), on: true }); }
+  if (foot) audio.foot(b.tws || 4); audio.beach(bsP); }
 function footAdapter() { if (!G || G.mode === 'menu') return null; if (PG && PG.on) return paraAdapter(PG); if (G.mode === 'free' && G.player && G.player.b) return boatAdapter(G); return null; }
 function footKey() { if (FT.on) { FT.mount(); return; } const ad = footAdapter(); if (!ad) return; const q = ad.canExit(); if (!q.ok) { toast(q.why || 'Сейчас не выйти'); return; } FT.start(ad); }
 // Режим Pro для яхты: шкот без автоподбора, по колдунчикам на компасе. Обычная игра не меняется

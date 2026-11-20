@@ -1,5 +1,6 @@
 // Всё, что выросло вокруг яхты: выбор снаряда, достижения, соревнования для гребных и моторных, сплав по реке,
 // движение в акватории и милиция, выбор места старта по карте (включая горы). Главный модуль вызывает отсюда крючки.
+import { KINDS as FKINDS } from './finds.js';
 import { SPECS, CRAFT_ORDER, YACHT_INFO, ACH, makeCraftBody, aiPaddle, aiMotor, flow } from './crafts.js';
 import { MODEL, FX } from './craftmodels.js';
 import { makeTraffic } from './traffic.js';
@@ -54,9 +55,11 @@ export function installExtra(A) {
 
   // ---------- достижения ----------
   function ach(id) { if (done.has(id)) return; const a = ACH.find((x) => x[1] === id); if (!a) return; done.add(id); store.set('ach', [...done]); audio.chime(); toast('★ ' + a[2]); journal(); }
-  function journal() { const groups = { yacht: 'Яхта', kayak: 'Каяк', scull: 'Академическая одиночка', sup: 'SUP-доска', jetski: 'Гидроцикл', boat: 'Моторный катер', law: 'Закон и порядок', map: 'География', spy: 'Подзорная труба', para: 'Параплан' };
+  function journal() { const groups = { yacht: 'Яхта', kayak: 'Каяк', scull: 'Академическая одиночка', sup: 'SUP-доска', jetski: 'Гидроцикл', boat: 'Моторный катер', law: 'Закон и порядок', map: 'География', spy: 'Подзорная труба', para: 'Параплан', dymok: 'Дымок на берегу' };
     $('bjournal').textContent = `Журнал · ${done.size}/${ACH.length}`;
-    $('jlist').innerHTML = Object.keys(groups).map((g) => `<h4>${groups[g]}</h4>` + ACH.filter((a) => a[0] === g).map((a) => `<div class="ja${done.has(a[1]) ? ' ok' : ''}"><b>${a[2]}</b><span>${a[3]}</span></div>`).join('')).join(''); }
+    $('jlist').innerHTML = Object.keys(groups).map((g) => `<h4>${groups[g]}</h4>` + ACH.filter((a) => a[0] === g).map((a) => `<div class="ja${done.has(a[1]) ? ' ok' : ''}"><b>${a[2]}</b><span>${a[3]}</span></div>`).join('') + (g === 'dymok' ? collHtml() : '')).join(''); }
+  // коллекция находок Дымка: что найдено и сколько; ненайденное -- знаком вопроса, чтобы было что искать
+  function collHtml() { const c = store.get('finds') || {}; return `<div class="ja coll"><b>Коллекция</b><span>${FKINDS.map((k) => (c[k.id] ? `${k.name} × ${c[k.id]}` : '???')).join(' · ')}</span></div>`; }
 
   // ---------- снаряды ----------
   function mkEntity(id, opts, name, skill = 1) { const b = makeCraftBody(id), model = MODEL[id](opts || {}), wake = makeWake(); scene.add(model.root, wake.mesh); return { id, b, model, wake, name, skill, ai: {}, leg: 0, time: 0 }; }
@@ -232,7 +235,7 @@ export function installExtra(A) {
     const on = sel === 'para'; box.hidden = !on; $('psitesl').hidden = !on; for (const c of box.children) c.setAttribute('aria-pressed', c.dataset.id === (store.get('paraSite') || 'airport')); }
   function buildMenu() { yachtHow = $('how').innerHTML;
     for (const id of [...CRAFT_ORDER, 'para']) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); refreshMenu(); }; $('crafts').appendChild(b); }
-    $('briver').onclick = () => { audio.start(); startRiver(); }; $('bjournal').onclick = () => { $('journal').hidden = false; }; $('jclose').onclick = () => { $('journal').hidden = true; };
+    $('briver').onclick = () => { audio.start(); startRiver(); }; $('bjournal').onclick = () => { journal(); $('journal').hidden = false; }; $('jclose').onclick = () => { $('journal').hidden = true; };
     $('bmap').onclick = openMap; $('mclose').onclick = () => { $('mapdlg').hidden = true; }; $('mreset').onclick = () => { startAt = null; $('mapdlg').hidden = true; refreshMenu(); };
     const nm = $('pname'), setName = (v) => { name = v; store.set('name', v); };
     nm.value = name; nm.addEventListener('input', () => { const v = nm.value.replace(/\s+/g, ' ').trim().slice(0, 16); if (v) setName(v); });

@@ -111,7 +111,7 @@ export function makeParaMode(A) {
   function begin() { build(); loadLandcover(); /* лес под ельниками -- по маске OSM */ if (!on) prevPlayer = G.player; on = true; for (const k in G.marks || {}) G.marks[k].visible = false;
     if (prevPlayer && prevPlayer.model) prevPlayer.model.root.visible = false; if (prevPlayer && prevPlayer.wake) prevPlayer.wake.mesh.visible = false;
     show(true); G.player = P; G.race = null; G.race2 = null; G.rv = null; R = null; F = null; lift.length = 0; air.list.length = 0; W.trail.reset(); BR.run = 0; BR.total = 0; BR.mult = 1; air.setSky(G.preset); G.clockK = 0.12;
-    if (G.clock === undefined || G.clock < 10.5 || G.clock > 16.5) G.clock = 12; // летают днём: термики в силе
+    if (G.clock === undefined || G.clock < 10.5 || G.clock > 19.6) G.clock = 12; // летают днём (термики в силе) или на закате -- вечерняя динамика
     document.body.classList.add('para'); document.body.classList.toggle('feel', !inst); document.body.classList.remove('motor'); $('ts').textContent = 'аксель'; $('mark').hidden = true; $('brief').hidden = true;
     G.mode = 'para'; ctInit = false; A.showGame(true); A.resetView(); G.cam = G.cam === 1 ? 0 : G.cam; G.modeT = 0; hold.L = hold.R = hold.B = hold.F = 0; }
   const sunK = () => (G.wx ? G.wx.sun : 1) * smooth(0.05, 0.45, SUN.y);

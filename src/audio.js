@@ -85,8 +85,43 @@ export function makeAudio() {
   function winch(on, k = 0) { if (!ctx || ctx.state !== 'running') return;
     if (!winchO) { if (!on) return; const o = ctx.createOscillator(), g = ctx.createGain(), f = ctx.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.value = 90; f.type = 'bandpass'; f.frequency.value = 500; f.Q.value = 1.5; g.gain.value = 0; o.connect(f); f.connect(g); g.connect(master); o.start(); winchO = { o, g }; }
     set(winchO.g.gain, on ? 0.03 + 0.03 * k : 0, 0.2); set(winchO.o.frequency, 80 + 60 * k, 0.3); }
+  // ---- пляж: Дымок пешком или лодка у берега ----
+  // Прибой -- накат каждые 5-9 с (шипение, затихающее вниз), гомон людей рядом, треск костра, гитара у ночной
+  // компании (переборы Am-F-C-G), чайки днём. Всё -- от расстояний, которые даёт берег, и тихо: фон, не музыка.
+  let bch = null, nextWave = 0, nextGull = 0, nextCrack = 0, nextPick = 0, gStep = 0;
+  const GUIT = [[220, 261.6, 329.6, 440], [174.6, 220, 261.6, 349.2], [130.8, 196, 261.6, 329.6], [196, 246.9, 293.7, 392]];
+  function pluck(f, v, pan) { if (!ctx) return; const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), fl = ctx.createBiquadFilter(), t = ctx.currentTime;
+    o.type = 'triangle'; o2.type = 'sawtooth'; o.frequency.value = f; o2.frequency.value = f * 1.002; fl.type = 'lowpass'; fl.frequency.setValueAtTime(f * 6, t); fl.frequency.exponentialRampToValueAtTime(f * 1.5, t + 0.6);
+    const g2 = ctx.createGain(); g2.gain.value = 0.25; o2.connect(g2); g2.connect(fl); o.connect(fl); fl.connect(g); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+    const pn = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (pn) { pn.pan.value = pan; g.connect(pn); pn.connect(master); } else g.connect(master); o.start(t); o2.start(t); o.stop(t + 1.7); o2.stop(t + 1.7); }
+  // p: { water: м до воды, crowd: 0..N, fireD, guitD, day 0..1, on }
+  function beach(p) { if (!ctx || ctx.state !== 'running') return; const t = ctx.currentTime;
+    if (!bch) { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; s.playbackRate.value = 0.6; const fl = ctx.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.value = 420; fl.Q.value = 1.6;
+      const g = ctx.createGain(); g.gain.value = 0; s.connect(fl); fl.connect(g); g.connect(master); s.start(); // гомон: полоса голосов, «дышит» случайно
+      const lf = ctx.createOscillator(), lg = ctx.createGain(); lf.frequency.value = 3.1; lg.gain.value = 140; lf.connect(lg); lg.connect(fl.frequency); lf.start(); bch = { g }; }
+    const on = p.on !== false, surf = on ? Math.max(0, 1 - (p.water || 0) / 45) : 0;
+    set(bch.g.gain, on ? Math.min(0.07, p.crowd * 0.012) * (0.55 + 0.45 * (p.day ?? 1)) : 0, 0.5);
+    if (!on) return;
+    if (t > nextWave && surf > 0.02) { nextWave = t + 5 + Math.random() * 4; const v = 0.05 + 0.13 * surf; noise(900, 0.5, 2.6, v, (Math.random() - 0.5) * 0.6, 260); setTimeout(() => noise(3000, 0.6, 1.8, v * 0.35, 0, 900), 500); }
+    if (t > nextGull && (p.day ?? 1) > 0.5 && surf > 0.1) { nextGull = t + 9 + Math.random() * 18; const f = 1500 + Math.random() * 500, pan = Math.random() * 1.6 - 0.8;
+      for (let i = 0; i < 2 + Math.floor(Math.random() * 3); i++) setTimeout(() => tone(f, 0.22, 'triangle', 0.025, f * 0.72, pan), i * 260); }
+    const fk = Math.max(0, 1 - (p.fireD ?? 1e9) / 18); if (fk > 0 && t > nextCrack) { nextCrack = t + 0.05 + Math.random() * 0.35 / fk; noise(2500 + Math.random() * 3000, 2, 0.04, 0.05 * fk, (Math.random() - 0.5) * 0.4); }
+    const gk = Math.max(0, 1 - (p.guitD ?? 1e9) / 35); if (gk > 0 && t > nextPick) { const ch = GUIT[Math.floor(gStep / 8) % 4], idx = [0, 1, 2, 3, 2, 1, 2, 3][gStep % 8]; gStep++; nextPick = t + 0.28; pluck(ch[idx], 0.07 * gk * gk, 0.2); } }
+  // находка: нота серии -- выше с каждой (пентатоника), редкое -- арпеджио и блеск
+  const PENTA = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+  function find(tier = 0, combo = 1) { const base = 659 * Math.pow(2, PENTA[Math.min(PENTA.length - 1, combo - 1)] / 12);
+    tone(base, 0.18, 'sine', 0.1); setTimeout(() => tone(base * 1.5, 0.3, 'sine', 0.08), 70);
+    if (tier >= 4) [1, 1.26, 1.5, 2, 2.52].forEach((k, i) => setTimeout(() => tone(523 * k * (tier >= 6 ? 1.5 : 1), 0.5, 'triangle', 0.09), 160 + i * 90));
+    noise(7000, 1.2, 0.35, 0.03, 0, 10000); }
+  // пешком: лодочные шумы (поток, плеск о борт, парус) стихают, остаётся лёгкий ветер
+  function foot(wind = 4) { if (!ctx || ctx.state !== 'running') return; set(L.low.g.gain, 0.02 + wind * wind * 0.0008, 0.4); set(L.mid.g.gain, wind * wind * 0.0004, 0.4); for (const k of ['whistle', 'rush', 'bubble', 'flap']) set(L[k].g.gain, 0, 0.3); }
   return {
-    start, update, engine, siren, vario, airflow, winch,
+    start, update, engine, siren, vario, airflow, winch, beach, find, foot,
+    plop(p = 1) { noise(700, 1.2, 0.5, 0.3 * p, 0, 180); tone(300, 0.15, 'sine', 0.12 * p, 120); },
+    paddle() { noise(900 + Math.random() * 400, 1, 0.22, 0.04, (Math.random() - 0.5) * 0.4, 400); },
+    shake() { for (let i = 0; i < 6; i++) setTimeout(() => noise(3500, 1.5, 0.07, 0.05, i % 2 ? 0.4 : -0.4), i * 45); },
+    purr() { tone(48, 0.9, 'sawtooth', 0.04, 44); },
+    mew(sad) { tone(sad ? 700 : 900, 0.35, 'triangle', 0.05, sad ? 450 : 1300); },
     pop(p = 1) { noise(260, 0.9, 0.35, 0.5 * p, 0, 90); tone(70, 0.3, 'sine', 0.35 * p, 40); },
     gust(p = 1) { noise(500, 0.7, 1.2, 0.22 * p, (Math.random() - 0.5) * 0.8, 1700); noise(180, 0.8, 0.9, 0.18 * p, 0, 90); },
     rustle(p = 1) { noise(1800, 0.6, 0.6, 0.12 * p, 0, 500); },

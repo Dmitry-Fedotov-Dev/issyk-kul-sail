@@ -166,8 +166,15 @@ export function makeBeach({ G, scene, camera, audio, toast }) {
   const camYaw = () => { const v = new THREE.Vector3(); camera.getWorldDirection(v); return Math.atan2(v.x, -v.z); };
   // костёр рядом с Дымком (для его поз «у огня»)
   function fireNear(X, Y, R = 4.5) { for (const f of fires) if (Math.hypot(f.x - X, f.y - Y) < R) return f; return null; }
-  function interact(h) { if (!h) return false; const e = h.e; e.emoT = 2.5; if (e.vendor) toast(pickW(Math.random, [['Кукуруза — Дымку досталось зёрнышко!', 1], ['Лимонад — Дымок облизнулся', 1], ['Сосиска в тесте — пополам с Дымком', 1]])); else if (e.role === 'pink' || e.role === 'goth' || e.role === 'ngirl') toast('Дымка гладят и фотографируют'); else toast('Дымку подмигнули'); if (audio && audio.chime) audio.chime(); return true; }
+  // для звука пляжа: сколько людей рядом со слушателем, далеко ли костёр и гитара (ночные компании)
+  function sound(X, Y) { let crowd = 0, fireD = 1e9, guitD = 1e9, vendD = 1e9; const hr = G.clock ?? 12;
+    for (const c of cells) { if (!c.on || Math.hypot(c.X - X, c.Y - Y) > 1200) continue; const all = c.camp ? c.ents.concat(c.camp.ents) : c.ents;
+      for (const e of all) { if (!e.s) continue; const d = Math.hypot(e.x - X, e.y - Y);
+        if (e.fire) fireD = Math.min(fireD, d); else if (e.role) { if (d < 40) crowd += 1 - d / 40; if (e.role === 'nguitar' || e.role === 'guitar') guitD = Math.min(guitD, d); if (e.vendor) vendD = Math.min(vendD, d); } } }
+    return { crowd, fireD, guitD, vendD, night: hr >= 20 || hr < 5 }; }
+  // E рядом с человеком: что вышло -- для настроения Дымка (первое знакомство, угощение)
+  function interact(h) { if (!h) return false; const e = h.e; e.emoT = 2.5; const first = !e.greeted; e.greeted = true; const res = { vendor: !!e.vendor, first, role: e.role }; if (e.vendor) toast(pickW(Math.random, [['Кукуруза — Дымку досталось зёрнышко!', 1], ['Лимонад — Дымок облизнулся', 1], ['Сосиска в тесте — пополам с Дымком', 1]])); else if (e.role === 'pink' || e.role === 'goth' || e.role === 'ngirl') toast('Дымка гладят и фотографируют'); else toast('Дымку подмигнули'); if (audio && audio.chime) audio.chime(); return res; }
   // тон для чужих спрайтов (Дымок): ночная синева и тёплый отсвет ближайшего костра
   function tint(X, Y, out) { const dayK = clamp(ENV.uDay.value, 0, 1); out.setRGB(0.22 + 0.78 * dayK, 0.24 + 0.76 * dayK, 0.42 + 0.58 * dayK); for (const f of fires) { const d = Math.hypot(f.x - X, f.y - Y); if (d < 9) out.lerp(warm, (1 - d / 9) * (1 - dayK) * 0.85); } return out; }
-  return { update, fireNear, tint, interact, get count() { return live.size; }, cells };
+  return { update, fireNear, tint, interact, sound, get count() { return live.size; }, get dayN() { return day.n; }, cells };
 }
