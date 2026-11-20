@@ -7,6 +7,7 @@
 // обе сразу -- торможение и подрыв у земли; пробел -- акселератор (на буксировке -- отцепка, на склоне -- разбег).
 // Гонка -- как на настоящих соревнованиях: все в воздухе над аэродромом, окно старта через 45 с, выход из стартового
 // цилиндра, два поворотных цилиндра над предгорьями, цель -- поле у пляжа. Сели раньше -- считается оставшийся путь.
+import { rangeTxt } from './minimap.js';
 import * as THREE from 'three';
 import { Air, Glider, aiPilot, aiLand, WING } from './para.js';
 import { makeGlider } from './glidermodel.js';
@@ -406,7 +407,8 @@ export function makeParaMode(A) {
   // компас «курс вверх»: ветер, следующий пункт, ассистент термиков (где был подъём на последних кругах)
   function drawDial(g) { const cv = dial(), dc = cv.getContext('2d'), Wd = 352, c = Wd / 2, Rr = 142; dc.clearRect(0, 0, Wd, Wd);
     dc.fillStyle = 'rgba(5,20,45,.30)'; dc.beginPath(); dc.arc(c, c, Rr + 14, 0, 7); dc.fill(); dc.lineWidth = 3; dc.strokeStyle = 'rgba(255,255,255,.28)'; dc.beginPath(); dc.arc(c, c, Rr, 0, 7); dc.stroke();
-    const th = g.th, pol = (a, r) => [c + Math.sin(a) * r, c - Math.cos(a) * r], S = 0.6; // 0.6 px на метр: радиус круга -- около 240 м
+    const rg = G.mmRange(true); G.mini.draw(dc, c, Rr, g.X, g.Y, g.th, rg); dc.fillStyle = 'rgba(255,255,255,.8)'; dc.font = '600 17px sans-serif'; dc.textAlign = 'center'; dc.textBaseline = 'middle'; dc.fillText(rangeTxt(rg), c, c + 112); // миникарта
+    const th = g.th, pol = (a, r) => [c + Math.sin(a) * r, c - Math.cos(a) * r], S = Rr / rg; // точки потоков -- в масштабе миникарты
     for (let i = 0; i < lift.length; i += 3) { const dx = lift[i] - (g.X - (P.ax || 0)), dy = lift[i + 1] - (g.Y - (P.ay || 0)), v = lift[i + 2], a = Math.atan2(dx, dy) - th, d = Math.hypot(dx, dy) * S; if (d > Rr - 8) continue; const [x, y] = pol(a, d);
       const age = (lift.length - i) / lift.length; if (v > 0.2) { dc.fillStyle = `rgba(88,214,141,${(0.25 + 0.6 * (1 - age)).toFixed(2)})`; dc.beginPath(); dc.arc(x, y, 3 + Math.min(10, v * 3), 0, 7); dc.fill(); } else if (v < -1.5) { dc.fillStyle = 'rgba(255,90,70,.35)'; dc.fillRect(x - 2, y - 2, 4, 4); } }
     if (helpOn && near) for (const L of near.list) { const a = Math.atan2(L.X - g.X, L.Y - g.Y) - th, r = (Rr - 14) * Math.min(1, L.d / 1600) ** 0.6, [x, y] = pol(a, r); // радар потоков: дальнее прижато к краю

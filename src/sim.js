@@ -127,7 +127,7 @@ export function deepTarget(terrainH, X, Y, need) { for (let r = 15; r < 6000; r 
 export class Boat {
   constructor() { this.events = []; this.skill = 1; this.reset(0, 0, 0); }
   reset(X, Y, th) {
-    Object.assign(this, { X, Y, th, vx: 0, vy: 0, r: 0, phi: 0, p: 0, rudder: 0, ease: 0, boom: 0, trim: 30 * DEG, crew: 0,
+    Object.assign(this, { X, Y, th, vx: 0, vy: 0, r: 0, phi: 0, p: 0, rudder: 0, ease: 0, boom: 0, trim: 30 * DEG, ttW: 0, ttL: 0, crew: 0,
       capsized: false, righting: 0, rightHold: 0, aground: false, y: 0, pitch: 0, slopeR: 0, slopeF: 0,
       awa: 0, aws: 0, tws: 0, twd: 0, twa: 0, alpha: 0, luff: 0, u: 0, vs: 0, power: 0, lastAwaSign: 0, slam: 0, att: 1 });
     this.events.length = 0;
@@ -164,8 +164,9 @@ export class Boat {
     if (this.aground) return this.stepAground(dt, terrainH);
 
     // --- автоподбор шкота с запаздыванием + травление ---
-    const dOpt = clamp(absA - 18 * DEG, 6 * DEG, 86 * DEG);
-    this.trim += clamp(dOpt - this.trim, -0.6 * dt, 0.6 * dt);
+    // Pro: шкот только руками (выбрать / потравить), автоподбора нет -- недобрал или перебрал, и лодка едет хуже
+    if (this.pro) this.trim = clamp(this.trim - (inp.sheet || 0) * 0.32 * dt, 3 * DEG, 88 * DEG);
+    else { const dOpt = clamp(absA - 18 * DEG, 6 * DEG, 86 * DEG); this.trim += clamp(dOpt - this.trim, -0.6 * dt, 0.6 * dt); }
     const sheet = Math.min(88 * DEG, this.trim + this.ease * Math.max(0, absA - this.trim) * 0.97);
     const lee = awa > 0 ? -1 : 1; // гик уходит под ветер
     const bt = lee * Math.min(sheet, absA), brate = (1.2 + aws * 0.45) * dt, pb = this.boom;
@@ -182,6 +183,8 @@ export class Boat {
 
     const alpha = Math.max(0, absA - Math.abs(this.boom)), aDeg = alpha / DEG;
     this.alpha = alpha; this.luff = 1 - smooth(3, 11, aDeg);
+    // колдунчики: недобран -- наветренный задирается и полощет, перебран -- на подветренной срыв потока, он падает и пляшет
+    this.ttW += (smooth(2, 8, 18 - aDeg) - this.ttW) * Math.min(1, dt * 4); this.ttL += (smooth(3, 10, aDeg - 18) * (this.trim < 86 * DEG ? 1 : 0) - this.ttL) * Math.min(1, dt * 4); // парус потравлен до вант -- травить некуда
     const ce = Math.pow(Math.max(0, Math.cos(this.phi)), 1.2) * this.skill * (1 - 0.35 * (this.wearA || 0)) * (1 - 0.4 * (this.brkA || 0)); // растянутый парус тянет хуже, рваный -- совсем плохо
     const q = 0.5 * B.rhoAir * aws * aws * B.sail * ce, hx = ax / aws, hy = ay / aws;
     // нормаль паруса (подветренная сторона) -- выбирает знак подъёмной силы

@@ -8,31 +8,43 @@ import { CURVE, GLSL_COMMON, END, ENV } from './world.js';
 import { smooth } from './sim.js';
 
 // ---------- реки ----------
-const RV_V = CURVE + `attribute vec3 aR; varying vec3 vR; varying vec3 vP; void main(){ vR=aR; vP=position; vec3 q=position; q.y-=curve(q); gl_Position=projectionMatrix*modelViewMatrix*vec4(q,1.); }`;
-const RV_F = GLSL_COMMON + `uniform float uT; varying vec3 vR; varying vec3 vP;
-void main(){ float s=vR.x, v=vR.y, sp=vR.z, dist=length(vP-cameraPosition), px=length(fwidth(vP.xz));
-  vec3 col=mix(vec3(0.16,0.42,0.50), vec3(0.32,0.60,0.66), 0.5+0.5*sin(v*3.1))*(0.55+0.45*uSunI);
-  // струйки: короткие светлые штрихи, бегут вниз по течению, у камней и на перекатах гуще
-  float lane=floor(v*3.5+3.5), ph=fract((s-uT*sp)/(7.+3.*fract(lane*0.37))+lane*0.61), dash=smoothstep(0.0,0.08,ph)*(1.-smoothstep(0.32,0.45,ph));
-  float lw=1.-smoothstep(0.05,0.14,abs(fract(v*3.5+3.5)-0.5)-0.25); col=mix(col, vec3(0.95,0.98,1.), dash*lw*0.75*(1.-smoothstep(20.,90.,px*30.)));
-  float e=abs(v); col=mix(col, vec3(0.12,0.16,0.20), smoothstep(0.80,0.95,e)); // контур тушью
-  col=applyFog(col,dist,vP.y); gl_FragColor=vec4(col,1.); ${END} }`;
+// Реки не геометрия, а функция координат: русло по OSM (притянутое к дну долины по рельефу) запекается в маленькую
+// текстуру на сетке 14 м -- знаковое расстояние до оси в полуширинах русла и направление течения. Шейдер рельефа
+// по ней рисует воду прямо на поверхности склона: она ничего не перекрывает и лежит ровно там, где земля.
 function makeRivers(dem, h) {
-  const pos = [], att = [], idx = [];
+  const lines = [], pts = [];
   for (const w of RIVERS.split(';')) { const a = w.split(',').map(Number); let P = []; for (let i = 0; i + 1 < a.length; i += 2) P.push([a[i] * 4, a[i + 1] * 4]);
     P = P.filter((p) => dem.inside(p[0], p[1]) && dem.raw(p[0], p[1]) > 3); if (P.length < 2) continue;
     if (h(P[0][0], P[0][1]) < h(P[P.length - 1][0], P[P.length - 1][1])) P.reverse(); // течёт вниз
-    // гуще: шаг ~6 м, чтобы лента повторяла рельеф
-    const Q = []; for (let i = 0; i < P.length - 1; i++) { const [x0, y0] = P[i], [x1, y1] = P[i + 1], n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 6)); for (let k = 0; k < n; k++) Q.push([x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n]); } Q.push(P[P.length - 1]);
-    const base = pos.length / 3; let s = 0;
-    for (let i = 0; i < Q.length; i++) { const p = Q[i], q = Q[Math.min(i + 1, Q.length - 1)], o = Q[Math.max(i - 1, 0)], dx = q[0] - o[0], dy = q[1] - o[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
-      if (i) s += Math.hypot(p[0] - Q[i - 1][0], p[1] - Q[i - 1][1]);
-      const hw = 2.2 + Math.min(3, s / 900), slope = Math.max(0, (h(o[0], o[1]) - h(q[0], q[1])) / l), sp = 1.2 + Math.min(5, slope * 18);
-      for (const sd of [-1, 1]) { const X = p[0] + nx * hw * sd, Y = p[1] + ny * hw * sd; pos.push(X, Math.max(h(X, Y), h(p[0], p[1]), h((X + p[0]) / 2, (Y + p[1]) / 2)) + 0.6, -Y); att.push(s, sd, sp); }
-      if (i) { const a2 = base + (i - 1) * 2; idx.push(a2, a2 + 2, a2 + 1, a2 + 1, a2 + 2, a2 + 3); } } }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aR', new THREE.Float32BufferAttribute(att, 3)); g.setIndex(idx);
-  const mat = new THREE.ShaderMaterial({ uniforms: { ...ENV, uT: { value: 0 } }, defines: { FBM_OCT: 3, RIP_OCT: 3, SHN: 6 }, vertexShader: RV_V, fragmentShader: RV_F, side: THREE.DoubleSide, extensions: { derivatives: true }, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
-  const m = new THREE.Mesh(g, mat); m.frustumCulled = false; m.renderOrder = 1; return { mesh: m, mat, pts: pos.length / 6 };
+    let Q = []; for (let i = 0; i < P.length - 1; i++) { const [x0, y0] = P[i], [x1, y1] = P[i + 1], n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 6)); for (let k = 0; k < n; k++) Q.push([x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n]); } Q.push(P[P.length - 1]);
+    // русло OSM смещено от тальвега карты высот на десятки метров -- ищем дно долины поперёк, сдвиг сглаживаем
+    const nrm = (i) => { const q = Q[Math.min(i + 1, Q.length - 1)], o = Q[Math.max(i - 1, 0)], dx = q[0] - o[0], dy = q[1] - o[1], l = Math.hypot(dx, dy) || 1; return [-dy / l, dx / l]; };
+    let off = Q.map((p, i) => { const [nx, ny] = nrm(i); let best = 0, bh = 1e9; for (let d = -36; d <= 36; d += 3) { const z = h(p[0] + nx * d, p[1] + ny * d) + Math.abs(d) * 0.03; if (z < bh) { bh = z; best = d; } } return best; });
+    for (let pass = 0; pass < 3; pass++) off = off.map((_, i) => { let s = 0, n = 0; for (let k = -6; k <= 6; k++) { const j = i + k; if (j >= 0 && j < off.length) { s += off[j]; n++; } } return s / n; });
+    Q = Q.map((p, i) => { const [nx, ny] = nrm(i); return [p[0] + nx * off[i], p[1] + ny * off[i]]; });
+    let s = 0; const L = Q.map((p, i) => (i ? (s += Math.hypot(p[0] - Q[i - 1][0], p[1] - Q[i - 1][1])) : 0));
+    lines.push({ Q, hw: L.map((l) => 2.2 + Math.min(3, l / 900)) }); for (let i = 0; i < Q.length; i += 5) pts.push(Q[i]); }
+  // запекание: R -- знаковое расстояние / полуширина (-4..4), G -- маска «рядом река», BA -- течение
+  const S = dem.STEP, VR = 4; let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
+  for (const { Q } of lines) for (const [x, y] of Q) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y); }
+  const pad = VR * 5.2 + 3 * S; bx0 -= pad; by0 -= pad; bx1 += pad; by1 += pad;
+  const W = Math.ceil((bx1 - bx0) / S), H = Math.ceil((by1 - by0) / S), best = new Float32Array(W * H).fill(1e9), data = new Uint8Array(W * H * 4), lid = new Int16Array(W * H).fill(-1), vv = new Float32Array(W * H);
+  lines.forEach(({ Q, hw }, li) => { for (let i = 0; i < Q.length - 1; i++) {
+    const [ax, ay] = Q[i], [qx, qy] = Q[i + 1], dx = qx - ax, dy = qy - ay, l2 = dx * dx + dy * dy || 1, l = Math.sqrt(l2), R = VR * Math.max(hw[i], hw[i + 1]) + S * 1.5;
+    const i0 = Math.max(0, Math.floor((Math.min(ax, qx) - R - bx0) / S)), i1 = Math.min(W - 1, Math.ceil((Math.max(ax, qx) + R - bx0) / S)), j0 = Math.max(0, Math.floor((by1 - Math.max(ay, qy) - R) / S)), j1 = Math.min(H - 1, Math.ceil((by1 - Math.min(ay, qy) + R) / S));
+    for (let j = j0; j <= j1; j++) for (let ii = i0; ii <= i1; ii++) { const X = bx0 + (ii + 0.5) * S, Y = by1 - (j + 0.5) * S, t = Math.max(0, Math.min(1, ((X - ax) * dx + (Y - ay) * dy) / l2));
+      const d = Math.hypot(X - ax - dx * t, Y - ay - dy * t), k = j * W + ii; if (d >= best[k]) continue; best[k] = d;
+      const sg = (dx * (Y - ay) - dy * (X - ax)) >= 0 ? 1 : -1, v = Math.max(-VR, Math.min(VR, sg * d / (hw[i] + (hw[i + 1] - hw[i]) * t))), o = k * 4;
+      data[o] = Math.round((v / VR * 0.5 + 0.5) * 255); data[o + 1] = 255; data[o + 2] = Math.round((dx / l * 0.5 + 0.5) * 255); data[o + 3] = Math.round((dy / l * 0.5 + 0.5) * 255); lid[k] = li; vv[k] = v; } } });
+  // между двумя руслами, за концом русла и на крутой излучине знак расстояния скачет -- интерполяция нарисовала бы ложную воду.
+  // Такие стыки вне самой воды выключаем маской
+  const cut = []; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (lid[k] < 0) continue;
+    for (const n of [i + 1 < W ? k + 1 : -1, j + 1 < H ? k + W : -1]) { if (n < 0 || lid[n] < 0 || Math.sign(vv[n]) === Math.sign(vv[k])) continue;
+      if (best[k] + best[n] > S * 1.08) cut.push(k, n); } } // честное пересечение оси: сумма расстояний не больше шага сетки
+  for (const k of cut) data[k * 4 + 1] = 0;
+  const tex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat); tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false; tex.flipY = false; tex.needsUpdate = true;
+  ENV.uRiv.value = tex; ENV.uRivT.value.set(bx0, by1, 1 / (W * S), 1 / (H * S)); ENV.uRivOn.value = 1;
+  return { pts, tex };
 }
 
 // ---------- валуны ----------
@@ -111,7 +123,6 @@ function makeSlabs(dem, h) { let seed = 53; const r = () => (seed = (seed * 1680
   const m = new THREE.Mesh(geo, mat); m.frustumCulled = false; return { mesh: m, n }; }
 
 export function makeCorridorArt(scene, dem, h) {
-  const rv = makeRivers(dem, h), riverPts = []; { const p = rv.mesh.geometry.attributes.position.array; for (let i = 0; i < p.length; i += 30) riverPts.push([p[i], -p[i + 2]]); }
-  const bo = makeBoulders(dem, h, riverPts), sl = makeSlabs(dem, h); scene.add(rv.mesh, bo.mesh, sl.mesh);
-  return { rivers: rv.mesh, boulders: bo.mesh, slabs: sl.n, n: bo.n, tick(t) { rv.mat.uniforms.uT.value = t; } };
+  const rv = makeRivers(dem, h), bo = makeBoulders(dem, h, rv.pts), sl = makeSlabs(dem, h); scene.add(bo.mesh, sl.mesh);
+  return { rivers: rv.tex, riverPts: rv.pts, boulders: bo.mesh, slabs: sl.n, n: bo.n, tick(t) { ENV.uRT.value = t; } };
 }

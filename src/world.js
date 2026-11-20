@@ -37,6 +37,7 @@ export const ENV = {
   uSun: { value: SUN }, uHor: { value: new THREE.Vector3(0.56, 0.76, 0.97) }, uCover: { value: 0.4 }, uCirrus: { value: 0.3 },
   uStorm: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
   uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() },
+  uRiv: { value: null }, uRivT: { value: new THREE.Vector4() }, uRivOn: { value: 0 }, uRT: { value: 0 }, // реки коридора -- маской (corridorart)
   uLC: { value: null }, uLCOn: { value: 0 }, uPaint: { value: 1 }, uLCT: { value: new THREE.Vector4(-141000, 63000, 1 / 273600, 1 / 180600) }, // маска зон OSM (по требованию) // съёмка карты сверху: дно плавно уходит в цвет озера на карте
 };
 export const GLSL_COMMON = /* glsl */`
@@ -205,7 +206,7 @@ varying vec3 vP; varying vec3 vN; varying float vH; uniform float uMap; uniform 
 // гребневой шум: острые хребты и кулуары, которых нет в карте высот с её шагом в десятки метров
 float ridged(vec2 p){ float a=0.5, s=0., w=1.; for(int i=0;i<FBM_OCT;i++){ float r=1.-abs(2.*vnoise(p)-1.); r*=r*w; s+=a*r; w=clamp(r*1.6,0.,1.); p=mat2(1.6,1.2,-1.2,1.6)*p+7.; a*=0.5; } return s; }
 #ifdef DEMN
-uniform sampler2D uDemN; uniform vec4 uDemT;
+uniform sampler2D uDemN; uniform vec4 uDemT; uniform sampler2D uRiv; uniform vec4 uRivT; uniform float uRivOn, uRT;
 #endif
 void main(){ vec3 N=normalize(vN); float h=vH;
 #ifdef DEMN
@@ -274,6 +275,18 @@ void main(){ vec3 N=normalize(vN); float h=vH;
     float hsh=dot(N, normalize(vec3(-0.55,0.7,-0.45))); ao*=clamp((1.+cav*0.5)*mix(0.72,1.15,hsh),0.45,1.4); l*=clamp(1.+cav*0.25,0.7,1.25); }
 #endif
   vec3 col=c*(sunC*l*(1.25+0.75*sunny)+shC*ao*(1.25+0.3*sunny)+snowM*vec3(0.36,0.42,0.60)*mix(1.,0.5,uStorm)*ao);
+#ifdef DEMN
+  // реки: вода нарисована прямо на склоне по запечённой маске русла -- светлые струйки бегут вниз по течению
+  if(uRivOn>0.){ vec2 ru=vec2((vP.x-uRivT.x)*uRivT.z, (uRivT.y+vP.z)*uRivT.w); vec4 rv=texture2D(uRiv, clamp(ru,0.,1.));
+    float v=(rv.r*2.-1.)*4., av=abs(v), fw=max(fwidth(v),0.02), ok=step(0.995,rv.g)*step(0.,ru.x)*step(ru.x,1.)*step(0.,ru.y)*step(ru.y,1.);
+    if(ok>0. && av<1.8){ vec2 td=normalize(rv.ba*2.-1.+1e-4); float sa=dot(vec2(vP.x,-vP.z),td), px2=length(fwidth(vP.xz));
+      vec3 wc=mix(vec3(0.16,0.42,0.50), vec3(0.34,0.62,0.68), 0.5+0.5*sin(v*3.1+sa*0.05))*(0.55+0.55*uSunI);
+      float lane=floor(v*3.5+3.5), ph=fract((sa-uRT*(2.+fract(lane*0.53)*1.5))/(7.+3.*fract(lane*0.37))+lane*0.61), dash=smoothstep(0.,0.08,ph)*(1.-smoothstep(0.32,0.45,ph));
+      float lw=1.-smoothstep(0.05,0.14,abs(fract(v*3.5+3.5)-0.5)-0.25); wc=mix(wc, vec3(0.95,1.,1.05), dash*lw*0.5*(1.-smoothstep(0.6,3.,px2)));
+      wc=mix(wc, vec3(0.10,0.13,0.17), smoothstep(0.80-fw,0.95+fw,av)*(1.-smoothstep(1.,1.2,av))); // контур тушью
+      col*=mix(0.72,1.,smoothstep(1.,1.7,av)); // мокрый берег темнее
+      col=mix(col, wc, (1.-smoothstep(1.-fw,1.+fw,av))*(1.-smoothstep(4.,9.,px2))); } }
+#endif
   // контровой свет по гребням: кромка, обращённая к солнцу, горит
   vec3 Vd=normalize(cameraPosition-vP); col+=sunC*c*pow(1.-max(dot(N,Vd),0.),3.)*max(dot(N,uSun)+0.25,0.)*0.55*mt*uSunI;
   float dist=length(vP-cameraPosition);

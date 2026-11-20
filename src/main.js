@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TRAILS, RIVERS } from './trails.js';
+import { makeMinimap, rangeTxt } from './minimap.js';
 import { Boat, Wind, Waves, PRESETS, DEG, KN, clamp, wrapPi, smooth, pointOfSail, aiControl } from './sim.js';
 import { DEM } from './demdata.js';
 import { applyQuality, loadHeight, loadDem, makeDemTerrain, makeSky, makeTerrain, makeFarTerrain, makeWater, makeShore, makeMark, SUN, HAZE, ENV, MAP } from './world.js';
@@ -103,6 +104,10 @@ async function init() {
   X = installExtra({ mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
     setPreset: (id) => { if (PRESETS[id]) { G.preset = id; applyPreset(); } }, para: () => PG });
   SPY = makeSpyglass({ G, camera, post, audio, store, ach: X.ach, $, extra: X }); SPY.renderAtlas(); // подзорная труба (spyglass.js)
+  G.pro = !!store.get('pro'); $('bpro').classList.toggle('on', G.pro);
+  G.mini = makeMinimap(hA); G.mmZ = store.get('mmZ') ?? 1; // миникарта в компасе; масштаб -- тапом по компасу
+  $('dialwrap').addEventListener('pointerdown', (e) => { e.stopPropagation(); }); $('dialwrap').onclick = (e) => { e.stopPropagation(); G.mmZ = (G.mmZ + 1) % 3; store.set('mmZ', G.mmZ); audio.tick && audio.tick(); };
+  G.mmRange = (para) => (para ? [240, 1500, 6000] : [400, 1500, 5000])[G.mmZ];
   PG = makeParaMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, lens }); // параплан (paramode.js)
   buildMenu(); applyPreset(); toMenu(); resize();
   // Шейдеры собираются при первом показе каждого объекта, и это подвешивало меню на несколько секунд. Собираем всё
@@ -324,7 +329,7 @@ function finishRace() {
 }
 
 // ---------- ввод ----------
-const KEY = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'ease', ArrowDown: 'ease', KeyS: 'ease' };
+const KEY = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'ease', ArrowDown: 'ease', KeyS: 'ease', ArrowUp: 'sin', KeyW: 'sin' };
 window.addEventListener('keydown', (e) => {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return; // печатают имя -- не рулим
   if (e.code === 'Space') input.bar = true; if (e.code === 'ArrowDown' || e.code === 'KeyS') input.flare = true; // параплан: акселератор и обе клеванты
@@ -334,6 +339,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyE' && SPY && SPY.on) SPY.holdStart(); // E -- зажать с клавиатуры
   else if (e.code === 'Escape' && SPY && SPY.on) SPY.close();
   else if (e.code === 'KeyC') { G.cam = (G.cam + 1) % 3; resetView(); }
+  else if (e.code === 'KeyP' && G.mode !== 'menu' && !(PG && PG.on)) togglePro();
   else if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Звук выключен' : 'Звук включён');
   else if (e.code === 'Escape' && G.mode !== 'menu') toMenu();
   else if (e.code === 'KeyF' && G.mode !== 'menu' && !(PG && PG.on)) X.hookPress();
@@ -343,7 +349,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyR' && G.mode === 'race') startRace(); else if (e.code === 'KeyR' && G.mode === 'free') startFree();
 });
 window.addEventListener('keyup', (e) => { if (e.code === 'KeyE' && SPY && SPY.on) SPY.holdEnd(); if (e.code === 'Space') input.bar = false; if (e.code === 'ArrowDown' || e.code === 'KeyS') input.flare = false; if (KEY[e.code]) { input[KEY[e.code]] = false; e.preventDefault(); } });
-window.addEventListener('blur', () => { input.left = input.right = input.ease = input.bar = input.flare = false; input.joy = null; });
+window.addEventListener('blur', () => { input.left = input.right = input.ease = input.bar = input.flare = input.sin = false; input.sheetT = 0; input.joy = null; });
 if (TOUCH) document.body.classList.add('touchdev');
 // касание левой половины экрана -- руль влево, правой -- вправо; несколько пальцев учитываются по отдельности
 // Обзор и руль делят один экран. Мышь: перетаскивание -- обзор, колесо -- приближение (рулят с клавиатуры).
@@ -371,7 +377,9 @@ canvas.addEventListener('pointermove', (e) => { const q = ptr.get(e.pointerId); 
 for (const n of ['pointerup', 'pointercancel']) window.addEventListener(n, (e) => { const q = ptr.get(e.pointerId); ptr.delete(e.pointerId); if (SPY && SPY.on && q) SPY.holdEnd(); if (ptr.size < 2) pinch = 0; if (held.delete(e.pointerId)) syncTouch();
   if (q && n === 'pointerup' && G && Math.hypot(e.clientX - q.x0, e.clientY - q.y0) < 8 && performance.now() - q.t < 300) { const now = performance.now(); if (now - lastTap < 320) { resetView(); lastTap = 0; } else lastTap = now; } });
 canvas.addEventListener('wheel', (e) => { if (!G || G.mode === 'menu') return; e.preventDefault(); if (SPY && SPY.on) { SPY.zoomBy(Math.exp(-e.deltaY * 0.0016)); return; } G.zoom = clamp(G.zoom * Math.exp(e.deltaY * 0.0012), PG && PG.on ? 0.15 : 0.45, 3.2); }, { passive: false });
-{ const el = $('ts'), set = (v) => (e) => { e.preventDefault(); e.stopPropagation(); input.ease = v; input.bar = v; el.classList.toggle('on', v); };
+{ const el = $('ts'); let y0 = null; const set = (v) => (e) => { e.preventDefault(); e.stopPropagation(); input.ease = v; input.bar = v; el.classList.toggle('on', v); y0 = v ? e.clientY : null; if (!v) input.sheetT = 0; };
+  // Pro: провести по кнопке вверх -- выбрать шкот, вниз -- потравить; просто держать -- как раньше, обезветрить
+  el.addEventListener('pointermove', (e) => { if (y0 === null || !G || !G.pro) return; const dy = e.clientY - y0; if (Math.abs(dy) > 10) { input.ease = input.bar = false; el.classList.remove('on'); input.sheetT = clamp(-dy / 50, -1, 1); } });
   el.addEventListener('pointerdown', set(true)); for (const n of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(n, set(false)); }
 // джойстик моторных на сенсорном экране: кружок с точкой; точку тянут -- куда тянут, туда и рулит, дальше -- больше газа
 { const el = $('joy'), dot = el.firstElementChild; let id = null;
@@ -383,7 +391,7 @@ canvas.addEventListener('wheel', (e) => { if (!G || G.mode === 'menu') return; e
   for (const n of ['pointerup', 'pointercancel']) el.addEventListener(n, end); }
 $('bmenu').onclick = () => toMenu();
 $('bcam').onclick = () => { G.cam = (G.cam + 1) % 3; resetView(); };
-$('bspy').onclick = () => { audio.start(); SPY.toggle(); }; $('spyx').onclick = () => SPY.close();
+$('bspy').onclick = () => { audio.start(); SPY.toggle(); }; $('bpro').onclick = (e) => { e.currentTarget.blur(); togglePro(); }; $('spyx').onclick = () => SPY.close();
 $('spyin').onclick = () => SPY.zoomBy(1.5); $('spyout').onclick = () => SPY.zoomBy(1 / 1.5);
 let drag = null;
 
@@ -529,7 +537,9 @@ function tick(dt) {
   } else if (input.joy && b.spec && b.spec.cls === 'motor') { // джойстик моторных: угол от «вверх» -- руль, отклонение -- газ, назад не бывает
     const j = input.joy, m = Math.min(1, Math.hypot(j.x, j.y)), on = m > 0.15, a = Math.atan2(j.x, -j.y);
     ctl = X.filterCtl({ steer: on ? clamp(a / (Math.PI / 2), -1, 1) : 0, thr: on ? (m - 0.15) / 0.85 : 0, ease: on && b.capsized, left: false, right: false });
-  } else ctl = X.filterCtl({ steer: (input.right ? 1 : 0) - (input.left ? 1 : 0), ease: input.ease, left: input.left, right: input.right });
+  } else if (G.pro && !b.kind) ctl = X.filterCtl({ steer: (input.right ? 1 : 0) - (input.left ? 1 : 0), ease: input.bar, sheet: clamp((input.sin ? 1 : 0) - (input.flare ? 1 : 0) + (input.sheetT || 0), -1, 1), left: input.left, right: input.right }); // Pro: ↑ выбрать, ↓ потравить, пробел -- обезветрить
+  else ctl = X.filterCtl({ steer: (input.right ? 1 : 0) - (input.left ? 1 : 0), ease: input.ease, left: input.left, right: input.right });
+  b.pro = !!G.pro && !b.kind;
   const ctls = boats.map((e, i) => { if (i === 0) return ctl; if (G.race2) return X.aiFor(e, dt);
     const tg = target(R, e.leg, true), c = aiControl(e.b, tg.X, tg.Y, e.ai, dt);
     if (R.t < 0 && al(R, e.b) > -9) c.ease = true;
@@ -627,6 +637,7 @@ function updateCamera(dt, b, sp) {
   }
   if (G.dbgCam) { const c = G.dbgCam, hx = Math.sin(b.th), hz = -Math.cos(b.th); // крупный план для автотестов
     camera.position.set(bx - hx * c.back + hz * -c.side, c.up, bz - hz * c.back + hx * c.side); camera.lookAt(bx, 1.2, bz); camera.fov = 45; }
+  if (G.dbgLook) { const L = G.dbgLook; camera.position.set(...L.p); camera.lookAt(...L.t); camera.fov = 50; } // для автотестов: камера в точку
   if (G.mode !== 'menu' && camera.view && camera.view.enabled) camera.clearViewOffset();
   camera.updateProjectionMatrix();
   G.sky.position.copy(camera.position);
@@ -637,6 +648,7 @@ const dial = $('dial'), dc = dial.getContext('2d');
 function drawDial(b) {
   const W = 352, c = W / 2, R = 142; dc.clearRect(0, 0, W, W);
   dc.fillStyle = 'rgba(5,20,45,.30)'; dc.beginPath(); dc.arc(c, c, R + 14, 0, 7); dc.fill();
+  { const rg = G.mmRange(false); G.mini.draw(dc, c, R, b.X, b.Y, b.th, rg); dc.fillStyle = 'rgba(255,255,255,.8)'; dc.font = '600 17px sans-serif'; dc.textAlign = 'center'; dc.textBaseline = 'middle'; dc.fillText(rangeTxt(rg), c, c + 112); }
   // тяга: дуга по ободу компаса растёт от шести часов по кругу; сглажена, чтобы не дрожала на волне. Полощет парус -- дуга голубая
   G.pow = (G.pow || 0) + ((b.capsized ? 0 : b.kind ? b.powerN : clamp(b.power / 900, 0, 1)) - (G.pow || 0)) * 0.3;
   dc.lineCap = 'round'; dc.lineWidth = 9; dc.strokeStyle = 'rgba(255,255,255,.16)'; dc.beginPath(); dc.arc(c, c, R + 20, 0, 7); dc.stroke();
@@ -657,8 +669,20 @@ function drawDial(b) {
   // лодка и гик
   dc.fillStyle = '#fff'; dc.beginPath(); dc.moveTo(c, c - 52); dc.quadraticCurveTo(c + 26, c - 8, c + 17, c + 44); dc.lineTo(c - 17, c + 44); dc.quadraticCurveTo(c - 26, c - 8, c, c - 52); dc.fill();
   dc.strokeStyle = b.luff > 0.5 ? '#7fd0ff' : '#ff8a2a'; dc.lineWidth = 8; dc.lineCap = 'round'; dc.beginPath(); dc.moveTo(c, c - 12); dc.lineTo(c + Math.sin(b.boom) * 62, c - 12 + Math.cos(b.boom) * 62); dc.stroke();
+  if (b.pro && !b.capsized) drawTell(b, c);
 }
+// Колдунчики Pro: две ленточки на парусе, по обе стороны. Обе ровно струятся назад -- шкот настроен.
+// Наветренная (зелёная) задирается и полощет -- шкот недобран; подветренная (красная) падает и пляшет -- перебран
+function drawTell(b, c) { const t = G.t, ux = Math.sin(b.boom), uy = Math.cos(b.boom), lee = b.boom >= 0 ? 1 : -1, nx = uy * lee, ny = -ux * lee; // n -- к подветренной стороне
+  const px = c + ux * 26, py = c - 12 + uy * 26;
+  const tape = (side, k, col, ph) => { const lift = side < 0 ? k : -k * 0.6; dc.strokeStyle = col; dc.lineWidth = 7; dc.lineCap = 'round'; dc.beginPath();
+    for (let i = 0; i <= 8; i++) { const s = i / 8, along = s * 60 * (1 - 0.35 * k), w = (Math.sin(t * (6 + 16 * k) + s * 7 + ph) * (1.2 + 13 * k) + lift * 26) * s, ox = nx * side * 14, oy = ny * side * 14;
+      const x = px + ox + ux * along + nx * side * w, y = py + oy + uy * along + ny * side * w; if (i) dc.lineTo(x, y); else dc.moveTo(x, y); } dc.stroke(); };
+  tape(-1, b.ttW, '#58d68d', 0); tape(1, b.ttL, '#ff6b5b', 2.1); }
 let hintKey = '', hintT = 0;
+// Режим Pro для яхты: шкот без автоподбора, по колдунчикам на компасе. Обычная игра не меняется
+function togglePro() { G.pro = !G.pro; store.set('pro', G.pro); $('bpro').classList.toggle('on', G.pro); G.proT = 0;
+  toast(G.pro ? 'Pro: шкот вручную — следите за колдунчиками' : 'Обычный режим: шкот подбирается сам'); }
 // Приборы обновляются много раз в секунду, а меняются редко. Запись в DOM того же значения всё равно заставляет
 // браузер пересчитывать стили и раскладку, поэтому пишем только изменившееся
 const setT = (el, s) => { if (el.textContent !== s) el.textContent = s; };
@@ -668,9 +692,9 @@ const setSt = (el, k, v) => { if (el.style[k] !== v) el.style[k] = v; };
 function tackNow(R, b) { const tg = target(R, G.player.leg, false), brg = Math.atan2(tg.X - b.X, tg.Y - b.Y);
   return Math.abs(wrapPi(brg - b.th)) > 92 * DEG && Math.abs(wrapPi(brg - b.twd)) < 120 * DEG && Math.hypot(tg.X - b.X, tg.Y - b.Y) > 25; }
 function updateHud(dt, b, sp) {
-  if (PG && PG.on) { PG.hud(dt); return; }
+  if (PG && PG.on) { setP($('bpro'), 'hidden', true); PG.hud(dt); return; }
   if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; }
-  const heel = Math.abs(b.phi) / DEG, R = G.race;
+  const heel = Math.abs(b.phi) / DEG, R = G.race; G.proT = (G.proT ?? 99) + dt; setP($('bpro'), 'hidden', !!b.kind || G.mode === 'menu'); // Pro -- только у яхты
   setSt($('vign'), 'opacity', String(+smooth(32, 58, heel).toFixed(2)));
   const hold = b.capsized && !b.righting && !(b.noRight > 0); setP($('ring'), 'hidden', !hold); if (hold) $('ringarc').setAttribute('stroke-dashoffset', String(314 * (1 - b.rightHold)));
   // метка цели: висит над знаком, а если он вне кадра -- прижата к краю экрана с той стороны, где он есть
@@ -702,6 +726,9 @@ function updateHud(dt, b, sp) {
   else if (R && R.t > 3 && G.player.leg === 0 && al(R, b) > 6) { h = 'Старт не взят — вернитесь и пройдите между красным и синим знаком'; alert = true; }
   else if (twa < 34 && sp < 1.6) h = (R && R.t >= 0 && G.player.leg !== 2 && G.player.leg < 4) ? 'Знак против ветра — прямо не дойти. Отверните к краю красного сектора и идите зигзагом' : 'Нос в ветер, парус не тянет — отверните от красного сектора';
   else if (R && R.t >= 0 && (G.player.leg === 1 || G.player.leg === 3) && tackNow(R, b)) h = 'Пора поворачивать через ветер — знак остался сбоку';
+  else if (b.pro && b.ttL > 0.6) h = TOUCH ? 'Красный колдунчик пляшет — шкот перебран: проведите по «шкоту» вниз' : 'Красный колдунчик пляшет — шкот перебран: ↓ потравить';
+  else if (b.pro && b.ttW > 0.6 && b.ease < 0.3) h = TOUCH ? 'Зелёный колдунчик полощет — шкот недобран: проведите по «шкоту» вверх' : 'Зелёный колдунчик полощет — шкот недобран: ↑ выбрать';
+  else if (b.pro && (G.proT ?? 99) < 9) h = TOUCH ? 'Pro: по «шкоту» вверх — выбрать, вниз — потравить · держать — обезветрить' : 'Pro: ↑ выбрать шкот · ↓ потравить · пробел — обезветрить';
   else if (b.ease > 0.6 && heel < 12 && twa < 120) h = 'Шкот потравлен — парус не тянет';
   else if (T < 9) h = TOUCH ? 'Держать слева или справа — руль · провести — обзор' : '← → руль · пробел — травить шкот · мышь — обзор';
   else if (G.mode === 'race' && R.t < 0) h = 'К сигналу — к линии между красным и синим знаком';

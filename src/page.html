@@ -41,9 +41,10 @@ body.spy #hint,body.spy #ts,body.spy #joy,body.spy #bhook{visibility:hidden}
 #atlas h3{margin:18px 0 6px;font-size:15px}.acat{font:600 11px var(--ui);letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:8px 0 4px}
 .achips{display:flex;flex-wrap:wrap;gap:6px}.achips span{font-size:12px;padding:4px 8px;border-radius:10px;border:1px solid rgba(255,255,255,.15);color:var(--dim)}.achips span.on{color:#ffe2a0;border-color:rgba(255,214,120,.6);background:rgba(255,214,120,.08)}
 #tools{display:flex;gap:8px;margin-top:10px;pointer-events:auto}
+#bpro{font:700 9px var(--ui)!important;letter-spacing:.04em}#bpro.on{background:rgba(255,138,42,.75);opacity:1}
 #tools button{width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(7,26,58,.28);color:var(--ink);font-size:15px;line-height:1;cursor:pointer;padding:0;opacity:.75}
 #tools button:focus-visible,#ts:focus-visible{outline:2px solid #fff;outline-offset:2px}
-#dialwrap{right:max(16px,env(safe-area-inset-right,0px));top:14px;text-align:center}
+#dialwrap{right:max(16px,env(safe-area-inset-right,0px));top:14px;text-align:center;pointer-events:auto;cursor:pointer;-webkit-tap-highlight-color:transparent}
 #dial{width:118px;height:118px;display:block}
 #windtxt{font-size:12px;margin-top:-2px;opacity:.9}
 #hint{left:50%;bottom:26px;transform:translateX(-50%);font-size:15px;max-width:min(560px,calc(100vw - 32px));text-align:center;box-sizing:border-box;padding:7px 14px;border-radius:999px}
@@ -197,7 +198,7 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
 <div id="lens"></div>
 <div id="game" hidden>
   <div id="speed" class="hud"><b id="kn">0.0</b><small>уз</small><div id="pos"></div><div id="wear"></div>
-    <div id="tools"><button id="bmenu" aria-label="Меню">☰</button><button id="bcam" aria-label="Сменить камеру">◉</button><button id="bfriends" aria-label="Друзья и приглашение">👥</button><button id="bspy" aria-label="Подзорная труба (Z)">🔭</button></div></div>
+    <div id="tools"><button id="bmenu" aria-label="Меню">☰</button><button id="bcam" aria-label="Сменить камеру">◉</button><button id="bfriends" aria-label="Друзья и приглашение">👥</button><button id="bspy" aria-label="Подзорная труба (Z)">🔭</button><button id="bpro" aria-label="Режим Pro: шкот вручную (P)" hidden>PRO</button></div></div>
   <div id="race" class="hud" hidden><b id="rtime">0:00</b><div id="rinfo"></div></div>
   <div id="dialwrap" class="hud"><canvas id="dial" width="352" height="352"></canvas><div id="windtxt"></div></div>
   <div id="mark" class="hud" hidden><span id="markd"></span><i></i></div>
