@@ -3,12 +3,12 @@
 import { createRequire } from 'node:module'; const { chromium } = createRequire('/home/feduk/.npm/_npx/e41f203b7505f1fb/node_modules/')('playwright');
 import fs from 'fs';
 const DIR = '/home/feduk/Code/issyk-kul-sail/art/dymok/';
-const src = 'data:image/png;base64,' + fs.readFileSync(DIR + 'back.png').toString('base64');
+const src = 'data:image/png;base64,' + fs.readFileSync(DIR + 'back.png').toString('base64'), srcF = 'data:image/png;base64,' + fs.readFileSync(DIR + 'adv.png').toString('base64');
 // полосы с кадрами: [имя, x0, y0, x1, y1, сколько кадров]
 const BANDS = [['idle', 10, 432, 380, 552, 4], ['walk', 392, 432, 782, 552, 4], ['left', 795, 432, 1150, 552, 3], ['right', 1160, 432, 1530, 552, 3],
   ['act', 10, 590, 1530, 748, 7], ['cycle', 10, 852, 765, 985, 8], ['mood', 908, 48, 1520, 258, 4]];
 const b = await chromium.launch(); const p = await b.newPage();
-const out = await p.evaluate(async ([src, BANDS]) => {
+const out = await p.evaluate(async ([src, BANDS, srcF]) => {
   const im = new Image(); im.src = src; await im.decode(); const W = im.width, H = im.height, cv = new OffscreenCanvas(W, H), x = cv.getContext('2d'); x.drawImage(im, 0, 0);
   const D = x.getImageData(0, 0, W, H).data, res = [];
   for (const [name, x0, y0, x1, y1, n] of BANDS) {
@@ -68,12 +68,31 @@ const out = await p.evaluate(async ([src, BANDS]) => {
       const mx = Math.max(...sz); for (let k = 0; k < W2 * H2; k++) if (lb[k] >= 0 && sz[lb[k]] < mx * 0.08) I2.data[k * 4 + 3] = 0; }
     let cL = 0, cR = 0; for (let k = 0; k < cut.length; k++) if (cut[k]) { if (k % fw < cx) cL++; else cR++; }
     OUT.push({ side: cL >= cR ? -1 : 1, name: f.name, w: W2, h: H2, ax: cx * s, ay: (by1 + 1) * s, rl: rl && [rl[0] * s, rl[1] * s], rr: rr && [rr[0] * s, rr[1] * s], cut: nc, data: Array.from(I2.data) }); }
+  // ---- вид спереди: лист 4x3 с лицом (adv.png); фон там уже прозрачный (мусор -- с альфой ~1) ----
+  const bw = (d, w, h) => { let by = 0; for (let j = h - 1; j >= 0 && !by; j--) for (let i = 0; i < w; i++) if (d[(j * w + i) * 4 + 3]) { by = j; break; } const jb = Math.round(by - h * 0.06); let a = w, b = 0; for (let i = 0; i < w; i++) if (d[(jb * w + i) * 4 + 3]) { a = Math.min(a, i); b = Math.max(b, i); } return [b - a + 1, (a + b) / 2, by]; };
+  const backBW = OUT.filter((f) => /^(idle|cycle)/.test(f.name)).map((f) => bw(f.data, f.w, f.h)[0]), TBW = backBW.reduce((a, b) => a + b, 0) / backBW.length;
+  { const im2 = new Image(); im2.src = srcF; await im2.decode(); const W3 = im2.width, H3 = im2.height, c3 = new OffscreenCanvas(W3, H3), x3 = c3.getContext('2d'); x3.drawImage(im2, 0, 0); const D3 = x3.getImageData(0, 0, W3, H3).data;
+    const FR = []; for (let r = 0; r < 3; r++) for (let q = 0; q < 4; q++) { const x0 = Math.round(q * W3 / 4), y0 = Math.round(r * H3 / 3), w = Math.round(W3 / 4), h = Math.round(H3 / 3), lb = new Int32Array(w * h).fill(-1), sz = [], bb = [];
+      const op = (i, j) => D3[((y0 + j) * W3 + x0 + i) * 4 + 3] > 128;
+      for (let k = 0; k < w * h; k++) { const i0 = k % w, j0 = (k / w) | 0; if (!op(i0, j0) || lb[k] >= 0) continue; const id = sz.length, st = [k]; lb[k] = id; let n = 0, a = 1e9, b2 = 1e9, c = -1, d2 = -1;
+        while (st.length) { const kk = st.pop(), i = kk % w, j = (kk / w) | 0; n++; a = Math.min(a, i); b2 = Math.min(b2, j); c = Math.max(c, i); d2 = Math.max(d2, j); for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const i2 = i + di, j2 = j + dj; if (i2 < 0 || j2 < 0 || i2 >= w || j2 >= h) continue; const k2 = j2 * w + i2; if (op(i2, j2) && lb[k2] < 0) { lb[k2] = id; st.push(k2); } } }
+        sz.push(n); bb.push([a, b2, c, d2]); }
+      const mi = sz.indexOf(Math.max(...sz)), keep = new Set(sz.map((n, i) => (n > sz[mi] * 0.12 ? i : -1)).filter((i) => i >= 0));
+      let a = 1e9, b2 = 1e9, c = -1, d2 = -1; for (const i of keep) { a = Math.min(a, bb[i][0]); b2 = Math.min(b2, bb[i][1]); c = Math.max(c, bb[i][2]); d2 = Math.max(d2, bb[i][3]); }
+      const fw = c - a + 1, fh = d2 - b2 + 1, A = new Uint8ClampedArray(fw * fh * 4);
+      for (let j = 0; j < fh; j++) for (let i = 0; i < fw; i++) { const k = (b2 + j) * w + a + i; if (!keep.has(lb[k])) continue; const o = ((y0 + b2 + j) * W3 + x0 + a + i) * 4, t = (j * fw + i) * 4; A[t] = D3[o]; A[t + 1] = D3[o + 1]; A[t + 2] = D3[o + 2]; A[t + 3] = 255; }
+      FR.push({ A, fw, fh }); }
+    const scs = FR.map((f) => TBW / bw(f.A, f.fw, f.fh)[0]).sort((a, b) => a - b), sc = scs[scs.length >> 1];
+    for (const { A, fw, fh } of FR) { const [, cxF, byF] = bw(A, fw, fh), W2 = Math.round(fw * sc), H2 = Math.round(fh * sc);
+      const c0 = new OffscreenCanvas(fw, fh); c0.getContext('2d').putImageData(new ImageData(A, fw, fh), 0, 0); const c1 = new OffscreenCanvas(W2, H2), x1 = c1.getContext('2d'); x1.imageSmoothingQuality = 'high'; x1.drawImage(c0, 0, 0, W2, H2);
+      const I2 = x1.getImageData(0, 0, W2, H2); for (let k = 3; k < I2.data.length; k += 4) { if (I2.data[k] < 110) I2.data[k] = 0; else { const al = I2.data[k] / 255; for (let e = 1; e <= 3; e++) I2.data[k - e] = Math.min(255, I2.data[k - e] / al); I2.data[k] = 255; } }
+      OUT.push({ side: 0, name: 'front', w: W2, h: H2, ax: cxF * sc, ay: (byF + 1) * sc, rl: null, rr: null, cut: 0, data: Array.from(I2.data) }); } }
   // атлас: в ряд с полями по 2 px
   const AW = 1024; let X = 2, Y = 2, rowH = 0; for (const f of OUT) { if (X + f.w + 2 > AW) { X = 2; Y += rowH + 2; rowH = 0; } f.x = X; f.y = Y; X += f.w + 2; rowH = Math.max(rowH, f.h); }
   const AH = Y + rowH + 2, ac = new OffscreenCanvas(AW, AH), ax = ac.getContext('2d'); for (const f of OUT) ax.putImageData(new ImageData(Uint8ClampedArray.from(f.data), f.w, f.h), f.x, f.y);
   const bl = await ac.convertToBlob(); const url = await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(bl); });
   return { url, frames: OUT.map(({ data, ...f }) => f) };
-}, [src, BANDS]);
+}, [src, BANDS, srcF]);
 fs.writeFileSync(DIR + 'atlas.png', Buffer.from(out.url.split(',')[1], 'base64'));
 const cnt = {}, F = {}; for (const f of out.frames) { const i = (cnt[f.name] = (cnt[f.name] ?? -1) + 1); const r = (v) => Math.round(v * 10) / 10;
   F[f.name + i] = [f.x, f.y, f.w, f.h, r(f.ax), r(f.ay), f.rl ? r(f.rl[0]) : null, f.rl ? r(f.rl[1]) : null, f.rr ? r(f.rr[0]) : null, f.rr ? r(f.rr[1]) : null, f.side]; console.log(f.name + i, f.w + 'x' + f.h, 'ax', Math.round(f.ax), 'ay', Math.round(f.ay), 'cut', f.cut, 'L', f.rl && f.rl.map(Math.round), 'R', f.rr && f.rr.map(Math.round)); }
