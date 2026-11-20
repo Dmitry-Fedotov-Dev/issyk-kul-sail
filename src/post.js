@@ -42,9 +42,11 @@ void main(){
     float g=length(vec2(a-b,c2-d)); ink=max(ink, smoothstep(0.10,0.26,g)*0.5*nearK);
     // штриховка в тенях
     float lum=L(U), h=step(0.55,fract((gl_FragCoord.x+gl_FragCoord.y)/(5.*uK)));
-    col*=1.-0.22*h*smoothstep(0.16,0.05,lum)*nearK; }
+    col*=1.-0.3*h*smoothstep(0.18,0.05,lum)*nearK;
+    // цел-шейдинг: яркость ступенями (4 тона), примешано на треть -- плоские пятна света и тени, цвет не трогаем
+    float lq=max(dot(col/(1.+col),vec3(0.3,0.59,0.11)),1e-3), st=(floor(lq*4.+0.5)+0.15)/4.; col*=mix(1.,clamp(st/lq,0.6,1.5),0.33*mix(0.6,1.,nearK)); }
   col=mix(vec3(dot(col,vec3(0.3,0.59,0.11))),col,1.12);              // цвет плотнее
-  col=mix(col, vec3(0.012,0.016,0.03), ink*uInk);
+  col=mix(col, vec3(0.012,0.016,0.03), min(1.,ink*uInk*1.15)); // обводка чуть плотнее
   // Солнце в кадре: засветка объектива. Ореол, лучи, большое кольцо-гало и цепочка бликов-кругов по линии от солнца
   // через центр кадра. Если солнце закрыто парусом или горой (по карте глубины), блики гаснут, остаётся слабый ореол.
   if(uSunP.z>0.003){ vec2 sp=uSunP.xy, asp=vec2(uPx.y/uPx.x,1.), dv=(U-sp)*asp; float len=length(dv), an=atan(dv.y,dv.x);
