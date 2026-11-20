@@ -52,7 +52,7 @@ const out = await p.evaluate(async ([src, BANDS, srcF]) => {
     for (let pass = 0; pass < 3; pass++) for (let j = 1; j < fh - 1; j++) for (let i = 1; i < fw - 1; i++) { const k = j * fw + i; if (cut[k] || (i >= span0 && i <= span1) || !A[k * 4 + 3]) continue;
       const t = k * 4, dark = A[t] + A[t + 1] + A[t + 2] < 330 || red(A, t) || (A[t] > A[t + 2] + 30); if (dark && (cut[k - 1] || cut[k + 1] || cut[k - fw] || cut[k + fw])) cut[k] = 2; }
     let sc = PS[f.name]; if (f.name === 'mood') sc = [0.38, 0.44, 0.52, 0.7][mi]; const s = sc;
-    let nc = 0; for (let k = 0; k < cut.length; k++) if (cut[k]) { A[k * 4 + 3] = 0; nc++; }
+    let nc = 0; // хвосты шарфа больше не срезаем: шарф -- как нарисован на листе
     const rl = rootL[2] > 3 ? [rootL[0] / rootL[2], rootL[1] / rootL[2]] : null, rr = rootR[2] > 3 ? [rootR[0] / rootR[2], rootR[1] / rootR[2]] : null;
     // в масштаб: сглаженным уменьшением, затем альфа -- порогом, чтобы край остался пиксельным
     const c0 = new OffscreenCanvas(fw, fh); c0.getContext('2d').putImageData(new ImageData(A, fw, fh), 0, 0);

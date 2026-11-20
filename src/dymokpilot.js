@@ -1,6 +1,5 @@
 // Дымок в ведёрке под парапланом, вид со спины. Гибрид: позы -- кадры из спрайт-листа автора (dymokpara.js),
-// а всё, что должно жить непрерывно, -- процедурно поверх: хвост шарфа (цепочка с инерцией, её треплет поток),
-// крен и раскачка ведёрка (пружина с запаздыванием), подъём в термике, дрожь в болтанке.
+// а непрерывное движение -- процедурно: крен и раскачка ведёрка (пружина с запаздыванием), подъём в термике, дрожь в болтанке.
 // Состояние выбирается по настоящему полёту (тормоза, крен, вариометр, порыв, турбулентность), с приоритетами
 // и минимальным временем удержания -- позы не мигают. Физику, управление и камеру модуль не трогает.
 import * as THREE from 'three';
@@ -16,18 +15,14 @@ const FRONT = { idle: ['front0', 'front11'], fly: ['front0', 'front11'], sway: [
   brake: ['front2'], thermal: ['front3'], gust: ['front8'], turb: ['front6'], jump: ['front7'], happy: ['front9'], sad: ['front10'] };
 // приоритеты: чем выше, тем важнее; удержание -- чтобы поза не мигала
 const PRI = { happy: 9, jump: 8, turb: 7, gust: 6, brake: 5, pullL: 4, pullR: 4, left: 3, right: 3, thermal: 2, sad: 2, fly: 1, sway: 1, idle: 0 };
-const N = 10, SEG = 5; // шарф: узлы цепочки, длина звена в пикселях кадра
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export function makeDymokPilot() {
   const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH; const cx = cv.getContext('2d');
-  const rb = document.createElement('canvas'); rb.width = CW; rb.height = CH; const rx = rb.getContext('2d', { willReadFrequently: true });
   const tex = new THREE.CanvasTexture(cv); tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.colorSpace = THREE.SRGBColorSpace;
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, alphaTest: 0.3 }), spr = new THREE.Sprite(mat);
   spr.scale.set(CW * PXM, CH * PXM, 1); spr.center.set(AX / CW, 1 - AY / CH);
-  const S = { st: 'fly', hold: 0, fi: 0, ft: 0, happyT: 0, jumpT: 0, prevMode: '', rot: 0, rotV: 0, lift: 0, liftV: 0, side: -1, sideU: 0, prevVz: 0, ay: 0, prevTh: null, yaw: 0, shake: 0 };
-  // цепочка шарфа в координатах холста
-  const P = Array.from({ length: N }, (_, i) => ({ x: AX - 20 - i * SEG, y: 50 + i, px: AX - 20 - i * SEG, py: 50 + i }));
+  const S = { st: 'fly', hold: 0, fi: 0, ft: 0, happyT: 0, jumpT: 0, prevMode: '', rot: 0, rotV: 0, lift: 0, liftV: 0, prevVz: 0, ay: 0, prevTh: null, yaw: 0, shake: 0 };
   let frameKey = 'cycle0', front = false; const cam = new THREE.Vector3(), me = new THREE.Vector3();
   spr.onBeforeRender = (r, sc, camera) => { cam.copy(camera.position); }; // откуда смотрят -- чтобы повернуть Дымка как параплан
 
@@ -55,35 +50,6 @@ export function makeDymokPilot() {
     return seq[S.fi % seq.length];
   }
 
-  function scarf(g, dt, f) {
-    // корень: узел на шее, с той стороны, куда уходит хвост; при смене стороны корень переезжает по узлу плавно
-    const k = (F[f] ? F[f] : F.cycle0), ox = AX - k[4], oy = AY - k[5];
-    const Lr = k[6] !== null ? [k[6] + ox, k[7] + oy] : null, Rr = k[8] !== null ? [k[8] + ox, k[9] + oy] : null;
-    const rl = Lr || (Rr ? [2 * AX - Rr[0], Rr[1]] : [AX - 18, 50]), rr = Rr || [2 * AX - rl[0], rl[1]];
-    // куда уносит: поворот вправо -- поток заходит справа, хвост уходит влево; порыв и болтанка добавляют рывки
-    const yaw = S.yaw, sideT = Math.abs(yaw) > 0.08 ? -Math.sign(yaw) : S.side; S.side = sideT;
-    S.sideU += ((S.side > 0 ? 1 : 0) - S.sideU) * Math.min(1, dt * 2.5);
-    const root = [rl[0] + (rr[0] - rl[0]) * S.sideU, rl[1] + (rr[1] - rl[1]) * S.sideU], sd = S.sideU * 2 - 1;
-    const V = g.mode === 'air' ? (g.V || 10) : 2, gust = g.gustFx || 0, turb = g.turb || 0, t = performance.now() / 1000;
-    const flow = 18 + V * 5.5 + gust * 60, h = dt * dt;
-    const ay = S.ay; // рывок вверх -- шарф отстаёт вниз
-    P[0].x = root[0]; P[0].y = root[1]; P[0].px = root[0]; P[0].py = root[1];
-    for (let i = 1; i < N; i++) { const p = P[i], s = i / (N - 1);
-      // поток: назад-в сторону и чуть вниз; трепет -- бегущая волна поперёк, сильнее к концу и в порыв
-      const wave = Math.sin(t * (9 + V * 0.6 + gust * 8) - i * 0.9) * (14 + V * 2.2 + gust * 70 + turb * 40) * s;
-      let fx = sd * flow + (Math.random() - 0.5) * turb * 160 * s, fy = flow * 0.1 + 14 + wave + ay * 6 + (Math.random() - 0.5) * gust * 120 * s;
-      fx -= yaw * 140 * s; // в повороте ткань отстаёт по инерции
-      const vx = (p.x - p.px) * 0.9, vy = (p.y - p.py) * 0.9; p.px = p.x; p.py = p.y; p.x += vx + fx * h; p.y += vy + fy * h; }
-    for (let it = 0; it < 4; it++) for (let i = 1; i < N; i++) { const a = P[i - 1], b = P[i], dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1e-3, e = (l - SEG) / l;
-      if (i === 1) { b.x -= dx * e; b.y -= dy * e; } else { a.x += dx * e * 0.5; a.y += dy * e * 0.5; b.x -= dx * e * 0.5; b.y -= dy * e * 0.5; } }
-    for (const p of P) { p.x = clamp(p.x, 1, CW - 2); p.y = clamp(p.y, 1, CH - 2); }
-    // рисуем лентой: контур, ткань, светлая кромка; край -- порогом альфы, чтобы остался пиксельным
-    rx.clearRect(0, 0, CW, CH); rx.lineCap = 'round'; rx.lineJoin = 'round';
-    const band = (wid, col) => { rx.strokeStyle = col; for (let i = 1; i < N; i++) { rx.lineWidth = wid * (1 - 0.55 * i / N); rx.beginPath(); rx.moveTo(P[i - 1].x, P[i - 1].y); rx.lineTo(P[i].x, P[i].y); rx.stroke(); } };
-    band(11, '#5a1a22'); band(8, '#e2453a'); rx.translate(0, -1.5); band(2.5, '#ff8a6e'); rx.setTransform(1, 0, 0, 1, 0, 0);
-    const id = rx.getImageData(0, 0, CW, CH), dd = id.data; for (let q = 3; q < dd.length; q += 4) dd[q] = dd[q] > 120 ? 255 : 0; rx.putImageData(id, 0, 0);
-  }
-
   return {
     sprite: spr,
     happy(sec = 1.6) { S.happyT = Math.max(S.happyT, sec); },
@@ -93,7 +59,8 @@ export function makeDymokPilot() {
       if (S.prevTh !== null) { let dth = (g.th || 0) - S.prevTh; dth = Math.atan2(Math.sin(dth), Math.cos(dth)); S.yaw += (dth / Math.max(dt, 1e-3) - S.yaw) * Math.min(1, dt * 3); } S.prevTh = g.th || 0;
       // спереди или сзади: по тому, куда смотрит крыло относительно камеры (с запасом, чтобы на боку не мигало)
       spr.getWorldPosition(me); const fx = Math.sin(g.th || 0), fz = -Math.cos(g.th || 0), dx = me.x - cam.x, dz = me.z - cam.z, dl = Math.hypot(dx, dz) || 1, dot = (fx * dx + fz * dz) / dl;
-      if (front && dot > 0.2) front = false; else if (!front && dot < -0.2) front = true;
+      const side = dl / (Math.hypot(dl, me.y - cam.y) || 1); // камера почти точно сверху или снизу -- вид не переключаем
+      if (side > 0.25) { if (front && dot > 0.2) front = false; else if (!front && dot < -0.2) front = true; }
       const f = choose(g, dt), k = F[f] || F.cycle0;
       // ведёрко: крен за креном крыла и тормозами -- пружиной, с запаздыванием и лёгким перехлёстом
       const air = g.mode === 'air', tr = air ? -(g.phi || 0) * 0.45 - ((g.R || 0) - (g.L || 0)) * 0.12 : 0, turb = g.turb || 0;
@@ -108,7 +75,6 @@ export function makeDymokPilot() {
       frameKey = f; if (!IMG || !IMG.complete) return;
       cx.clearRect(0, 0, CW, CH); cx.imageSmoothingEnabled = false;
       cx.drawImage(IMG, k[0], k[1], k[2], k[3], Math.round(AX - k[4]), Math.round(AY - k[5]), k[2], k[3]);
-      if (near && !front) { scarf(g, dt, f); cx.drawImage(rb, 0, 0); }
       tex.needsUpdate = true;
     },
   };
