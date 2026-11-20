@@ -69,6 +69,10 @@ body.spy #hint,body.spy #ts,body.spy #joy,body.spy #bhook{visibility:hidden}
 @media (prefers-reduced-motion:reduce){#lens{display:none}}
 #ts{display:none;position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:84px;height:84px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(7,26,58,.22);color:var(--ink);font:600 13px var(--ui);letter-spacing:.08em;text-transform:uppercase;pointer-events:auto;touch-action:none}
 #ts.on{background:rgba(255,138,42,.6)}
+#bfoot{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(120px + env(safe-area-inset-bottom,0px));min-width:84px;height:44px;border-radius:22px;border:1px solid rgba(255,255,255,.35);background:rgba(255,138,42,.75);color:#fff;font:600 14px var(--ui);letter-spacing:.06em;text-transform:uppercase;pointer-events:auto;cursor:pointer;padding:0 16px}
+/* пешком: приборы снаряда прячем, остаются меню, подсказка, тосты; на телефоне -- джойстик слева, прыжок справа */
+body.foot #speed>:not(#tools),body.foot #dialwrap,body.foot #race,body.foot #mark,body.foot #brief,body.foot #bpro,body.foot [id^="p_"]{display:none!important}
+body.touchdev.foot #joy{display:block;left:calc(28px + 66px);}body.touchdev.foot #ts{display:block;left:auto;right:28px;transform:none}
 body.touchdev #ts{display:block}
 #joy{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(22px + env(safe-area-inset-bottom,0px));width:132px;height:132px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(7,26,58,.22);pointer-events:auto;touch-action:none}
 #joy i{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 2px 10px rgba(0,18,50,.4)}
@@ -211,6 +215,7 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
   <svg id="ring" class="hud" viewBox="0 0 120 120" hidden><circle cx="60" cy="60" r="50" fill="rgba(7,26,58,.45)" stroke="rgba(255,255,255,.25)" stroke-width="6"/><circle id="ringarc" cx="60" cy="60" r="50" fill="none" stroke="#ff8a2a" stroke-width="6" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="314" transform="rotate(-90 60 60)"/></svg>
   <button id="ts" aria-label="Травить шкот">шкот</button>
   <div id="joy" aria-label="Джойстик: руль и газ"><i></i></div>
+  <button id="bfoot" hidden aria-label="Выйти из снаряда или сесть обратно (F)">выйти</button>
   <button id="bhook" hidden aria-label="Абордажный крюк"><b id="bhookt">крюк</b><small>F</small></button>
   <button id="brepair" hidden><b>Ресурс 0%</b>Восстановить в гонке<small id="brepairs"></small></button>
 </div>
@@ -248,7 +253,7 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
 <div id="fdlg" class="dlg" hidden><div class="panel"><h2>Друзья</h2><p class="note" id="fnote"></p>
   <div class="modes"><button class="btn go" id="fshare">Позвать друга<small>ссылка: откроет — и окажется рядом с вами</small></button></div>
   <div id="flist"></div><div class="modes"><button class="btn" id="fclose">Закрыть</button></div></div></div>
-<div id="result" hidden><div class="panel"><h2 id="rh"></h2><div id="rs" style="color:var(--dim)"></div><table id="rt"></table><div class="modes"><button class="btn go" id="ragain">Ещё гонка</button><button class="btn" id="rmenu">В меню</button></div></div></div>
+<div id="result" hidden><div class="panel"><h2 id="rh"></h2><div id="rs" style="color:var(--dim)"></div><table id="rt"></table><div class="modes"><button class="btn go" id="ragain">Ещё гонка</button><button class="btn" id="rfoot" hidden>Пешком<small>выйти из ведёрка (F)</small></button><button class="btn" id="rmenu">В меню</button></div></div></div>
 <div id="load"><div id="loadimg"></div><div id="loadsrc">фото: pastvu.com/1397881</div>
   <div id="loadbox"><p id="loadcap">Берег Иссык-Куля · архивный снимок</p><h2>Парус <em>Иссык-Куля</em></h2>
     <p id="loadtip"></p><div id="loadbar"><div id="loadfill"></div></div><div id="loadmsg">Поднимаем паруса…</div></div></div>

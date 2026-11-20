@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { TRAILS, RIVERS } from './trails.js';
 import { makeMinimap, rangeTxt } from './minimap.js';
+import { makeFootMode, paraAdapter, boatAdapter } from './footmode.js';
 import { Boat, Wind, Waves, PRESETS, DEG, KN, clamp, wrapPi, smooth, pointOfSail, aiControl } from './sim.js';
 import { DEM } from './demdata.js';
 import { applyQuality, loadHeight, loadDem, makeDemTerrain, makeSky, makeTerrain, makeFarTerrain, makeWater, makeShore, makeMark, SUN, HAZE, ENV, MAP } from './world.js';
@@ -60,7 +61,7 @@ canvas.addEventListener('webglcontextrestored', () => { glLost = 0; location.rel
 
 const audio = makeAudio();
 const input = { left: false, right: false, ease: false };
-let G = null, X = null, SPY = null, PG = null; // G -- всё состояние игры после загрузки; X -- снаряды, режимы и акватория (extra.js)
+let G = null, X = null, SPY = null, PG = null, FT = null; // G -- всё состояние игры после загрузки; X -- снаряды, режимы и акватория (extra.js)
 
 // экран загрузки: настоящие этапы подготовки, а не крутилка
 const loadStep = async (pct, msg) => { $('loadfill').style.width = pct + '%'; $('loadmsg').textContent = msg; await new Promise((r) => setTimeout(r, 40)); };
@@ -104,7 +105,10 @@ async function init() {
   X = installExtra({ mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
     setPreset: (id) => { if (PRESETS[id]) { G.preset = id; applyPreset(); } }, para: () => PG });
   SPY = makeSpyglass({ G, camera, post, audio, store, ach: X.ach, $, extra: X }); SPY.renderAtlas(); // подзорная труба (spyglass.js)
+  FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH }); // пеший Дымок (footmode.js)
+  $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey();
   G.pro = !!store.get('pro'); $('bpro').classList.toggle('on', G.pro);
+  G.hMesh = (x, y) => { const v = demT.userData.meshH(x, y); return v === null ? hA(x, y) : v; }; // высота видимой земли -- для персонажей
   G.mini = makeMinimap(hA); G.mmZ = store.get('mmZ') ?? 1; // миникарта в компасе; масштаб -- тапом по компасу
   $('dialwrap').addEventListener('pointerdown', (e) => { e.stopPropagation(); }); $('dialwrap').onclick = (e) => { e.stopPropagation(); G.mmZ = (G.mmZ + 1) % 3; store.set('mmZ', G.mmZ); audio.tick && audio.tick(); };
   G.mmRange = (para) => (para ? [240, 1500, 6000] : [400, 1500, 5000])[G.mmZ];
@@ -220,7 +224,7 @@ function showGame(on) { $('game').hidden = !on; $('menu').hidden = on; $('result
 function setRivals(v) { for (const r of G.rivals) { const on = v && !r.out; r.model.root.visible = on; r.wake.mesh.visible = on; } for (const k in G.marks) G.marks[k].visible = v; }
 
 function toMenu() {
-  if (SPY) SPY.close(); if (PG) PG.stop();
+  if (SPY) SPY.close(); if (FT) FT.stop(); if (PG) PG.stop();
   $('brief').hidden = true; $('mark').hidden = true; if (X) X.toMenuCraft();
   G.mode = 'menu'; G.race = null; showGame(false); setRivals(false);
   const Y0 = Math.min(G.shore.pierY - 260, -150); placeBoat(G.player, 60, Y0, openWaterHeading(60, Y0), 2.5);
@@ -329,7 +333,7 @@ function finishRace() {
 }
 
 // ---------- ввод ----------
-const KEY = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'ease', ArrowDown: 'ease', KeyS: 'ease', ArrowUp: 'sin', KeyW: 'sin' };
+const KEY = { ShiftLeft: 'shift', ShiftRight: 'shift', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'ease', ArrowDown: 'ease', KeyS: 'ease', ArrowUp: 'sin', KeyW: 'sin' };
 window.addEventListener('keydown', (e) => {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return; // печатают имя -- не рулим
   if (e.code === 'Space') input.bar = true; if (e.code === 'ArrowDown' || e.code === 'KeyS') input.flare = true; // параплан: акселератор и обе клеванты
@@ -339,6 +343,9 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyE' && SPY && SPY.on) SPY.holdStart(); // E -- зажать с клавиатуры
   else if (e.code === 'Escape' && SPY && SPY.on) SPY.close();
   else if (e.code === 'KeyC') { G.cam = (G.cam + 1) % 3; resetView(); }
+  else if (e.code === 'KeyF' && G.mode !== 'menu' && (FT.on || (PG && PG.on))) footKey();
+  else if (e.code === 'KeyG' && G.mode === 'free' && !(PG && PG.on)) footKey();
+  else if (e.code === 'KeyE' && FT && FT.on) FT.interact();
   else if (e.code === 'KeyP' && G.mode !== 'menu' && !(PG && PG.on)) togglePro();
   else if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Звук выключен' : 'Звук включён');
   else if (e.code === 'Escape' && G.mode !== 'menu') toMenu();
@@ -349,7 +356,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyR' && G.mode === 'race') startRace(); else if (e.code === 'KeyR' && G.mode === 'free') startFree();
 });
 window.addEventListener('keyup', (e) => { if (e.code === 'KeyE' && SPY && SPY.on) SPY.holdEnd(); if (e.code === 'Space') input.bar = false; if (e.code === 'ArrowDown' || e.code === 'KeyS') input.flare = false; if (KEY[e.code]) { input[KEY[e.code]] = false; e.preventDefault(); } });
-window.addEventListener('blur', () => { input.left = input.right = input.ease = input.bar = input.flare = input.sin = false; input.sheetT = 0; input.joy = null; });
+window.addEventListener('blur', () => { input.left = input.right = input.ease = input.bar = input.flare = input.sin = input.shift = false; input.sheetT = 0; input.joy = null; });
 if (TOUCH) document.body.classList.add('touchdev');
 // касание левой половины экрана -- руль влево, правой -- вправо; несколько пальцев учитываются по отдельности
 // Обзор и руль делят один экран. Мышь: перетаскивание -- обзор, колесо -- приближение (рулят с клавиатуры).
@@ -507,7 +514,7 @@ function loop(now) {
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
   sunL.target.position.set(b.X, b.base || 0, -b.Y); sunL.position.set(b.X + LIGHT.x * 30, (b.base || 0) + LIGHT.y * 30, -b.Y + LIGHT.z * 30);
-  if (PG && PG.on) PG.sound(dt); else audio.update(b);
+  if (FT && FT.on) { audio.vario(0, false); audio.airflow(0, 0, 0, false); } else if (PG && PG.on) PG.sound(dt); else audio.update(b);
   if (G.mode !== 'menu') updateHud(dt, b, sp);
   // адаптивное разрешение -- ДО отрисовки: смена размера очищает холст, после неё был бы пустой кадр
   fpsT += dt; fpsN++; if (fpsT > 2) { const fps = fpsN / fpsT; fpsT = 0; fpsN = 0; qHold--;
@@ -526,6 +533,7 @@ function loop(now) {
 function tick(dt) {
   const P = G.player, b = P.b, R = G.race;
   G.t += dt; G.wind.update(dt); dayCycle(dt);
+  if (FT && FT.on) { FT.tick(dt); envTick(G.player.b); return; } // Дымок пешком: снаряд стоит, где оставили
   if (PG && PG.on) { PG.tick(dt); envTick(G.player.b); return; } // параплан: свой мир в воздухе
   const boats = X.boats(P);
   // управление
@@ -602,6 +610,7 @@ function envTick(b) {
 
 function updateCamera(dt, b, sp) {
   if (SPY && SPY.on && G.mode !== 'menu') { SPY.place(dt, b); G.sky.position.copy(camera.position); return; } // вид в подзорную трубу
+  if (FT && FT.on) { FT.camera(dt); G.sky.position.copy(camera.position); return; }
   if (PG && PG.on) { PG.camera(dt); G.sky.position.copy(camera.position); return; }
   if (G.mode === 'menu') G.camYaw += dt * 0.07; else G.camYaw += wrapPi(b.th - G.camYaw) * Math.min(1, dt * 2.4);
   G.shake = Math.max(0, G.shake - dt * 1.6);
@@ -680,6 +689,9 @@ function drawTell(b, c) { const t = G.t, ux = Math.sin(b.boom), uy = Math.cos(b.
       const x = px + ox + ux * along + nx * side * w, y = py + oy + uy * along + ny * side * w; if (i) dc.lineTo(x, y); else dc.moveTo(x, y); } dc.stroke(); };
   tape(-1, b.ttW, '#58d68d', 0); tape(1, b.ttL, '#ff6b5b', 2.1); }
 let hintKey = '', hintT = 0;
+// спешиться / вернуться: снаряд подключается адаптером (параплан -- после посадки, лодка -- у самого берега)
+function footAdapter() { if (!G || G.mode === 'menu') return null; if (PG && PG.on) return paraAdapter(PG); if (G.mode === 'free' && G.player && G.player.b) return boatAdapter(G); return null; }
+function footKey() { if (FT.on) { FT.mount(); return; } const ad = footAdapter(); if (!ad) return; const q = ad.canExit(); if (!q.ok) { toast(q.why || 'Сейчас не выйти'); return; } FT.start(ad); }
 // Режим Pro для яхты: шкот без автоподбора, по колдунчикам на компасе. Обычная игра не меняется
 function togglePro() { G.pro = !G.pro; store.set('pro', G.pro); $('bpro').classList.toggle('on', G.pro); G.proT = 0;
   toast(G.pro ? 'Pro: шкот вручную — следите за колдунчиками' : 'Обычный режим: шкот подбирается сам'); }
@@ -692,6 +704,8 @@ const setSt = (el, k, v) => { if (el.style[k] !== v) el.style[k] = v; };
 function tackNow(R, b) { const tg = target(R, G.player.leg, false), brg = Math.atan2(tg.X - b.X, tg.Y - b.Y);
   return Math.abs(wrapPi(brg - b.th)) > 92 * DEG && Math.abs(wrapPi(brg - b.twd)) < 120 * DEG && Math.hypot(tg.X - b.X, tg.Y - b.Y) > 25; }
 function updateHud(dt, b, sp) {
+  if (FT && FT.on) { if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; } FT.hud(dt); return; }
+  if (G.frame % 10 === 0) { const ad = footAdapter(), ok = !!ad && ad.canExit().ok; setP($('bfoot'), 'hidden', !ok); if (ok) setT($('bfoot'), 'выйти'); setP($('rfoot'), 'hidden', !(ok && PG && PG.on)); }
   if (PG && PG.on) { setP($('bpro'), 'hidden', true); PG.hud(dt); return; }
   if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; }
   const heel = Math.abs(b.phi) / DEG, R = G.race; G.proT = (G.proT ?? 99) + dt; setP($('bpro'), 'hidden', !!b.kind || G.mode === 'menu'); // Pro -- только у яхты
@@ -736,5 +750,5 @@ function updateHud(dt, b, sp) {
   if (h !== hintKey) { hintKey = h; const el = $('hint'); el.hidden = !h; el.textContent = h; el.className = 'hud' + (alert ? ' alert' : ''); }
 }
 
-window.__setQ = (q) => setQuality(q); window.__spy = () => SPY; window.__para = () => PG; window.__gfx = () => ({ renderer, scene, camera, post, sunL, ENV }); window.__game = () => { if (G) G.__X = X; return G; }; window.__tick = (sec, inp) => { Object.assign(input, inp || {}); for (let i = 0; i < sec * 60; i++) tick(1 / 60); }; // для автотестов
+window.__setQ = (q) => setQuality(q); window.__spy = () => SPY; window.__para = () => PG; window.__foot = () => FT; window.__footKey = () => footKey(); window.__gfx = () => ({ renderer, scene, camera, post, sunL, ENV }); window.__game = () => { if (G) G.__X = X; return G; }; window.__tick = (sec, inp) => { Object.assign(input, inp || {}); for (let i = 0; i < sec * 60; i++) tick(1 / 60); }; // для автотестов
 init().catch((e) => { $('loadmsg').textContent = 'Не удалось запустить: ' + e.message; console.error(e); });

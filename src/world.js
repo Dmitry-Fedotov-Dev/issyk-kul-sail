@@ -194,7 +194,13 @@ export function makeDemTerrain(dem, touch) {
   const T = new THREE.Vector4(X0, Y1, 1 / ((dem.W - 1) * STEP), 1 / ((dem.H - 1) * STEP));
   const mk = (shore) => { const m = terrainMaterial(shore); m.userData.defs = { ...m.userData.defs, DEMN: 1 }; m.defines = { ...m.defines, DEMN: 1 }; m.uniforms = { ...m.uniforms, uDemN: { value: tex }, uDemT: { value: T } };
     m.polygonOffset = true; m.polygonOffsetFactor = -1; m.polygonOffsetUnits = -2; return m; };
-  return chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, mk(false), mk(true));
+  const obj = chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, mk(false), mk(true));
+  // высота НАРИСОВАННОЙ поверхности (та же сетка и те же треугольники a-d-b / a-c-d): по ней ставят персонажей,
+  // иначе на склоне между узлами 28 м они тонут в земле или висят над ней
+  obj.userData.meshH = (X, Y) => { const u = (X - X0) / M, v = (Y1 - Y) / M, i = Math.floor(u), j = Math.floor(v); if (i < 0 || j < 0 || i >= W - 1 || j >= Hn - 1) return null;
+    const fu = u - i, fv = v - j, a = hs[j * W + i], b = hs[j * W + i + 1], c = hs[(j + 1) * W + i], d = hs[(j + 1) * W + i + 1];
+    return fv <= fu ? a * (1 - fu) + b * (fu - fv) + d * fv : a * (1 - fv) + c * (fv - fu) + d * fu; };
+  return obj;
 }
 export function terrainMaterial(shore = true) {
   const defs = shore ? { FDEPTH: 1 } : {};
