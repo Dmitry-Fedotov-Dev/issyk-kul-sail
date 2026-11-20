@@ -77,7 +77,7 @@ export function makeParaMode(A) {
   let on = false, P = null, air = null, rivals = [], R = null, F = null, built = false, W = null, field = null, prevPlayer = null;
   const hold = { L: 0, R: 0, B: 0, F: 0, dL: false, dR: false, lastL: -9, lastR: -9, pl: false, pr: false };
   const lift = []; // ассистент термиков: где на последних кругах был подъём (x, y, vario)
-  const done = new Set(store.get('ach') || []), ach = (id) => { if (done.has(id)) return; done.add(id); A.ach(id); };
+  const done = new Set(store.get('ach') || []), ach = (id) => { if (done.has(id)) return; done.add(id); A.ach(id); if (P && P.model && P.model.happy) P.model.happy(); }; // достижение -- Дымок радуется
   const C3 = new THREE.Vector3(), Q0 = { wx: 0, wy: 0, U: 0 };
 
   // поле для посадки (и цель гонки): берег западнее города, южнее аэродрома -- первая суша от воды плюс 90 м
@@ -322,7 +322,7 @@ export function makeParaMode(A) {
     if (BR.run > 0 || BR.total > 0) { el.hidden = false; const live = BR.run > 0; el.className = 'hud' + (live ? ' live' : '') + (BR.flash > 0 ? ' fl' : '');
       if (G.frame % 3 === 0) el.innerHTML = live ? `<b>+${Math.round(BR.run)}</b> <i>×${BR.mult.toFixed(1)}</i><small>смелость · всего ${Math.round(BR.total)}</small>` : `<b>${Math.round(BR.total)}</b><small>смелость · рекорд ${Math.round(Math.max(BR.best, BR.total))}</small>`;
       if (near && G.frame % 20 === 0) audio.tick && audio.tick(500 + BR.mult * 180, 0.03); } }
-  function bank(lost) { if (lost) { toast(`Серия сгорела: −${Math.round(BR.run)}`); } else { BR.total += BR.run; toast(`+${Math.round(BR.run)} смелости`); audio.chime(); if (BR.total > BR.best) { BR.best = BR.total; store.set('paraBrave', Math.round(BR.best)); } if (BR.run > 1000) ach('p_brave'); }
+  function bank(lost) { if (lost) { toast(`Серия сгорела: −${Math.round(BR.run)}`); } else { BR.total += BR.run; toast(`+${Math.round(BR.run)} смелости`); if (P.model.happy) P.model.happy(); audio.chime(); if (BR.total > BR.best) { BR.best = BR.total; store.set('paraBrave', Math.round(BR.best)); } if (BR.run > 1000) ach('p_brave'); }
     BR.run = 0; BR.mult = 1; BR.away = 0; }
   // ---------- свободный полёт: журнал ----------
   function freeStep(dt) { const g = P.g; F.t += dt; if (g.mode !== 'air') return;
