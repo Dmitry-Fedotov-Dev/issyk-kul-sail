@@ -31,10 +31,14 @@ const below = (n, sc) => { let k = n - 1; while (!sc.includes(((k % 12) + 12) % 
 export function makeMusic(ctx, dest) {
   // зал: свёртка с затухающим шумом и тихое эхо
   const ir = ctx.createBuffer(2, ctx.sampleRate * 3.2, ctx.sampleRate);
-  for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3.4); }
+  // хвост из шума, который темнеет со временем (воздух глушит верха), с мягким началом -- иначе каждая нота шипит
+  for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); let y = 0, y2 = 0;
+    for (let i = 0; i < d.length; i++) { const u = i / d.length, k = 0.5 * Math.pow(1 - u, 2) + 0.03; y += (Math.random() * 2 - 1 - y) * k; y2 += (y - y2) * k;
+      d[i] = y2 * Math.pow(1 - u, 3.4) * Math.min(1, i / (ctx.sampleRate * 0.012)) * 2.2; } }
   const bus = ctx.createGain(), rev = ctx.createConvolver(), wet = ctx.createGain(), dry = ctx.createGain(), echo = ctx.createDelay(1), fb = ctx.createGain(), es = ctx.createGain();
-  rev.buffer = ir; wet.gain.value = 0.5; dry.gain.value = 0.7; echo.delayTime.value = 0.42; fb.gain.value = 0.18; es.gain.value = 0.22;
-  bus.connect(dry); bus.connect(rev); bus.connect(es); es.connect(echo); echo.connect(fb); fb.connect(echo); echo.connect(rev); rev.connect(wet); dry.connect(dest); wet.connect(dest);
+  rev.buffer = ir; wet.gain.value = 0.42; dry.gain.value = 0.7; echo.delayTime.value = 0.42; fb.gain.value = 0.18; es.gain.value = 0.22;
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 70; hp.Q.value = 0.5; // низ гудит и хрипит в динамике телефона
+  bus.connect(hp); hp.connect(dry); hp.connect(rev); bus.connect(es); es.connect(echo); echo.connect(fb); fb.connect(echo); echo.connect(rev); rev.connect(wet); dry.connect(dest); wet.connect(dest);
   // тембры: фортепиано с войлочными молоточками и челеста для верхней октавы
   const wave = (h) => { const re = new Float32Array(h.length), im = new Float32Array(h); return ctx.createPeriodicWave(re, im); };
   const PIANO = wave([0, 1, 0.42, 0.2, 0.11, 0.05, 0.03, 0.015]), CEL = wave([0, 1, 0.06, 0.12, 0, 0.04]);
@@ -59,7 +63,7 @@ export function makeMusic(ctx, dest) {
     const [bass, voices] = CH[cn], v = (0.55 + 0.45 * m.a) * (dn ? 0.85 : 1), J = () => (Math.random() - 0.5) * 0.025, L = 3 * beat;
     const o = { dark: dn };
     // аккомпанемент: бас на раз, аккорд на два -- или ломаный аккорд восьмыми
-    key(mp(bass), T + J(), 0.07 * v, L * 1.6 * ring, o);
+    key(mp(bass), T + J(), 0.055 * v, L * 1.6 * ring, o);
     if (fx.arp && ring === 1) { const vs = voices.map(mp), seq = [vs[0], vs[1], vs[2], vs[1], vs[2] + 12 * (Math.random() < 0.4 ? 1 : 0)];
       seq.forEach((n, i) => key(n, T + (0.5 + i * 0.5) * beat + J(), 0.038 * v, beat * 2.2, o)); }
     else voices.forEach((n, i) => key(mp(n), T + beat + i * 0.018 + J(), 0.035 * v, beat * 2.6 * ring, o));
@@ -99,5 +103,5 @@ export function makeMusic(ctx, dest) {
     bar(b, m.barT, beat); m.barT += 3 * beat * (b[3] || 1);
     if (m.ending && !m.queue.length) { m.on = false; m.ending = false; m.stopT = t; m.pos = Math.ceil(Math.max(0, m.pos) / 4) * 4 % FORM.length; }
   }
-  return { update };
+  return { update, get playing() { return m.on || ctx.currentTime < m.barT + 2; } };
 }

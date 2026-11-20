@@ -7,7 +7,8 @@ export function makeAudio() {
     if (ctx) { if (ctx.state !== 'running') ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
     ctx = new AC(); master = ctx.createGain(); master.gain.value = 0.75;
-    const comp = ctx.createDynamicsCompressor(); master.connect(comp); comp.connect(ctx.destination);
+    // мягкий лимитер на выходе, а не компрессор с порогом -24 дБ: тот «качал» ветер и мял ноты, звук казался перегруженным
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -8; comp.knee.value = 6; comp.ratio.value = 6; comp.attack.value = 0.004; comp.release.value = 0.25; master.connect(comp); comp.connect(ctx.destination);
     buf = ctx.createBuffer(2, ctx.sampleRate * 4, ctx.sampleRate);
     for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); let b0 = 0, b1 = 0, b2 = 0; // розовый шум, каналы независимы -- звук «вокруг»
       for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; b0 = 0.99765 * b0 + w * 0.099046; b1 = 0.963 * b1 + w * 0.2965164; b2 = 0.57 * b2 + w * 1.0526913; d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.22; } }
@@ -77,7 +78,7 @@ export function makeAudio() {
   // вариометр -- музыкой: «Гимнопедия» Сати, мажор в подъёме и минор в снижении (см. music.js)
   let winchO = null, music = null;
   function vario(v, on = true) { if (!ctx || ctx.state !== 'running') return; (music ||= makeMusic(ctx, master)).update(v || 0, on); }
-  function airflow(V, turb = 0, flap = 0, on = true) { if (!ctx || ctx.state !== 'running') return; const a = on ? V : 0, j = 1 + turb * 0.5 * Math.sin(ctx.currentTime * 23) * Math.sin(ctx.currentTime * 7.3);
+  function airflow(V, turb = 0, flap = 0, on = true) { if (!ctx || ctx.state !== 'running') return; const a = (on ? V : 0) * (music && music.playing ? 0.8 : 1), j = 1 + turb * 0.5 * Math.sin(ctx.currentTime * 23) * Math.sin(ctx.currentTime * 7.3);
     set(L.low.g.gain, Math.min(0.5, (0.02 + a * a * 0.0021) * j)); set(L.low.fl.frequency, 150 + a * 15); if (L.low.pan.pan) set(L.low.pan.pan, 0);
     set(L.mid.g.gain, Math.min(0.32, a * a * 0.0012 * j)); set(L.mid.fl.frequency, 380 + a * 40); set(L.whistle.g.gain, Math.min(0.1, Math.max(0, a - 12) ** 2 * 0.004), 0.25);
     set(L.rush.g.gain, 0); set(L.bubble.g.gain, 0); set(L.flap.g.gain, on ? Math.min(0.5, flap * 0.5) : 0); }
