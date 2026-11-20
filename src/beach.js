@@ -9,7 +9,7 @@ import { NPCART } from './npcart.js';
 import { FAR } from './farmap.js';
 import { ENV } from './world.js';
 
-const FR = NPCART.frames, PXM = 1.7 / 64; // 64 px атласа -- рост человека 1.7 м
+const FR = NPCART.frames, PXM = 2.2 / 64; // 64 px атласа -- рост 2.2 м: чиби-масштаб, чтобы людей было видно с воды и с воздуха
 // посёлки по берегу: [широта, долгота, радиус км, тип]
 const PLACES = [[42.648, 77.083, 4.5, 'resort'], [42.646, 77.193, 4, 'resort'], [42.655, 77.0, 3.5, 'resort'], [42.645, 76.95, 3, 'resort'], [42.56, 76.65, 3.5, 'resort'],
   [42.61, 76.77, 3, 'resort'], [42.66, 77.31, 3, 'resort'], [42.66, 77.37, 2, 'village'], [42.7, 77.47, 3, 'village'], [42.75, 77.66, 3, 'village'], [42.46, 76.18, 4, 'village'],
@@ -18,8 +18,10 @@ const M = 28.11, OX = 2923 * 256 + 600.5, OY = 1508 * 256 + 695.5, Z = 256 * 409
 const geo = (lat, lon) => { const px = (lon + 180) / 360 * Z, s = Math.sin(lat * Math.PI / 180), py = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * Z; return [(px - OX) * M, -(py - OY) * M]; };
 const ZONES = PLACES.map(([la, lo, r, kind]) => { const [X, Y] = geo(la, lo); return { X, Y, R: r * 1000, kind }; });
 // сколько чего на 600 м берега
-const DENS = { resort: { day: 9, vend: 0.8, tent: 0.3, fire: 0.25 }, village: { day: 3.5, vend: 0.2, tent: 0.6, fire: 0.3 }, camp: { day: 2, vend: 0, tent: 3, fire: 0.6 }, wild: { day: 0.3, vend: 0, tent: 0.25, fire: 0.08 } };
+const DENS = { resort: { day: 16, vend: 0.8, tent: 0.3, fire: 0.25 }, village: { day: 6, vend: 0.2, tent: 0.6, fire: 0.3 }, camp: { day: 2, vend: 0, tent: 3, fire: 0.6 }, wild: { day: 0.3, vend: 0, tent: 0.25, fire: 0.08 } };
 // ночные сценарии (вероятность выбора, когда компания появилась)
+// витрина: пляж прямо напротив старта яхты у пирса Чолпон-Аты -- там компания есть всегда
+const SHOW = [[30, 470], [150, 480]];
 const NIGHT = [['guitar', 25], ['girls', 20], ['lamb', 15], ['pair', 20], ['solo', 10], ['empty', 10]];
 const rng = (seed) => { let s = (seed * 2654435761) >>> 0 || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); };
 const pickW = (r, L) => { let t = r() * L.reduce((a, b) => a + b[1], 0); for (const [k, w] of L) if ((t -= w) <= 0) return k; return L[0][0]; };
@@ -59,13 +61,17 @@ export function makeBeach({ G, scene, camera, audio, toast }) {
     if (!G.lake[k - 1] || !G.lake[k + 1] || !G.lake[k - W] || !G.lake[k + W]) cells.push({ id: k, X: X0 + i * STEP, Y: Y1 - j * STEP, on: false, ents: [], night: -1 }); }
   const zoneOf = (X, Y) => { let best = null, bd = 1; for (const z of ZONES) { const d = Math.hypot(X - z.X, Y - z.Y) / z.R; if (d < bd) { bd = d; best = z.kind; } } return best || 'wild'; };
   for (const c of cells) c.zone = zoneOf(c.X, c.Y);
+  const byId = new Map(cells.map((c) => [c.id, c]));
+  // кому принадлежит место на берегу: ближайшей береговой ячейке (пляж часто лежит в соседней, «сухой» клетке маски)
+  const owner = (x, y) => { const i0 = Math.round((x - X0) / STEP), j0 = Math.round((Y1 - y) / STEP); let best = null, bd = 1e18;
+    for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) { const c = byId.get((j0 + dj) * W + i0 + di); if (!c) continue; const d = (c.X - x) ** 2 + (c.Y - y) ** 2; if (d < bd) { bd = d; best = c; } } return best; };
 
-  // места на песке в ячейке: суша 0.3..4 м над водой, полого, вода рядом
-  function spots(c) { const out = [], S = 12, R = STEP * 0.75;
-    for (let y = c.Y - R; y < c.Y + R; y += S) for (let x = c.X - R; x < c.X + R; x += S) { const h = G.h(x, y); if (h < 0.35 || h > 4) continue;
-      const sl = Math.hypot(G.h(x + 4, y) - G.h(x - 4, y), G.h(x, y + 4) - G.h(x, y - 4)) / 8; if (sl > 0.12) continue;
-      let wet = null; for (let a = 0; a < 8 && !wet; a++) { const dx = Math.cos(a * 0.785), dy = Math.sin(a * 0.785); if (G.h(x + dx * 35, y + dy * 35) < 0) wet = [dx, dy]; } if (!wet) continue;
-      out.push({ x, y, wx: wet[0], wy: wet[1], h }); }
+  // места на песке ячейки: суша 0.25..6 м над водой, полого, вода в 45 м; ищем шире своей клетки, берём только свои
+  function spots(c) { const out = [], S = 12, R = STEP * 1.25;
+    for (let y = c.Y - R; y < c.Y + R; y += S) for (let x = c.X - R; x < c.X + R; x += S) { const h = G.h(x, y); if (h < 0.25 || h > 6) continue;
+      const sl = Math.hypot(G.h(x + 4, y) - G.h(x - 4, y), G.h(x, y + 4) - G.h(x, y - 4)) / 8; if (sl > 0.18) continue;
+      let wet = null; for (let a = 0; a < 8 && !wet; a++) { const dx = Math.cos(a * 0.785), dy = Math.sin(a * 0.785); if (G.h(x + dx * 45, y + dy * 45) < 0) wet = [dx, dy]; } if (!wet) continue;
+      if (owner(x, y) !== c) continue; out.push({ x, y, wx: wet[0], wy: wet[1], h }); }
     return out; }
   const day = { n: 0, prev: 10 };
   // ---- заселение ячейки ----
@@ -78,7 +84,8 @@ export function makeBeach({ G, scene, camera, audio, toast }) {
     // дневные компании -- кучками, не сеткой: центры кучек, вокруг -- пледы и люди
     const nDay = Math.round(D.day * (0.5 + r()));
     const clusters = Array.from({ length: Math.max(1, Math.round(nDay / 3)) }, () => sp[Math.floor(r() * sp.length)]);
-    for (let i = 0; i < nDay; i++) { const p = place(clusters[Math.floor(r() * clusters.length)]); if (!p) continue;
+    let extra = 0; for (const [sx, sy] of SHOW) { let best = null, bd = 120; for (const q of sp) { const d = Math.hypot(q.x - sx, q.y - sy); if (d < bd) { bd = d; best = q; } } if (best) { clusters.unshift(best); extra += 5; } }
+    for (let i = 0; i < nDay + extra; i++) { const p = place(i < extra ? clusters[Math.floor(i / 5)] : clusters[Math.floor(r() * clusters.length)]); if (!p) continue;
       const kind = pickW(r, [['pink', 30], ['goth', 14], ['blond', 14], ['guitar', 6], ['lounger', 8], ['big', 6], ['deck', 5], ['family', 10]]);
       const from = 7 + r() * 3, to = 18 + r() * 3.5; // пришли утром, ушли вечером -- каждый в своё время
       if (kind === 'family') { add({ prop: pickW(r, [['castle', 3], ['ball', 3], ['flamingo', 2], ['cooler', 2], ['radio', 2]]), x: p.x, y: p.y, from, to }); continue; }
@@ -131,7 +138,10 @@ export function makeBeach({ G, scene, camera, audio, toast }) {
         step(e, dt * (frameN % 6 === 0 && !near ? 6 : 1), hr, dym); } }
     // тон: ночная синева на всех, тёплый отсвет у костров, огонь -- сам светится
     for (const c of cells) { if (!c.on) continue; const all = c.camp ? c.ents.concat(c.camp.ents) : c.ents;
-      for (const e of all) { if (!e.s) continue; if (e.fire) { e.s.material.color.setRGB(1.3, 1.15, 1); const fl = 1 + Math.sin(G.t * 23 + e.x) * 0.03 + Math.sin(G.t * 37 + e.y) * 0.02; if (e.s.userData.sx) e.s.scale.set(e.s.userData.sx * fl, e.s.userData.sy * (2 - fl), 1); continue; } // пламя дышит
+      for (const e of all) { if (!e.s) continue;
+        // издали фигурки подрастают (до 3x), чтобы не теряться в несколько пикселей; вблизи -- как есть
+        const dd = Math.hypot(e.x - cx, e.y - cy, camera.position.y - (e.s.position.y || 0)), gk = clamp(dd * 0.025 / 2.2, 1, 3); if (e.s.userData.sx && !e.fire) e.s.scale.set(e.s.userData.sx * gk, e.s.userData.sy * gk, 1); if (e.emo && e.emo.userData.sx) e.emo.scale.set(e.emo.userData.sx * gk, e.emo.userData.sy * gk, 1);
+        if (e.fire) { e.s.material.color.setRGB(1.3, 1.15, 1); const fl = 1 + Math.sin(G.t * 23 + e.x) * 0.03 + Math.sin(G.t * 37 + e.y) * 0.02; if (e.s.userData.sx) e.s.scale.set(e.s.userData.sx * fl * gk, e.s.userData.sy * (2 - fl) * gk, 1); continue; } // пламя дышит
         tmp.copy(night); for (const f of fires) { const d = Math.hypot(f.x - e.x, f.y - e.y); if (d < 9) tmp.lerp(warm, (1 - d / 9) * (1 - dayK) * 0.85); } e.s.material.color.copy(tmp); } }
     return hintNpc;
   }
@@ -151,7 +161,7 @@ export function makeBeach({ G, scene, camera, audio, toast }) {
     // бок: кадры смотрят в role.face; зеркалим по направлению шага на экране
     let flip = false; if (moving && role.face) { const right = e.dirx * Math.cos(camYaw()) - e.diry * Math.sin(camYaw()); flip = (right >= 0 ? 1 : -1) !== role.face; }
     setFrame(s, seq[fi], flip); s.position.set(e.x, H(e.x, e.y), -e.y);
-    if (e.emoT > 0) { e.emoT -= dt; if (!e.emo) { e.emo = getSpr(); setFrame(e.emo, PROPS.heart); } e.emo.position.set(e.x, H(e.x, e.y) + s.scale.y + 0.3 + Math.sin(G.t * 4) * 0.08, -e.y); e.emo.material.color.setRGB(1, 1, 1); if (e.emoT <= 0) { putSpr(e.emo); e.emo = null; } }
+    if (e.emoT > 0) { e.emoT -= dt; if (!e.emo) { e.emo = getSpr(); setFrame(e.emo, PROPS.heart); } e.emo.position.set(e.x, H(e.x, e.y) + s.scale.y + 0.3 * (s.scale.y / (s.userData.sy || s.scale.y)) + Math.sin(G.t * 4) * 0.08, -e.y); e.emo.material.color.setRGB(1, 1, 1); if (e.emoT <= 0) { putSpr(e.emo); e.emo = null; } }
   }
   const camYaw = () => { const v = new THREE.Vector3(); camera.getWorldDirection(v); return Math.atan2(v.x, -v.z); };
   // костёр рядом с Дымком (для его поз «у огня»)
