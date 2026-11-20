@@ -3,6 +3,7 @@ import { TRAILS, RIVERS } from './trails.js';
 import { makeMinimap, rangeTxt } from './minimap.js';
 import { makeFootMode, paraAdapter, boatAdapter } from './footmode.js';
 import { makeFinds } from './finds.js';
+import { makeJetMode } from './jetmode.js';
 import { makeBeach } from './beach.js';
 import { Boat, Wind, Waves, PRESETS, DEG, KN, clamp, wrapPi, smooth, pointOfSail, aiControl } from './sim.js';
 import { DEM } from './demdata.js';
@@ -63,7 +64,7 @@ canvas.addEventListener('webglcontextrestored', () => { glLost = 0; location.rel
 
 const audio = makeAudio();
 const input = { left: false, right: false, ease: false };
-let G = null, X = null, SPY = null, PG = null, FT = null; // G -- всё состояние игры после загрузки; X -- снаряды, режимы и акватория (extra.js)
+let G = null, X = null, SPY = null, PG = null, FT = null, JM = null; // G -- всё состояние игры после загрузки; X -- снаряды, режимы и акватория (extra.js)
 
 // экран загрузки: настоящие этапы подготовки, а не крутилка
 const loadStep = async (pct, msg) => { $('loadfill').style.width = pct + '%'; $('loadmsg').textContent = msg; await new Promise((r) => setTimeout(r, 40)); };
@@ -105,7 +106,7 @@ async function init() {
     cam: 0, camYaw: 0, orbit: 0, orbitP: 0, zoom: 1, orbitV: 0, shake: 0, hintT: 0, free: null, toastT: 0, frame: 0, slow: 0 };
   if (!PRESETS[G.preset]) G.preset = 'santash';
   X = installExtra({ mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
-    setPreset: (id) => { if (PRESETS[id]) { G.preset = id; applyPreset(); } }, para: () => PG });
+    setPreset: (id) => { if (PRESETS[id]) { G.preset = id; applyPreset(); } }, para: () => PG, jet: () => JM });
   SPY = makeSpyglass({ G, camera, post, audio, store, ach: X.ach, $, extra: X }); SPY.renderAtlas(); // подзорная труба (spyglass.js)
   G.beach = makeBeach({ G, scene, camera, audio, toast }); // живой берег: отдыхающие, торговцы, ночные костры (beach.js)
   G.finds = makeFinds({ G, scene, camera, beach: G.beach, audio, toast, store, ach: X.ach, onTake: (k) => FT && FT.found(k) }); // находки на кромке воды (finds.js)
@@ -116,6 +117,7 @@ async function init() {
   G.mini = makeMinimap(hA); G.mmZ = store.get('mmZ') ?? 1; // миникарта в компасе; масштаб -- тапом по компасу
   $('dialwrap').addEventListener('pointerdown', (e) => { e.stopPropagation(); }); $('dialwrap').onclick = (e) => { e.stopPropagation(); G.mmZ = (G.mmZ + 1) % 3; store.set('mmZ', G.mmZ); audio.tick && audio.tick(); };
   G.mmRange = (para) => (para ? [240, 1500, 6000] : [400, 1500, 5000])[G.mmZ];
+  JM = makeJetMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt }); // Як-130 (jetmode.js)
   PG = makeParaMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, lens }); // параплан (paramode.js)
   buildMenu(); applyPreset(); toMenu(); resize();
   // Шейдеры собираются при первом показе каждого объекта, и это подвешивало меню на несколько секунд. Собираем всё
@@ -216,9 +218,9 @@ function buildMenu() {
   const TOD = { morning: ['Утро', 7.5], day: ['День', 13], sunset: ['Закат', 19.3], night: ['Ночь', 22.3] }, setTod = (id) => { G.tod = TOD[id] ? id : 'day'; store.set('tod', G.tod); for (const c of $('tod').children) c.setAttribute('aria-pressed', c.dataset.id === G.tod); };
   for (const id in TOD) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${TOD[id][0]}</b>`; b.onclick = () => setTod(id); $('tod').appendChild(b); }
   setTod(store.get('tod') || 'day'); G.todHour = () => TOD[G.tod][1];
-  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if (X.sel === 'para') PG.startFree(X.startAt); else startFree(); };
+  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if (X.sel === 'para') PG.startFree(X.startAt); else if (X.sel === 'jet') JM.startFree(); else startFree(); };
   $('brace').onclick = () => { audio.start(); X.compete(); };
-  $('ragain').onclick = () => { if (PG && PG.on) PG.again(); else if (G.mode === 'river') { $('result').hidden = true; $('briver').click(); } else X.compete(); }; $('rmenu').onclick = () => toMenu();
+  $('ragain').onclick = () => { if (JM && JM.on) JM.again(); else if (PG && PG.on) PG.again(); else if (G.mode === 'river') { $('result').hidden = true; $('briver').click(); } else X.compete(); }; $('rmenu').onclick = () => toMenu();
 }
 
 // выбрать курс вполветра, уводящий от берега
@@ -232,7 +234,7 @@ function showGame(on) { $('game').hidden = !on; $('menu').hidden = on; $('result
 function setRivals(v) { for (const r of G.rivals) { const on = v && !r.out; r.model.root.visible = on; r.wake.mesh.visible = on; } for (const k in G.marks) G.marks[k].visible = v; }
 
 function toMenu() {
-  if (SPY) SPY.close(); if (FT) FT.stop(); if (PG) PG.stop();
+  if (SPY) SPY.close(); if (FT) FT.stop(); if (PG) PG.stop(); if (JM) JM.stop();
   $('brief').hidden = true; $('mark').hidden = true; if (X) X.toMenuCraft();
   G.mode = 'menu'; G.race = null; showGame(false); setRivals(false);
   const Y0 = Math.min(G.shore.pierY - 260, -150); placeBoat(G.player, 60, Y0, openWaterHeading(60, Y0), 2.5);
@@ -354,11 +356,12 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyF' && G.mode !== 'menu' && (FT.on || (PG && PG.on))) footKey();
   else if (e.code === 'KeyG' && G.mode === 'free' && !(PG && PG.on)) footKey();
   else if (e.code === 'KeyE' && FT && FT.on) { const r = G.beach && G.beach.interact(G.beachHint); if (r) FT.social(r); else FT.interact(); }
-  else if (e.code === 'KeyP' && G.mode !== 'menu' && !(PG && PG.on)) togglePro();
+  else if (e.code === 'KeyP' && G.mode !== 'menu' && !(PG && PG.on) && !(JM && JM.on)) togglePro();
   else if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Звук выключен' : 'Звук включён');
   else if (e.code === 'Escape' && G.mode !== 'menu') toMenu();
-  else if (e.code === 'KeyF' && G.mode !== 'menu' && !(PG && PG.on)) X.hookPress();
+  else if (e.code === 'KeyF' && G.mode !== 'menu' && !(PG && PG.on) && !(JM && JM.on)) X.hookPress();
   else if (e.code === 'KeyR' && PG && PG.on) PG.restart();
+  else if (e.code === 'KeyR' && JM && JM.on) JM.restart();
   else if (e.code === 'KeyH' && PG && PG.on) PG.toggleHelp();
   else if (e.code === 'KeyI' && PG && PG.on) PG.toggleInst();
   else if (e.code === 'KeyR' && G.mode === 'race') startRace(); else if (e.code === 'KeyR' && G.mode === 'free') startFree();
@@ -381,7 +384,7 @@ canvas.addEventListener('pointerdown', (e) => { if (!G || G.mode === 'menu') ret
   const side = e.clientX < window.innerWidth / 2 ? 'left' : 'right', other = [...held.values()][0];
   if (ptr.size === 2 && !mouse && PG && PG.on && other && other !== side) { held.set(e.pointerId, side); syncTouch(); } // параплан: пальцы на обеих половинах -- обе клеванты
   else if (ptr.size === 2) { const [a, c] = [...ptr.values()]; pinch = Math.hypot(a.x - c.x, a.y - c.y); for (const q of ptr.values()) q.look = true; held.clear(); syncTouch(); }
-  else if (!mouse && !document.body.classList.contains('motor')) { held.set(e.pointerId, e.clientX < window.innerWidth / 2 ? 'left' : 'right'); syncTouch(); } });
+  else if (!mouse && !document.body.classList.contains('motor') && !document.body.classList.contains('jet')) { held.set(e.pointerId, e.clientX < window.innerWidth / 2 ? 'left' : 'right'); syncTouch(); } });
 canvas.addEventListener('pointermove', (e) => { const q = ptr.get(e.pointerId); if (!q || !G) return; const dx = e.clientX - q.x, dy = e.clientY - q.y; q.x = e.clientX; q.y = e.clientY;
   if (ptr.size === 2 && PG && PG.on && held.size === 2) return;
   if (ptr.size === 2) { const [a, c] = [...ptr.values()], d = Math.hypot(a.x - c.x, a.y - c.y); if (pinch > 0) { if (SPY && SPY.on) SPY.zoomBy(d / Math.max(pinch, 1)); else G.zoom = clamp(G.zoom * pinch / Math.max(d, 1), PG && PG.on ? 0.15 : 0.45, 3.2); } pinch = d; return; }
@@ -525,7 +528,7 @@ function loop(now) {
   if (G.finds && G.mode !== 'menu') G.finds.update(dt, FT && FT.on && !FT.state.swim && FT.state.st !== 'dis' ? FT.state : null, G.beach.dayN, FT ? FT.magnet : 1.2);
   beachSound(dt, b);
   sunL.target.position.set(b.X, b.base || 0, -b.Y); sunL.position.set(b.X + LIGHT.x * 30, (b.base || 0) + LIGHT.y * 30, -b.Y + LIGHT.z * 30);
-  if (FT && FT.on) { audio.vario(0, false); audio.airflow(0, 0, 0, false); } else if (PG && PG.on) PG.sound(dt); else audio.update(b);
+  if (FT && FT.on) { audio.vario(0, false); audio.airflow(0, 0, 0, false); } else if (JM && JM.on) JM.sound(dt); else if (PG && PG.on) PG.sound(dt); else audio.update(b);
   if (G.mode !== 'menu') updateHud(dt, b, sp);
   // адаптивное разрешение -- ДО отрисовки: смена размера очищает холст, после неё был бы пустой кадр
   fpsT += dt; fpsN++; if (fpsT > 2) { const fps = fpsN / fpsT; fpsT = 0; fpsN = 0; qHold--;
@@ -546,6 +549,7 @@ function tick(dt) {
   G.t += dt; G.wind.update(dt); dayCycle(dt);
   if (FT && FT.on) { FT.tick(dt); envTick(G.player.b); return; } // Дымок пешком: снаряд стоит, где оставили
   if (PG && PG.on) { PG.tick(dt); envTick(G.player.b); return; } // параплан: свой мир в воздухе
+  if (JM && JM.on) { JM.tick(dt); envTick(G.player.b); return; } // Як-130
   const boats = X.boats(P);
   // управление
   let ctl;
@@ -614,7 +618,7 @@ function envTick(b) {
   if (G.corridor) G.corridor.tick(G.t);
   G.water.uniforms.uTime.value = G.t; G.water.uniforms.uCenter.value.set(camera.position.x, 0, camera.position.z);
   G.water.updateGust(G.wind, b.X, -b.Y, 22); // карта порывов: по шестой части за кадр
-  ENV.uCloud.value.set(-G.t * 0.0035 * G.wind.sx, G.t * 0.0035 * G.wind.sy); if (!(PG && PG.on)) { G.water.setBoat(b); G.water.setTrail(b, G.player.wake.pts); } else G.water.setBoat({ X: 1e7, Y: 1e7, th: 0, speed: 0 }); // в воздухе лодки на воде нет
+  ENV.uCloud.value.set(-G.t * 0.0035 * G.wind.sx, G.t * 0.0035 * G.wind.sy); if (!(PG && PG.on) && !(JM && JM.on)) { G.water.setBoat(b); G.water.setTrail(b, G.player.wake.pts); } else G.water.setBoat({ X: 1e7, Y: 1e7, th: 0, speed: 0 }); // в воздухе лодки на воде нет
   G.shore.flag.rotation.y = Math.atan2(G.wind.sy, G.wind.sx) + Math.sin(G.t * 7) * 0.12;
 
 }
@@ -623,6 +627,7 @@ function updateCamera(dt, b, sp) {
   if (SPY && SPY.on && G.mode !== 'menu') { SPY.place(dt, b); G.sky.position.copy(camera.position); return; } // вид в подзорную трубу
   if (FT && FT.on) { FT.camera(dt); G.sky.position.copy(camera.position); return; }
   if (PG && PG.on) { PG.camera(dt); G.sky.position.copy(camera.position); return; }
+  if (JM && JM.on) { JM.camera(dt); G.sky.position.copy(camera.position); return; }
   if (G.mode === 'menu') G.camYaw += dt * 0.07; else G.camYaw += wrapPi(b.th - G.camYaw) * Math.min(1, dt * 2.4);
   G.shake = Math.max(0, G.shake - dt * 1.6);
   const sh = G.shake * G.shake, jx = (Math.random() - 0.5) * sh * 0.5, jy = (Math.random() - 0.5) * sh * 0.5;
@@ -704,7 +709,7 @@ let hintKey = '', hintT = 0;
 // звук пляжа: слушатель -- Дымок или лодка; до кромки воды меряем кольцами раз в полсекунды
 let bsT = 0, bsP = null;
 function beachSound(dt, b) { if (!G.beach || G.mode === 'menu') return; bsT -= dt; const foot = FT && FT.on;
-  if (!foot && (PG && PG.on)) { audio.beach({ on: false }); return; }
+  if (!foot && ((PG && PG.on) || (JM && JM.on))) { audio.beach({ on: false }); return; }
   const X = foot ? FT.state.X : b.X, Y = foot ? FT.state.Y : b.Y;
   if (bsT <= 0 || !bsP) { bsT = 0.5; const wet = G.h(X, Y) < 0; let water = 99;
     for (let r = 3; r <= 45 && water > 90; r += 6) for (let a = 0; a < 8; a++) { const hh = G.h(X + Math.cos(a * 0.785) * r, Y + Math.sin(a * 0.785) * r); if ((hh < 0) !== wet) { water = r; break; } }
@@ -725,6 +730,7 @@ function tackNow(R, b) { const tg = target(R, G.player.leg, false), brg = Math.a
   return Math.abs(wrapPi(brg - b.th)) > 92 * DEG && Math.abs(wrapPi(brg - b.twd)) < 120 * DEG && Math.hypot(tg.X - b.X, tg.Y - b.Y) > 25; }
 function updateHud(dt, b, sp) {
   if (FT && FT.on) { if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; } FT.hud(dt); return; }
+  if (JM && JM.on) { JM.hud(dt); return; }
   if (G.frame % 10 === 0) { const ad = footAdapter(), ok = !!ad && ad.canExit().ok; setP($('bfoot'), 'hidden', !ok); if (ok) setT($('bfoot'), 'выйти'); setP($('rfoot'), 'hidden', !(ok && PG && PG.on)); }
   if (PG && PG.on) { setP($('bpro'), 'hidden', true); PG.hud(dt); return; }
   if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; }
@@ -770,5 +776,5 @@ function updateHud(dt, b, sp) {
   if (h !== hintKey) { hintKey = h; const el = $('hint'); el.hidden = !h; el.textContent = h; el.className = 'hud' + (alert ? ' alert' : ''); }
 }
 
-window.__setQ = (q) => setQuality(q); window.__spy = () => SPY; window.__para = () => PG; window.__foot = () => FT; window.__footKey = () => footKey(); window.__gfx = () => ({ renderer, scene, camera, post, sunL, ENV }); window.__game = () => { if (G) G.__X = X; return G; }; window.__tick = (sec, inp) => { Object.assign(input, inp || {}); for (let i = 0; i < sec * 60; i++) tick(1 / 60); }; // для автотестов
+window.__setQ = (q) => setQuality(q); window.__spy = () => SPY; window.__para = () => PG; window.__jet = () => JM; window.__foot = () => FT; window.__footKey = () => footKey(); window.__gfx = () => ({ renderer, scene, camera, post, sunL, ENV }); window.__game = () => { if (G) G.__X = X; return G; }; window.__tick = (sec, inp) => { Object.assign(input, inp || {}); for (let i = 0; i < sec * 60; i++) tick(1 / 60); }; // для автотестов
 init().catch((e) => { $('loadmsg').textContent = 'Не удалось запустить: ' + e.message; console.error(e); });

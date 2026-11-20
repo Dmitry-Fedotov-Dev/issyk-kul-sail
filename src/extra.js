@@ -28,8 +28,9 @@ const FLY_TXT = ['Уиииии!', 'Полетел!', 'Ласточкой!', 'С�
 const WAIT = { yacht: 30, kayak: 20, scull: 25, sup: 15, jetski: 15, boat: 15 }; // столько ждёт лобби (так же на сервере)
 const RIVALS = [['Ала-Тоо', 0.97, { hull: 0x1f6fd0, deck: 0xf4f3ee, pfd: 0x1f6fd0 }], ['Манас', 0.9, { hull: 0xf2c21b, deck: 0x20242b, pfd: 0xf2c21b }], ['Чайка', 0.84, { hull: 0x2f8f5a, deck: 0xf4f3ee, pfd: 0x8fd16a }]];
 const PARA_INFO = { id: 'para', name: 'Параплан', sub: 'термики · склоны · подсложения', key: 'аксель' };
-const COMPETE = { para: ['Гонка по маршруту', 'цилиндры над предгорьями, цель у пляжа'], yacht: ['Регата', 'три соперника, старт по сигналу'], kayak: ['Спринт 500 м', 'четыре дорожки, прямая'], scull: ['Гонка 1000 м', 'академическая классика'], sup: ['Гонка 200 м', 'техника и баланс'], jetski: ['Слалом по буям', 'восемь знаков на время'], boat: ['Фигурное вождение', 'слалом по буям на время'] };
-const HOW = { para: 'Старт с разбега со склона: <b>Пробел</b> — поднять крыло и бежать. <b>← →</b> — повороты (держите дольше — круче). Мотора нет: выше поднимают только восходящие потоки — у склонов на ветер и под облаками, там пищит вариометр; кружите в них. Садитесь против ветра, у земли — <b>↓</b>. В первом полёте всё покажет инструктор.', kayak: '<b>← →</b> — гребок левой и правой лопастью. Гребите по очереди и в ритм: частить бесполезно. Гребок слева уводит нос вправо. <b>Пробел</b> — опора на весло, после оверкиля — эскимосский переворот.',
+const JET_INFO = { id: 'jet', name: 'Як-130 — учебно-боевой самолёт Армавирского училища лётчиков', sub: 'реактивный · Армавир', key: 'максимал' };
+const COMPETE = { jet: ['Пилотажная зона', 'десять колец над озером на время'], para: ['Гонка по маршруту', 'цилиндры над предгорьями, цель у пляжа'], yacht: ['Регата', 'три соперника, старт по сигналу'], kayak: ['Спринт 500 м', 'четыре дорожки, прямая'], scull: ['Гонка 1000 м', 'академическая классика'], sup: ['Гонка 200 м', 'техника и баланс'], jetski: ['Слалом по буям', 'восемь знаков на время'], boat: ['Фигурное вождение', 'слалом по буям на время'] };
+const HOW = { jet: 'Взлёт с полосы старого аэродрома. <b>Пробел</b> — максимал, на 210 км/ч <b>↓</b> — ручку на себя. <b>← →</b> — крен, <b>↓ ↑</b> — на себя и от себя. Отпустили — автоматика держит траекторию и выводит крылья в горизонт, тягу держит сама. Петля, бочка, бреющий над водой. Садиться — к полосе, шасси выпустится само.', para: 'Старт с разбега со склона: <b>Пробел</b> — поднять крыло и бежать. <b>← →</b> — повороты (держите дольше — круче). Мотора нет: выше поднимают только восходящие потоки — у склонов на ветер и под облаками, там пищит вариометр; кружите в них. Садитесь против ветра, у земли — <b>↓</b>. В первом полёте всё покажет инструктор.', kayak: '<b>← →</b> — гребок левой и правой лопастью. Гребите по очереди и в ритм: частить бесполезно. Гребок слева уводит нос вправо. <b>Пробел</b> — опора на весло, после оверкиля — эскимосский переворот.',
   scull: '<b>Пробел</b> — гребок обоими вёслами: захват, проводка, вынос. Нажмёте раньше, чем вынесли вёсла, — поймаете «краба». <b>← →</b> — одним веслом, чтобы подправить курс.',
   sup: '<b>← →</b> — гребок слева и справа, меняйте борт. <b>Пробел</b> — присесть: устойчивее на волне, но гребок слабее.',
   jetski: '<b>Пробел</b> — газ. <b>← →</b> — руль, но рулится гидроцикл только под газом. На гребне на скорости — прыжок; приводняйтесь ровно.',
@@ -49,13 +50,13 @@ export function installExtra(A) {
   let fid = String(store.get('fid') || ''); if (!fid) { fid = Math.random().toString(36).slice(2, 12); store.set('fid', fid); }
   let friends = (store.get('friends') || []).filter((x) => x && x.fid && x.fid !== fid).slice(0, 20), fstat = new Map(), pendingTp = null, pendingFriend = null;
   const addFriend = (f, n) => { if (!f || f === fid) return false; const o = friends.find((x) => x.fid === f); if (o) { if (n) o.n = n; } else friends.unshift({ fid: f, n: n || 'Друг' }); friends = friends.slice(0, 20); store.set('friends', friends); return !o; };
-  if (sel !== 'yacht' && sel !== 'para' && !SPECS[sel]) sel = 'yacht';
-  const info = (id) => (id === 'yacht' ? YACHT_INFO : id === 'para' ? PARA_INFO : SPECS[id]);
-  const SHORT = { para: 'Параплан', yacht: 'Яхта', kayak: 'Каяк', scull: 'Одиночка', sup: 'SUP-доска', jetski: 'Гидроцикл', boat: 'Катер' }; // на кнопке -- коротко, полное имя в подсказке
+  if (sel !== 'yacht' && sel !== 'para' && sel !== 'jet' && !SPECS[sel]) sel = 'yacht';
+  const info = (id) => (id === 'yacht' ? YACHT_INFO : id === 'para' ? PARA_INFO : id === 'jet' ? JET_INFO : SPECS[id]);
+  const SHORT = { jet: 'Як-130', para: 'Параплан', yacht: 'Яхта', kayak: 'Каяк', scull: 'Одиночка', sup: 'SUP-доска', jetski: 'Гидроцикл', boat: 'Катер' }; // на кнопке -- коротко, полное имя в подсказке
 
   // ---------- достижения ----------
   function ach(id) { if (done.has(id)) return; const a = ACH.find((x) => x[1] === id); if (!a) return; done.add(id); store.set('ach', [...done]); audio.chime(); toast('★ ' + a[2]); journal(); }
-  function journal() { const groups = { yacht: 'Яхта', kayak: 'Каяк', scull: 'Академическая одиночка', sup: 'SUP-доска', jetski: 'Гидроцикл', boat: 'Моторный катер', law: 'Закон и порядок', map: 'География', spy: 'Подзорная труба', para: 'Параплан', dymok: 'Дымок на берегу' };
+  function journal() { const groups = { yacht: 'Яхта', kayak: 'Каяк', scull: 'Академическая одиночка', sup: 'SUP-доска', jetski: 'Гидроцикл', boat: 'Моторный катер', law: 'Закон и порядок', map: 'География', spy: 'Подзорная труба', para: 'Параплан', jet: 'Як-130', dymok: 'Дымок на берегу' };
     $('bjournal').textContent = `Журнал · ${done.size}/${ACH.length}`;
     $('jlist').innerHTML = Object.keys(groups).map((g) => `<h4>${groups[g]}</h4>` + ACH.filter((a) => a[0] === g).map((a) => `<div class="ja${done.has(a[1]) ? ' ok' : ''}"><b>${a[2]}</b><span>${a[3]}</span></div>`).join('') + (g === 'dymok' ? collHtml() : '')).join(''); }
   // коллекция находок Дымка: что найдено и сколько; ненайденное -- знаком вопроса, чтобы было что искать
@@ -224,7 +225,7 @@ export function installExtra(A) {
   // ---------- меню ----------
   function refreshMenu() { for (const c of $('crafts').children) c.setAttribute('aria-pressed', c.dataset.id === sel);
     $('brace').innerHTML = `${COMPETE[sel][0]}<small>${COMPETE[sel][1]}</small>`; $('briver').hidden = sel !== 'kayak';
-    siteUI(); $('bfree').innerHTML = sel === 'para' ? `Свободный полёт<small>старт: ${({ winch: 'лебёдка на полосе аэродрома', airport: 'склон над аэродромом', kurgak: 'пик Кургак-Сай', kalitka: 'гора Калитка' })[store.get('paraSite') || 'airport']}</small>` : 'Свободное плавание<small>бухта, мыс, открытая вода</small>';
+    siteUI(); $('bfree').innerHTML = sel === 'jet' ? 'Свободный полёт<small>взлёт с полосы старого аэродрома</small>' : sel === 'para' ? `Свободный полёт<small>старт: ${({ winch: 'лебёдка на полосе аэродрома', airport: 'склон над аэродромом', kurgak: 'пик Кургак-Сай', kalitka: 'гора Калитка' })[store.get('paraSite') || 'airport']}</small>` : 'Свободное плавание<small>бухта, мыс, открытая вода</small>';
     $('how').innerHTML = sel === 'yacht' ? yachtHow : HOW[sel].replace(/<b>Пробел<\/b>/g, TOUCH ? `кнопка <b>«${info(sel).key}»</b>` : '<b>Пробел</b>').replace(/<b>← →<\/b>/g, TOUCH ? '<b>касание слева и справа</b>' : '<b>← →</b>');
     $('bmap').textContent = startAt ? `Место: ${startAt.label}` : 'Место: Чолпон-Ата';
     const br = brokenStored(sel); $('brace').classList.toggle('pulse', br); $('brace').title = br ? 'Ресурс 0% — финиш в гонке восстановит его' : ''; }
@@ -234,7 +235,7 @@ export function installExtra(A) {
       for (const [id, n, sub] of [['winch', 'Буксир', 'лебёдка на полосе'], ['airport', 'Аэродром', 'склон над городом'], ['kurgak', 'Кургак-Сай', 'вершина ≈4100 м'], ['kalitka', 'Калитка', 'гора ≈2600 м']]) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${n}</b><small>${sub}</small>`; b.onclick = () => { store.set('paraSite', id); refreshMenu(); }; box.appendChild(b); } }
     const on = sel === 'para'; box.hidden = !on; $('psitesl').hidden = !on; for (const c of box.children) c.setAttribute('aria-pressed', c.dataset.id === (store.get('paraSite') || 'airport')); }
   function buildMenu() { yachtHow = $('how').innerHTML;
-    for (const id of [...CRAFT_ORDER, 'para']) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); refreshMenu(); }; $('crafts').appendChild(b); }
+    for (const id of [...CRAFT_ORDER, 'para', 'jet']) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); refreshMenu(); }; $('crafts').appendChild(b); }
     $('briver').onclick = () => { audio.start(); startRiver(); }; $('bjournal').onclick = () => { journal(); $('journal').hidden = false; }; $('jclose').onclick = () => { $('journal').hidden = true; };
     $('bmap').onclick = openMap; $('mclose').onclick = () => { $('mapdlg').hidden = true; }; $('mreset').onclick = () => { startAt = null; $('mapdlg').hidden = true; refreshMenu(); };
     const nm = $('pname'), setName = (v) => { name = v; store.set('name', v); };
@@ -471,7 +472,7 @@ export function installExtra(A) {
       return R.motor ? aiMotor(e.b, c.X, c.Y, 0.72 + 0.28 * e.skill) : aiPaddle(e.b, c.X, c.Y, e.ai, dt, e.skill); },
     toMenuCraft() { if (G.mode !== 'menu') saveWear(); leaveModes(); for (const k in crafts) show(crafts[k], k === 'yacht'); G.player = yacht; document.body.classList.remove('motor'); refreshMenu(); },
     useYacht() { leaveModes(); setPlayer('yacht'); },
-    compete() { if (sel === 'para') A.para().startRace(); else if (sel === 'yacht') A.startRace(); else startRace2(); }, get startAt() { return startAt; },
+    compete() { if (sel === 'jet') A.jet().startRace(); else if (sel === 'para') A.para().startRace(); else if (sel === 'yacht') A.startRace(); else startRace2(); }, get startAt() { return startAt; },
     onFreePre() { leaveModes(); setPlayer(sel); },
     onFree() { G.modeT = 0; const P = G.player; let cx = 0, cy = -600;
       if (startAt) { A.placeBoat(P, startAt.X, startAt.Y, A.openWaterHeading(startAt.X, startAt.Y), startAt.land ? 0 : 1); G.camYaw = P.b.th; if (!startAt.land) { cx = startAt.X; cy = startAt.Y; } }

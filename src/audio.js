@@ -115,8 +115,14 @@ export function makeAudio() {
     noise(7000, 1.2, 0.35, 0.03, 0, 10000); }
   // пешком: лодочные шумы (поток, плеск о борт, парус) стихают, остаётся лёгкий ветер
   function foot(wind = 4) { if (!ctx || ctx.state !== 'running') return; set(L.low.g.gain, 0.02 + wind * wind * 0.0008, 0.4); set(L.mid.g.gain, wind * wind * 0.0004, 0.4); for (const k of ['whistle', 'rush', 'bubble', 'flap']) set(L[k].g.gain, 0, 0.3); }
+  // реактивный: рёв (шум через фильтр, громче и ярче с тягой) и свист турбины (тон растёт с оборотами)
+  let jt = null;
+  function jet(thr = 0, V = 0, on = true) { if (!ctx || ctx.state !== 'running') return;
+    if (!jt) { if (!on) return; const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 400; const g = ctx.createGain(); g.gain.value = 0; s.connect(fl); fl.connect(g); g.connect(master); s.start();
+      const o = ctx.createOscillator(), og = ctx.createGain(), of = ctx.createBiquadFilter(); o.type = 'triangle'; o.frequency.value = 2000; of.type = 'bandpass'; of.frequency.value = 3000; of.Q.value = 3; og.gain.value = 0; o.connect(of); of.connect(og); og.connect(master); o.start(); jt = { g, fl, og, o }; }
+    const k = on ? thr : 0; set(jt.g.gain, on ? 0.04 + 0.2 * k : 0, 0.3); set(jt.fl.frequency, 300 + 1500 * k + V * 3, 0.3); set(jt.og.gain, on ? 0.008 + 0.025 * k : 0, 0.4); set(jt.o.frequency, 1800 + 2600 * k, 0.8); }
   return {
-    start, update, engine, siren, vario, airflow, winch, beach, find, foot,
+    start, update, engine, siren, vario, airflow, winch, beach, find, foot, jet,
     plop(p = 1) { noise(700, 1.2, 0.5, 0.3 * p, 0, 180); tone(300, 0.15, 'sine', 0.12 * p, 120); },
     paddle() { noise(900 + Math.random() * 400, 1, 0.22, 0.04, (Math.random() - 0.5) * 0.4, 400); },
     shake() { for (let i = 0; i < 6; i++) setTimeout(() => noise(3500, 1.5, 0.07, 0.05, i % 2 ? 0.4 : -0.4), i * 45); },
