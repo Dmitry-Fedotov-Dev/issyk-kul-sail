@@ -6,9 +6,12 @@
 // мордочкой -- на камеру и в покое. Чего в листе нет, добирает процедура: подпрыгивание шага, дуга прыжка, сжатие.
 import * as THREE from 'three';
 import { DFOOT } from './dymokfoot.js';
+import { NPCART } from './npcart.js';
 import { clamp, wrapPi } from './sim.js';
 
 const IMG = typeof Image !== 'undefined' ? new Image() : null; if (IMG) IMG.src = DFOOT.png;
+const IMN = typeof Image !== 'undefined' ? new Image() : null; if (IMN) IMN.src = NPCART.png; // Дымок у костра -- кадры с ночного листа
+const FIRE = ['ndym0', 'ndym1', 'ndym2', 'ndym3'], NK = (1.7 / 64) / 0.021; // ночной лист крупнее: пересчёт в масштаб пешего Дымка
 const FR = DFOOT.frames, CW = 128, CH = 104, AX = 64, AY = 98, PXM = 0.021;
 const SEQ = { idle: ['idle0', 'idle1', 'idle2', 'idle3'], walk: ['walk0', 'walk1', 'walk2', 'walk3', 'walk4'], run: ['run0', 'run1', 'run2', 'run3', 'run4'],
   back: ['back0', 'back1', 'back2', 'back3'], backRun: ['back4', 'back5', 'back6'], front: ['idle0', 'idle1', 'look0', 'idle3'],
@@ -48,7 +51,7 @@ function bucketSprite() { // пустое ведёрко, пиксельное -
 }
 
 export function makeFootMode(A) {
-  const { G: Gm, scene, camera, $, input, audio, toast, TOUCH } = A;
+  const { G: Gm, scene, camera, $, input, audio, toast, TOUCH, beach } = A;
   const H = (x, y) => (Gm.hMesh ? Gm.hMesh(x, y) : Gm.h(x, y)); // земля -- та, что нарисована
   const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH; const cx = cv.getContext('2d');
   const tex = new THREE.CanvasTexture(cv); tex.magFilter = tex.minFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.colorSpace = THREE.SRGBColorSpace;
@@ -105,7 +108,9 @@ export function makeFootMode(A) {
     // состояние
     C.actT -= dt; if (C.actT <= 0) C.act = null;
     if ((input.left || input.right || input.sin || input.flare || input.joy) && C.act && C.act !== 'land') C.act = null; // управление важнее случайных поз
-    if (!C.ground) C.st = 'jump'; else if (C.act) C.st = C.act; else if (sp > 3.6) C.st = 'run'; else if (sp > 0.35) C.st = 'walk'; else C.st = 'idle';
+    if (!C.ground) C.st = 'jump'; else if (C.act) C.st = C.act; else if (C.st === 'fire' && C.sp < 0.3) { /* у костра -- остаётся */ } else if (sp > 3.6) C.st = 'run'; else if (sp > 0.35) C.st = 'walk'; else C.st = 'idle';
+    const fire = beach && C.ground && C.sp < 0.3 && C.st !== 'jump' ? beach.fireNear(C.X, C.Y) : null;
+    if (fire && !C.act && (C.st === 'idle' || C.st === 'fire')) { C.st = 'fire'; C.fireT = (C.fireT || 0) + dt; if (C.fireT > 22 && !C.blanket && Math.random() < dt / 15) { C.blanket = true; toast('Кто-то укрыл уснувшего Дымка пледом'); } } else { C.fireT = 0; C.blanket = false; }
     if (C.st === 'idle') { C.idleT += dt; if (C.idleT > 6 && !C.act) { C.idleT = 0; const r = Math.random(); setAct(r < 0.4 ? 'look' : r < 0.75 ? 'rest' : 'inter', r < 0.4 ? 2.2 : 3.2); } } else C.idleT = 0;
     // эффекты: следы на песке, пыль при беге
     if (C.ground && sp > 0.4) { C.lastPrint += sp * dt; if (C.lastPrint > 0.32) { C.lastPrint = 0; C.step ^= 1; if (surf === 'sand' || surf === 'shallow') print(); if (sp > 3.6 && surf !== 'grass') puff(1); if (surf === 'shallow') audio.stroke && audio.stroke(0.3); } }
@@ -129,6 +134,11 @@ export function makeFootMode(A) {
     else if (C.st === 'mount') { /* назад по листу */ }
     else if (C.st === 'jump') C.fi = C.vz > 2 ? 1 : C.vz > -1 ? 2 : 3;
     else { const fps = C.st === 'run' ? 11 : C.st === 'walk' ? 7 : C.st === 'land' ? 9 : 3.5; C.ft += dt * fps; if (C.ft >= 1) { C.ft -= 1; C.fi++; } if (C.st === 'land' || C.st === 'inter' || C.st === 'look' || C.st === 'rest') C.fi = Math.min(C.fi, seq.length - 1); }
+    if (C.st === 'fire' && IMN && IMN.complete) { // у огня: сидит, греет лапки, ест; через ~20 с засыпает, а там, глядишь, укроют пледом
+      const NF = NPCART.frames, key = C.fireT > 20 ? 'ndym4' : FIRE[Math.floor(C.t * 0.8) % FIRE.length], k = NF[key]; cx.clearRect(0, 0, CW, CH); cx.imageSmoothingEnabled = false;
+      const w = Math.round(k[2] * NK), h = Math.round(k[3] * NK); cx.drawImage(IMN, k[0], k[1], k[2], k[3], Math.round(AX - k[4] * NK), AY - h, w, h);
+      if (C.blanket) { const b = NF.nobj17, bw = Math.round(w * 0.9), bh = Math.round(b[3] * bw / b[2]); cx.drawImage(IMN, b[0], b[1], b[2], b[3], AX - (bw >> 1), AY - bh - Math.round(h * 0.25), bw, bh); }
+      tex.needsUpdate = true; spr.position.set(C.X, C.Z, -C.Y); return; }
     const key = C.st === 'mount' ? seq[clamp(3 - C.fi, 0, 4)] : seq[C.fi % seq.length], k = FR[key]; if (!k || !IMG || !IMG.complete) return;
     cx.clearRect(0, 0, CW, CH); cx.imageSmoothingEnabled = false; cx.save(); if (flip) { cx.translate(CW, 0); cx.scale(-1, 1); }
     cx.drawImage(IMG, k[0], k[1], k[2], k[3], Math.round(AX - k[4]), Math.round(AY - k[5]), k[2], k[3]); cx.restore(); tex.needsUpdate = true;
@@ -138,7 +148,7 @@ export function makeFootMode(A) {
   }
   // камера: сзади-сверху, за курсом тянется плавно, мышью/пальцем -- облёт; в землю не уходит
   function cam(dt) {
-    if (!C.on) return; frame(dt);
+    if (!C.on) return; frame(dt); if (beach && beach.tint) beach.tint(C.X, C.Y, spr.material.color); // ночью -- в тон ночи, у костра -- тёплый
     if ((C.sp || 0) > 0.8 && !input.left && !input.right) C.camYaw += wrapPi(C.th - C.camYaw) * Math.min(1, dt * 1.2);
     const yaw = C.camYaw + Gm.orbit, d = 5.2 * Gm.zoom, el = clamp(0.32 + Gm.orbitP, 0.05, 1.3);
     const tx = C.X, ty = C.Z + 0.6, tz = -C.Y, want = new THREE.Vector3(tx - Math.sin(yaw) * d * Math.cos(el), ty + d * Math.sin(el), tz + Math.cos(yaw) * d * Math.cos(el));
@@ -146,9 +156,10 @@ export function makeFootMode(A) {
     C.camP.lerp(want, Math.min(1, dt * 5)); camera.position.copy(C.camP); camera.lookAt(tx, ty, tz); camera.fov += (55 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
   function hud() {
     if (!C.on) return; const el = $('hint'), near = C.seat && Math.hypot(C.X - C.seat.X, C.Y - C.seat.Y) < 3 && C.st !== 'dis';
-    const h = C.st === 'dis' ? '' : near ? (TOUCH ? 'Рядом снаряд — кнопка «сесть»' : `F — вернуться: ${C.adapter.name}`) : (TOUCH ? 'Джойстик — идти, к краю — бежать · кнопка — прыжок' : 'WASD / стрелки — идти · Shift — бег · пробел — прыжок · E — понюхать · F у снаряда — сесть');
+    const bh = Gm.beachHint, h = C.st === 'dis' ? '' : bh && bh.e ? (bh.e.vendor ? 'E — кукуруза, лимонад, сосиска в тесте' : 'E — поздороваться') : C.st === 'fire' ? (C.fireT > 20 ? 'Дымок уснул у костра' : 'Дымок греется у костра') : near ? (TOUCH ? 'Рядом снаряд — кнопка «сесть»' : `F — вернуться: ${C.adapter.name}`) : (TOUCH ? 'Джойстик — идти, к краю — бежать · кнопка — прыжок' : 'WASD / стрелки — идти · Shift — бег · пробел — прыжок · E — понюхать · F у снаряда — сесть');
     if (el.textContent !== h) el.textContent = h; el.hidden = !h; el.className = 'hud';
     const fb = $('bfoot'); if (fb) { fb.hidden = !near; fb.textContent = 'сесть'; } }
+  function happy() { if (C.on && C.ground) setAct('happy', 1.4); }
   function interact() { if (!C.on || !C.ground || C.st === 'dis') return; setAct(Math.random() < 0.5 ? 'inter' : 'look', 2); audio.tick(1400, 0.03); }
-  return { get on() { return C.on; }, start, stop, mount, tick, camera: cam, hud, interact, sound() {}, get state() { return C; } };
+  return { get on() { return C.on; }, happy, start, stop, mount, tick, camera: cam, hud, interact, sound() {}, get state() { return C; } };
 }

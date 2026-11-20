@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TRAILS, RIVERS } from './trails.js';
 import { makeMinimap, rangeTxt } from './minimap.js';
 import { makeFootMode, paraAdapter, boatAdapter } from './footmode.js';
+import { makeBeach } from './beach.js';
 import { Boat, Wind, Waves, PRESETS, DEG, KN, clamp, wrapPi, smooth, pointOfSail, aiControl } from './sim.js';
 import { DEM } from './demdata.js';
 import { applyQuality, loadHeight, loadDem, makeDemTerrain, makeSky, makeTerrain, makeFarTerrain, makeWater, makeShore, makeMark, SUN, HAZE, ENV, MAP } from './world.js';
@@ -105,7 +106,8 @@ async function init() {
   X = installExtra({ mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
     setPreset: (id) => { if (PRESETS[id]) { G.preset = id; applyPreset(); } }, para: () => PG });
   SPY = makeSpyglass({ G, camera, post, audio, store, ach: X.ach, $, extra: X }); SPY.renderAtlas(); // подзорная труба (spyglass.js)
-  FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH }); // пеший Дымок (footmode.js)
+  G.beach = makeBeach({ G, scene, camera, audio, toast }); // живой берег: отдыхающие, торговцы, ночные костры (beach.js)
+  FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach }); // пеший Дымок (footmode.js)
   $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey();
   G.pro = !!store.get('pro'); $('bpro').classList.toggle('on', G.pro);
   G.hMesh = (x, y) => { const v = demT.userData.meshH(x, y); return v === null ? hA(x, y) : v; }; // высота видимой земли -- для персонажей
@@ -345,7 +347,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyC') { G.cam = (G.cam + 1) % 3; resetView(); }
   else if (e.code === 'KeyF' && G.mode !== 'menu' && (FT.on || (PG && PG.on))) footKey();
   else if (e.code === 'KeyG' && G.mode === 'free' && !(PG && PG.on)) footKey();
-  else if (e.code === 'KeyE' && FT && FT.on) FT.interact();
+  else if (e.code === 'KeyE' && FT && FT.on) { if (G.beach && G.beach.interact(G.beachHint)) FT.happy(); else FT.interact(); }
   else if (e.code === 'KeyP' && G.mode !== 'menu' && !(PG && PG.on)) togglePro();
   else if (e.code === 'KeyM') toast(audio.toggleMute() ? 'Звук выключен' : 'Звук включён');
   else if (e.code === 'Escape' && G.mode !== 'menu') toMenu();
@@ -513,6 +515,7 @@ function loop(now) {
   if (!G.freeze) tick(dt); // freeze -- только для тестов: мир стоит, картинка рисуется
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
+  if (G.beach) G.beachHint = G.beach.update(dt, FT && FT.on ? FT.state : null);
   sunL.target.position.set(b.X, b.base || 0, -b.Y); sunL.position.set(b.X + LIGHT.x * 30, (b.base || 0) + LIGHT.y * 30, -b.Y + LIGHT.z * 30);
   if (FT && FT.on) { audio.vario(0, false); audio.airflow(0, 0, 0, false); } else if (PG && PG.on) PG.sound(dt); else audio.update(b);
   if (G.mode !== 'menu') updateHud(dt, b, sp);
