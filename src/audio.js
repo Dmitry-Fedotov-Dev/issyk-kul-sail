@@ -7,8 +7,14 @@ export function makeAudio() {
     if (ctx) { if (ctx.state !== 'running') ctx.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
     ctx = new AC(); master = ctx.createGain(); master.gain.value = 0.75;
-    // мягкий лимитер на выходе, а не компрессор с порогом -24 дБ: тот «качал» ветер и мял ноты, звук казался перегруженным
-    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -8; comp.knee.value = 6; comp.ratio.value = 6; comp.attack.value = 0.004; comp.release.value = 0.25; master.connect(comp); comp.connect(ctx.destination);
+    // выход: срез инфразвука (динамики ноутбука и телефона хрипят от гула ниже 45 Гц) -> мягкий компрессор -> запас
+    // по громкости -> плавный ограничитель (tanh). Раньше сумма слоёв доходила до 0 дБ, компрессор с автоподъёмом
+    // уровня в Chrome давил её рывками -- на сильном ветре, мотором и реактивным звук хрипел и «клиповал».
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 45; hp.Q.value = 0.6;
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 3; comp.attack.value = 0.006; comp.release.value = 0.3;
+    const trim = ctx.createGain(); trim.gain.value = 0.42;
+    const lim = ctx.createWaveShaper(), N = 4096, cv = new Float32Array(N); for (let i = 0; i < N; i++) { const x = (i / (N - 1)) * 4 - 2; cv[i] = Math.tanh(x * 1.3) * 0.9; } lim.curve = cv; lim.oversample = '2x';
+    master.connect(hp); hp.connect(comp); comp.connect(trim); trim.connect(lim); lim.connect(ctx.destination);
     buf = ctx.createBuffer(2, ctx.sampleRate * 4, ctx.sampleRate);
     for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); let b0 = 0, b1 = 0, b2 = 0; // розовый шум, каналы независимы -- звук «вокруг»
       for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; b0 = 0.99765 * b0 + w * 0.099046; b1 = 0.963 * b1 + w * 0.2965164; b2 = 0.57 * b2 + w * 1.0526913; d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.22; } }
@@ -36,7 +42,7 @@ export function makeAudio() {
   function tone(f, dur, type = 'sine', vol = 0.25, f2, pan = 0) {
     if (!ctx) return; const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
     o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + Math.min(0.006, dur * 0.2)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); o.connect(g);
     const pn = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (pn) { pn.pan.value = pan; g.connect(pn); pn.connect(master); } else g.connect(master);
     o.start(t); o.stop(t + dur + 0.02);
   }
@@ -92,7 +98,7 @@ export function makeAudio() {
   const GUIT = [[220, 261.6, 329.6, 440], [174.6, 220, 261.6, 349.2], [130.8, 196, 261.6, 329.6], [196, 246.9, 293.7, 392]];
   function pluck(f, v, pan) { if (!ctx) return; const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), fl = ctx.createBiquadFilter(), t = ctx.currentTime;
     o.type = 'triangle'; o2.type = 'sawtooth'; o.frequency.value = f; o2.frequency.value = f * 1.002; fl.type = 'lowpass'; fl.frequency.setValueAtTime(f * 6, t); fl.frequency.exponentialRampToValueAtTime(f * 1.5, t + 0.6);
-    const g2 = ctx.createGain(); g2.gain.value = 0.25; o2.connect(g2); g2.connect(fl); o.connect(fl); fl.connect(g); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+    const g2 = ctx.createGain(); g2.gain.value = 0.25; o2.connect(g2); g2.connect(fl); o.connect(fl); fl.connect(g); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(v, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
     const pn = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (pn) { pn.pan.value = pan; g.connect(pn); pn.connect(master); } else g.connect(master); o.start(t); o2.start(t); o.stop(t + 1.7); o2.stop(t + 1.7); }
   // p: { water: м до воды, crowd: 0..N, fireD, guitD, day 0..1, on }
   function beach(p) { if (!ctx || ctx.state !== 'running') return; const t = ctx.currentTime;
