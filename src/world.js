@@ -35,13 +35,13 @@ export async function loadHeight() {
 // Общее состояние неба и света: одни и те же объекты uniform'ов разделяют небо, рельеф и вода.
 export const ENV = {
   uSun: { value: SUN }, uHor: { value: new THREE.Vector3(0.56, 0.76, 0.97) }, uCover: { value: 0.4 }, uCirrus: { value: 0.3 },
-  uStorm: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
+  uStorm: { value: 0 }, uCuK: { value: 0.35 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
   uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() },
   uRiv: { value: null }, uRivT: { value: new THREE.Vector4() }, uRivOn: { value: 0 }, uRT: { value: 0 }, // реки коридора -- маской (corridorart)
   uLC: { value: null }, uLCOn: { value: 0 }, uPaint: { value: 1 }, uLCT: { value: new THREE.Vector4(-141000, 63000, 1 / 273600, 1 / 180600) }, // маска зон OSM (по требованию) // съёмка карты сверху: дно плавно уходит в цвет озера на карте
 };
 export const GLSL_COMMON = /* glsl */`
-uniform vec3 uSun, uHor; uniform float uCover, uCirrus, uStorm, uCloudScale, uSunI, uDay, uDusk; uniform vec2 uCloud;
+uniform vec3 uSun, uHor; uniform float uCuK; uniform float uCover, uCirrus, uStorm, uCloudScale, uSunI, uDay, uDusk; uniform vec2 uCloud;
 #define HOR uHor
 float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -106,7 +106,7 @@ void main(){ vec3 d=normalize(vDir); vec3 c=skyBase(d); float dk=mix(0.05,1.,uDa
       vec3 cc=mix(dark, bright, clamp(lit*(1.-0.5*core)+0.22*(1.-core),0.,1.));
       cc*=mix(1.,0.78,smoothstep(0.25,0.9,d.y)*core); // прямо над головой видны тёмные основания
       cc*=dt3; cc=mix(cc, uHor, exp(-d.y*8.)*0.78);
-      c=mix(c, cc, a*smoothstep(0.004,0.07,d.y)); } }
+      c=mix(c, cc, a*smoothstep(0.004,0.07,d.y)*uCuK); } } // uCuK: главные облака теперь рисованные (clouds.js), эти -- лишь лёгкая дымка за ними
   c=mix(c,uHor,smoothstep(0.02,-0.01,d.y));
   // для карты отражений: под горизонтом -- вода, иначе борт отражал бы «небо снизу»
   c=mix(c, mix(vec3(0.02,0.14,0.36),vec3(0.03,0.07,0.10),uStorm), uEnvW*smoothstep(0.,-0.06,d.y));
@@ -136,7 +136,14 @@ export function makeTerrain(h, hole = null) {
     if (hole) { const xa = pos[a * 3], za = -pos[a * 3 + 2], xd = pos[d * 3], zd = -pos[d * 3 + 2]; if (Math.min(xa, xd) > hole.x0 && Math.max(xa, xd) < hole.x1 && Math.min(za, zd) > hole.y0 && Math.max(za, zd) < hole.y1) continue; } // здесь подробная заплатка
     chunkList(lists, ((j / CH) | 0) * 64 + ((i / CH) | 0) + (Math.min(hs[a], hs[b], hs[c], hs[d]) < 0 ? SHORE : 0)).push(a, b, d, a, d, c);
   }
-  return chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, terrainMaterial(false), terrainMaterial());
+  const obj = chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, terrainMaterial(false), terrainMaterial());
+  // высота НАРИСОВАННОЙ поверхности: сетка неравномерная (у берега клетки мелкие, к краям -- по сотне метров), поэтому
+  // ищем клетку обратным растяжением и берём тот же треугольник (a-b-d / a-d-c), что рисует видеокарта
+  const unwarp = (v, lo, hi) => { const s = v < 0 ? -Math.pow(Math.max(0, v / lo), 1 / P) : Math.pow(Math.max(0, v / hi), 1 / P); return (s + 1) / 2 * (N - 1); };
+  obj.userData.meshH = (X, Y) => { const fi = unwarp(X, xw, xe), fj = unwarp(Y, ys, yn), i = Math.floor(fi), j = Math.floor(fj); if (i < 0 || j < 0 || i >= N - 1 || j >= N - 1) return null;
+    const a = j * N + i, x0 = pos[a * 3], x1 = pos[(a + 1) * 3], y0 = -pos[a * 3 + 2], y1 = -pos[(a + N) * 3 + 2], fu = (X - x0) / (x1 - x0 || 1), fv = (Y - y0) / (y1 - y0 || 1);
+    const ha = hs[a], hb = hs[a + 1], hc = hs[a + N], hd = hs[a + N + 1]; return fv <= fu ? ha * (1 - fu) + hb * (fu - fv) + hd * fv : ha * (1 - fv) + hc * (fv - fu) + hd * fu; };
+  return obj;
 }
 // Сетка рельефа режется на куски со своими границами: куски вне кадра (за спиной камеры, сбоку) видеокарта
 // не обрабатывает вовсе. Раньше обе сетки (~450 тыс. треугольников) целиком проходили через неё каждый кадр.
@@ -377,6 +384,10 @@ export async function makeFarTerrain(holes = []) {
   m.userData.heightAt = (X, Y) => { const fx = clamp((X - X0) / STEP, 0, W - 1.001), fy = clamp((Y1 - Y) / STEP, 0, H - 1.001), i = fx | 0, j = fy | 0, u = fx - i, v = fy - j;
     const a = hs[j * W + i], b = hs[j * W + i + 1], c = hs[(j + 1) * W + i], d = hs[(j + 1) * W + i + 1], y = (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v; return y < 0 ? y * 5 : y; };
   m.userData.grid = { hs, W, H, X0, Y1, STEP };
+  // высота нарисованной поверхности (треугольники a-e-b / b-e-f, на 12 м ниже карты)
+  m.userData.meshH = (X, Y) => { const fx = (X - X0) / STEP, fy = (Y1 - Y) / STEP, i = Math.floor(fx), j = Math.floor(fy); if (i < 0 || j < 0 || i >= W - 1 || j >= H - 1) return null;
+    const u = fx - i, v = fy - j, a = hs[j * W + i], b = hs[j * W + i + 1], e = hs[(j + 1) * W + i], f = hs[(j + 1) * W + i + 1];
+    return (u + v <= 1 ? a + (b - a) * u + (e - a) * v : f + (e - f) * (1 - u) + (b - f) * (1 - v)) - 12; };
   return m;
 }
 

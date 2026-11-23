@@ -47,6 +47,25 @@ function makeRivers(dem, h) {
   return { pts, tex };
 }
 
+// ---------- раскладка экземпляров по клеткам ----------
+// Валунов и плит -- десятки тысяч, и раньше все они одним куском проходили через видеокарту в каждом кадре, даже за
+// спиной камеры и за горизонтом. Теперь они разложены по клеткам 1.5 км со своими границами: клетки вне кадра
+// отбрасываются целиком, а в шейдере экземпляр дальше uFar своих размеров (мельче пикселя) сразу выбрасывается.
+// uFar -- сколько «своих размеров» помещается до того, как камень станет меньше ~1 пикселя: зависит от разрешения.
+export const FAR_PX = { value: 900 };
+function tiled(attrs, posKey, mat, hk) {
+  const P = attrs[posKey], n = P.length / 4, tiles = new Map(), T = 1500;
+  for (let i = 0; i < n; i++) { const k = Math.floor(P[i * 4] / T) * 10000 + Math.floor(P[i * 4 + 2] / T); let l = tiles.get(k); if (!l) tiles.set(k, (l = [])); l.push(i); }
+  const g = new THREE.Group(), base = new THREE.PlaneGeometry(1, 1);
+  for (const idx of tiles.values()) { const geo = new THREE.InstancedBufferGeometry(); geo.index = base.index; geo.attributes.position = base.attributes.position;
+    let mx = 0, my = 0, mz = 0, R = 0; for (const i of idx) { mx += P[i * 4]; my += P[i * 4 + 1]; mz += P[i * 4 + 2]; } mx /= idx.length; my /= idx.length; mz /= idx.length;
+    for (const i of idx) R = Math.max(R, Math.hypot(P[i * 4] - mx, P[i * 4 + 1] - my, P[i * 4 + 2] - mz) + P[i * 4 + 3] * hk + 5);
+    for (const key in attrs) { const src = attrs[key], a = new Float32Array(idx.length * 4); idx.forEach((i, j) => a.set(src.slice(i * 4, i * 4 + 4), j * 4)); geo.setAttribute(key, new THREE.InstancedBufferAttribute(a, 4)); }
+    geo.instanceCount = idx.length; const dd = Math.hypot(mx, mz) + 30000; geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(mx, my, mz), R + (dd * dd) / 14866000); // запас на кривизну Земли, как у рельефа
+    g.add(new THREE.Mesh(geo, mat)); }
+  return g;
+}
+
 // ---------- валуны ----------
 function rockAtlas() { const N = 4, S = 128, c = document.createElement('canvas'); c.width = S * N; c.height = S; const x = c.getContext('2d'); let seed = 9; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   for (let k = 0; k < N; k++) { const cx = k * S + S / 2, pts = [], n = 7 + Math.floor(r() * 4);
@@ -59,7 +78,8 @@ function rockAtlas() { const N = 4, S = 128, c = document.createElement('canvas'
       x.fillStyle = 'rgba(120,150,90,.45)'; x.fillRect(k * S, S - 16, S, 10); x.restore(); // мох и трава у подножия
     shape(); x.strokeStyle = '#1e1a18'; x.lineWidth = 5; x.lineJoin = 'round'; x.stroke(); }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; }
-const RK_V = CURVE + `attribute vec4 aI; varying vec2 vUv; varying vec3 vP; void main(){ vec3 c=aI.xyz; float sz=aI.w; float k=floor(fract(sz)*4.+0.5); sz=floor(sz);
+const RK_V = CURVE + `uniform float uFar; attribute vec4 aI; varying vec2 vUv; varying vec3 vP; void main(){ vec3 c=aI.xyz; float sz=aI.w; float k=floor(fract(sz)*4.+0.5); sz=floor(sz);
+  if(length(c-cameraPosition)>sz*uFar){ gl_Position=vec4(2.,2.,2.,1.); return; } // мельче пикселя -- не рисуем вовсе
   vec3 r=normalize(vec3(cameraPosition.z-c.z,0.,c.x-cameraPosition.x)+1e-5); r=vec3(-r.x,0.,-r.z); vec3 p=c+r*position.x*sz+vec3(0.,(position.y+0.06)*sz*0.8,0.);
   vUv=vec2((k+position.x+0.5)/4., position.y+0.5); vP=p; p.y-=curve(p); gl_Position=projectionMatrix*viewMatrix*vec4(p,1.); }`;
 const RK_F = GLSL_COMMON + `uniform sampler2D uMap; varying vec2 vUv; varying vec3 vP; void main(){ vec4 t=texture2D(uMap,vUv); if(t.a<0.5) discard; vec3 c=t.rgb*(0.55+0.55*uSunI); c=applyFog(c,length(vP-cameraPosition),vP.y); gl_FragColor=vec4(c,1.); ${END} }`;
@@ -72,10 +92,9 @@ function makeBoulders(dem, h, rivers) {
     if (r() < p * 0.15) { const sz = 1.5 + r() ** 2 * 3; out.push(x, z - sz * 0.12, -y, Math.floor(sz) + Math.floor(r() * 4) / 4 + 0.01); } }
   // вдоль рек -- окатанные валуны у воды
   for (const [x, y] of rivers) { if (r() < 0.35) { const a = r() * 6.28, d = 3 + r() * 6, X = x + Math.cos(a) * d, Y = y + Math.sin(a) * d, sz = 1 + r() * 2.5, z = h(X, Y); out.push(X, z - 0.2, -Y, Math.floor(sz) + Math.floor(r() * 4) / 4 + 0.01); } }
-  const n = out.length / 4, base = new THREE.PlaneGeometry(1, 1), geo = new THREE.InstancedBufferGeometry(); geo.index = base.index; geo.attributes.position = base.attributes.position;
-  geo.setAttribute('aI', new THREE.InstancedBufferAttribute(new Float32Array(out), 4)); geo.instanceCount = n;
-  const mat = new THREE.ShaderMaterial({ uniforms: { ...ENV, uMap: { value: rockAtlas() } }, defines: { FBM_OCT: 3, RIP_OCT: 3, SHN: 6 }, vertexShader: RK_V, fragmentShader: RK_F, side: THREE.DoubleSide });
-  const m = new THREE.Mesh(geo, mat); m.frustumCulled = false; return { mesh: m, n };
+  const n = out.length / 4;
+  const mat = new THREE.ShaderMaterial({ uniforms: { ...ENV, uMap: { value: rockAtlas() }, uFar: FAR_PX }, defines: { FBM_OCT: 3, RIP_OCT: 3, SHN: 6 }, vertexShader: RK_V, fragmentShader: RK_F, side: THREE.DoubleSide });
+  return { mesh: tiled({ aI: out }, 'aI', mat, 2), n };
 }
 
 // ---------- скалы: прямоугольные плиты на склоне ----------
@@ -97,9 +116,10 @@ function slabAtlas() { const N = 4, S = 128, c = document.createElement('canvas'
     x.restore();
     x.strokeStyle = '#1e1a18'; x.lineWidth = 5; x.strokeRect(X0 + 4, 4, S - 8, S - 8); }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; }
-const SL_V = CURVE + `uniform vec3 uSun; attribute vec4 aC; attribute vec4 aN; varying vec2 vUv; varying vec3 vP; varying float vL; varying float vDip;
+const SL_V = CURVE + `uniform float uFar; uniform vec3 uSun; attribute vec4 aC; attribute vec4 aN; varying vec2 vUv; varying vec3 vP; varying float vL; varying float vDip;
 void main(){ vec3 dn=vec3(aN.x,0.,aN.z); float sl=aN.y; // вниз по склону (горизонталь) и крутизна
-  vec3 c=aC.xyz; vec3 u=normalize(vec3(cameraPosition.z-c.z,0.,c.x-cameraPosition.x)+1e-5); u=-u; // поперёк взгляда
+  vec3 c=aC.xyz; if(length(c-cameraPosition)>aC.w*uFar){ gl_Position=vec4(2.,2.,2.,1.); return; } // мельче пикселя -- не рисуем
+  vec3 u=normalize(vec3(cameraPosition.z-c.z,0.,c.x-cameraPosition.x)+1e-5); u=-u; // поперёк взгляда
   float side=dot(dn,u); vec3 v=normalize(vec3(0.,1.,0.)+dn*min(0.6,sl*0.35)); // заваливается вниз по склону
   vDip=clamp(side*sl,-1.2,1.2); // как наклон склона виден с этого ракурса
   vec3 p=c+u*position.x*aC.w*aN.w+v*(position.y+0.5)*aC.w*0.9; float k=floor(fract(aC.w*7.31)*4.);
@@ -117,10 +137,9 @@ function makeSlabs(dem, h) { let seed = 53; const r = () => (seed = (seed * 1680
     const p = 0.32 * smooth(0.5, 0.9, sl) + 0.08 * smooth(0.35, 0.55, sl) * smooth(2700, 3200, z + 1601); if (r() >= p) continue;
     // скальный пояс: несколько плит подряд вдоль горизонтали, ступенькой
     const sz = 9 + r() ** 1.4 * 22, cx = gy / sl, cy = -gx / sl, n2 = 1 + Math.floor(r() * 4); for (let q = 0; q < n2; q++) { const o = (q - (n2 - 1) / 2) * sz * 0.85; put(x + cx * o + (r() - 0.5) * 4, y + cy * o + (r() - 0.5) * 4, sz); } }
-  const n = C.length / 4, base = new THREE.PlaneGeometry(1, 1), geo = new THREE.InstancedBufferGeometry(); geo.index = base.index; geo.attributes.position = base.attributes.position;
-  geo.setAttribute('aC', new THREE.InstancedBufferAttribute(new Float32Array(C), 4)); geo.setAttribute('aN', new THREE.InstancedBufferAttribute(new Float32Array(Nn), 4)); geo.instanceCount = n;
-  const mat = new THREE.ShaderMaterial({ uniforms: { ...ENV, uMap: { value: slabAtlas() } }, defines: { FBM_OCT: 3, RIP_OCT: 3, SHN: 6 }, vertexShader: SL_V, fragmentShader: SL_F, side: THREE.DoubleSide });
-  const m = new THREE.Mesh(geo, mat); m.frustumCulled = false; return { mesh: m, n }; }
+  const n = C.length / 4;
+  const mat = new THREE.ShaderMaterial({ uniforms: { ...ENV, uMap: { value: slabAtlas() }, uFar: FAR_PX }, defines: { FBM_OCT: 3, RIP_OCT: 3, SHN: 6 }, vertexShader: SL_V, fragmentShader: SL_F, side: THREE.DoubleSide });
+  return { mesh: tiled({ aC: C, aN: Nn }, 'aC', mat, 1.2), n }; }
 
 export function makeCorridorArt(scene, dem, h) {
   const rv = makeRivers(dem, h), bo = makeBoulders(dem, h, rv.pts), sl = makeSlabs(dem, h); scene.add(bo.mesh, sl.mesh);

@@ -77,10 +77,12 @@ void main(){ float a=vAl*(1.-smoothstep(vW-0.6,vW+0.6,abs(vSide))); if(a<0.01) d
 
 // lines: [{ pts: [[X, Y, значимость], ...], h: (X, Y) => высота }]; значимость 1e9 -- линия видна всегда
 export function makeInk(lines, mat) {
-  // каждый отрезок -- четыре вершины ленты; отрезки раскладываются по клеткам 8 км, чтобы невидимые отсекались
+  // каждый отрезок -- четыре вершины ленты; отрезки раскладываются по клеткам 24 км, чтобы невидимые отсекались.
+  // Было 8 км: 670 кусков и почти 200 вызовов отрисовки за кадр на ~12 тыс. треугольников -- видеокарта простаивала,
+  // а процессор раздавал команды. Крупнее клетка -- вызовов вдесятеро меньше, лишние вершины вне кадра почти даром.
   const tiles = new Map();
   for (const { pts, h } of lines) { const P = pts.map(([X, Y, a]) => [X, h(X, Y), -Y, Math.log2(a)]);
-    for (let i = 0; i + 1 < P.length; i++) { const a = P[i], b = P[i + 1], key = Math.floor((a[0] + b[0]) / 16000) * 1000 + Math.floor((a[2] + b[2]) / 16000);
+    for (let i = 0; i + 1 < P.length; i++) { const a = P[i], b = P[i + 1], key = Math.floor((a[0] + b[0]) / 48000) * 1000 + Math.floor((a[2] + b[2]) / 48000);
       let t = tiles.get(key); if (!t) tiles.set(key, (t = [])); t.push(a, b); } }
   const g = new THREE.Group(); let segs = 0;
   for (const pts of tiles.values()) { const n = pts.length / 2, pos = new Float32Array(n * 12), q = new Float32Array(n * 12), se = new Float32Array(n * 12), idx = new Uint32Array(n * 6);

@@ -18,6 +18,9 @@ import { makeShoreArt } from './shoreart.js';
 import { makeCorridorArt } from './corridorart.js';
 import { makePost, postSupported } from './post.js';
 import { RIVER_HOLES } from './rivermode.js';
+import { makeJailoo } from './jailoo.js';
+import { FAR_PX } from './corridorart.js';
+import { makeSpriteClouds } from './clouds.js';
 import { makeRidges, setRidgeRes } from './ridges.js';
 
 const $ = (id) => document.getElementById(id);
@@ -51,7 +54,7 @@ const pmrem = new THREE.PMREMGenerator(renderer), envRT = new THREE.WebGLCubeRen
 let envTex = null;
 function updateEnv(sky) { const m = sky.material; envScene.add(sky); m.uniforms.uEnvW.value = 1; sky.position.set(0, 0, 0); envCam.update(renderer, envScene); m.uniforms.uEnvW.value = 0; scene.add(sky);
   const old = envTex; envTex = pmrem.fromCubemap(envRT.texture).texture; scene.environment = envTex; if (old) old.dispose(); }
-function resize() { const w = window.innerWidth, h = window.innerHeight; if (G) G.spray.uniforms.uScale.value = (h * pixelRatio) / (2 * Math.tan((camera.fov * Math.PI) / 360)); renderer.setPixelRatio(pixelRatio); if (post) setTimeout(() => post.resize(), 0); renderer.setSize(w, h, false); { const d = renderer.getDrawingBufferSize(new THREE.Vector2()); setRidgeRes(d.x, d.y); } camera.aspect = w / h; camera.updateProjectionMatrix(); }
+function resize() { const w = window.innerWidth, h = window.innerHeight; if (G) G.spray.uniforms.uScale.value = (h * pixelRatio) / (2 * Math.tan((camera.fov * Math.PI) / 360)); renderer.setPixelRatio(pixelRatio); if (post) setTimeout(() => post.resize(), 0); renderer.setSize(w, h, false); { const d = renderer.getDrawingBufferSize(new THREE.Vector2()); setRidgeRes(d.x, d.y); if (G) G.bufH = d.y; FAR_PX.value = 1.3 * d.y / (2 * Math.tan((camera.fov * Math.PI) / 360)); } camera.aspect = w / h; camera.updateProjectionMatrix(); }
 window.addEventListener('resize', resize);
 // Браузер может отобрать у вкладки графику: открыто много вкладок с WebGL, кончилась видеопамять, сбросился драйвер.
 // Вернул -- перезапускаем страницу (ссылка друга в адресе сохраняется, если загрузка не дошла до конца). Не вернул за
@@ -114,6 +117,11 @@ async function init() {
   $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey();
   G.pro = !!store.get('pro'); $('bpro').classList.toggle('on', G.pro);
   G.hMesh = (x, y) => { const v = demT.userData.meshH(x, y); return v === null ? hA(x, y) : v; }; // высота видимой земли -- для персонажей
+  // высота нарисованной земли везде: ущелье -- подробная сетка, у Чолпон-Аты -- ближняя, дальше -- грубая (по её треугольникам)
+  G.hVis = (x, y) => { let v = demT.userData.meshH(x, y); if (v !== null) return v; if (x > NX0 && x < NX1 && y > NY0 && y < NY1) { v = nearT.userData.meshH(x, y); if (v !== null) return v; } v = far.userData.meshH(x, y); return v === null ? hA(x, y) : v; };
+  G.holes = RIVER_HOLES;
+  G.jailoo = makeJailoo({ G, scene, camera, toast, ach: X.ach, store }); // джайлоо: юрты, отары, табуны, яки (jailoo.js)
+  G.clouds = makeSpriteClouds(scene, hA); // рисованные кучевые облака (clouds.js)
   G.mini = makeMinimap(hA); G.mmZ = store.get('mmZ') ?? 1; // миникарта в компасе; масштаб -- тапом по компасу
   $('dialwrap').addEventListener('pointerdown', (e) => { e.stopPropagation(); }); $('dialwrap').onclick = (e) => { e.stopPropagation(); G.mmZ = (G.mmZ + 1) % 3; store.set('mmZ', G.mmZ); audio.tick && audio.tick(); };
   G.mmRange = (para) => (para ? [240, 1500, 6000] : [400, 1500, 5000])[G.mmZ];
@@ -524,6 +532,7 @@ function loop(now) {
   if (!G.freeze) tick(dt); // freeze -- только для тестов: мир стоит, картинка рисуется
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
+  lodTick(dt);   G.jailoo.update(dt, G.t); G.clouds.update(dt, camera, { cover: Math.min(1, Math.max(0.3, 0.38 + (ENV.uCover.value + 0.62) * 0.5)), storm: ENV.uStorm.value, cirrus: ENV.uCirrus.value, wind: G.wind }); // облачность погоды (-0.62..0.86) -> доля облаков
   if (G.beach) G.beachHint = G.beach.update(dt, FT && FT.on ? FT.state : null);
   if (G.finds && G.mode !== 'menu') G.finds.update(dt, FT && FT.on && !FT.state.swim && FT.state.st !== 'dis' ? FT.state : null, G.beach.dayN, FT ? FT.magnet : 1.2);
   beachSound(dt, b);
@@ -542,6 +551,20 @@ function loop(now) {
     post.setSun(sx, sy, G.mode === 'menu' ? a * 0.6 : a); }
   if (post) post.render(scene, camera); else renderer.render(scene, camera);
   G.frame++;
+}
+// Мелкие детали вдали: у лодок, катеров, парохода -- по 20-45 отдельных деталей (леера, лебёдки, фигурки). За сотни
+// метров большинство из них меньше пикселя, но каждая всё равно -- отдельный вызов отрисовки. Раз в несколько кадров
+// такие детали снимаются со слоя камеры (их собственная видимость не трогается -- ею управляет игра), а когда снова
+// становятся крупнее пикселя (подошли ближе, подзорная труба) -- возвращаются. Картинка та же, вызовов -- меньше.
+const LODV = new THREE.Vector3(); let lodList = [], lodScanT = 0, lodFov = 0, lodN = 0;
+function lodTick(dt) {
+  lodScanT -= dt; if (lodScanT <= 0) { lodScanT = 2; lodList = []; // список мелких деталей обновляется раз в 2 с: суда появляются по ходу игры
+    scene.traverse((o) => { if (!o.isMesh || o.isInstancedMesh || !o.frustumCulled || !o.geometry) return; if (!o.userData.lodR) { if (o.layers.mask !== 1) return; const g = o.geometry; if (!g.boundingSphere) g.computeBoundingSphere(); if (!g.boundingSphere) return; o.userData.lodR = g.boundingSphere.radius; }
+      if (o.userData.lodR < 3) lodList.push(o); }); }
+  if (++lodN % 4 && camera.fov === lodFov) return; lodFov = camera.fov;
+  const K = 2 * (G.bufH || window.innerHeight) / (2 * Math.tan(camera.fov * Math.PI / 360)), cp = camera.position;
+  for (const o of lodList) { const s = o.matrixWorld.getMaxScaleOnAxis(); LODV.setFromMatrixPosition(o.matrixWorld); const px = o.userData.lodR * s * K / (LODV.distanceTo(cp) + 1e-3);
+    if (px < 0.8) o.layers.disable(0); else o.layers.enable(0); } // меньше 0.8 пикселя в поперечнике -- не рисуем
 }
 // один шаг мира: физика, гонка, эффекты. Без отрисовки -- им же пользуются автотесты для перемотки.
 function tick(dt) {
@@ -776,5 +799,5 @@ function updateHud(dt, b, sp) {
   if (h !== hintKey) { hintKey = h; const el = $('hint'); el.hidden = !h; el.textContent = h; el.className = 'hud' + (alert ? ' alert' : ''); }
 }
 
-window.__setQ = (q) => setQuality(q); window.__spy = () => SPY; window.__para = () => PG; window.__jet = () => JM; window.__foot = () => FT; window.__footKey = () => footKey(); window.__gfx = () => ({ renderer, scene, camera, post, sunL, ENV }); window.__game = () => { if (G) G.__X = X; return G; }; window.__tick = (sec, inp) => { Object.assign(input, inp || {}); for (let i = 0; i < sec * 60; i++) tick(1 / 60); }; // для автотестов
+window.__setQ = (q) => setQuality(q); window.__wx = (id, clock) => { if (id) { G.preset = id; applyPreset(); } if (clock !== undefined) { G.clock = clock; dayCycle(0); } }; /* для автотестов: погода и время */ window.__spy = () => SPY; window.__para = () => PG; window.__jet = () => JM; window.__foot = () => FT; window.__footKey = () => footKey(); window.__gfx = () => ({ renderer, scene, camera, post, sunL, ENV }); window.__game = () => { if (G) G.__X = X; return G; }; window.__tick = (sec, inp) => { Object.assign(input, inp || {}); for (let i = 0; i < sec * 60; i++) tick(1 / 60); }; // для автотестов
 init().catch((e) => { $('loadmsg').textContent = 'Не удалось запустить: ' + e.message; console.error(e); });
