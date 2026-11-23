@@ -35,7 +35,7 @@ export async function loadHeight() {
 // Общее состояние неба и света: одни и те же объекты uniform'ов разделяют небо, рельеф и вода.
 export const ENV = {
   uSun: { value: SUN }, uHor: { value: new THREE.Vector3(0.56, 0.76, 0.97) }, uCover: { value: 0.4 }, uCirrus: { value: 0.3 },
-  uStorm: { value: 0 }, uCuK: { value: 0.35 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
+  uStorm: { value: 0 }, uCuK: { value: 0.15 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
   uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() },
   uRiv: { value: null }, uRivT: { value: new THREE.Vector4() }, uRivOn: { value: 0 }, uRT: { value: 0 }, // реки коридора -- маской (corridorart)
   uLC: { value: null }, uLCOn: { value: 0 }, uPaint: { value: 1 }, uLCT: { value: new THREE.Vector4(-141000, 63000, 1 / 273600, 1 / 180600) }, // маска зон OSM (по требованию) // съёмка карты сверху: дно плавно уходит в цвет озера на карте
