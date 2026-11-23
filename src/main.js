@@ -532,7 +532,7 @@ function loop(now) {
   if (!G.freeze) tick(dt); // freeze -- только для тестов: мир стоит, картинка рисуется
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
-  lodTick(dt);   G.jailoo.update(dt, G.t); G.clouds.update(dt, camera, { cover: Math.min(1, Math.max(0.3, 0.38 + (ENV.uCover.value + 0.62) * 0.5)), storm: ENV.uStorm.value, cirrus: ENV.uCirrus.value, wind: G.wind }); // облачность погоды (-0.62..0.86) -> доля облаков
+  lodTick(dt);   G.jailoo.update(dt, G.t); G.clouds.update(dt, camera, { cover: Math.min(1, Math.max(0.3, 0.4 + (ENV.uCover.value + 0.62) * 0.45)), storm: ENV.uStorm.value, cirrus: ENV.uCirrus.value, wind: G.wind, clock: G.clock }); // облачность погоды (-0.62..0.86) -> доля облаков
   if (G.beach) G.beachHint = G.beach.update(dt, FT && FT.on ? FT.state : null);
   if (G.finds && G.mode !== 'menu') G.finds.update(dt, FT && FT.on && !FT.state.swim && FT.state.st !== 'dis' ? FT.state : null, G.beach.dayN, FT ? FT.magnet : 1.2);
   beachSound(dt, b);
