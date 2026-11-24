@@ -14,7 +14,7 @@
 // fog -- туман и низкая облачность в долинах, cbT -- мощная кучевая / молодая грозовая, cbA -- грозовая с наковальней.
 export const AW = 2048, AH = 2048;
 export const PHI = (1 + Math.sqrt(5)) / 2, IPHI = PHI - 1; // золотое сечение
-export const CLOUD_KINDS = { hum: 5, cu: 6, ac: 4, ci: 4, len: 4, cap: 4, ban: 4, rot: 4, st: 4, fog: 3, cbT: 2, cbA: 2 };
+export const CLOUD_KINDS = { hum: 5, cu: 6, ac: 4, ci: 4, len: 4, cap: 4, ban: 4, rot: 4, st: 4, fog: 3, cbT: 2, cbA: 2, val: 4 };
 
 // синхронно (экспорт PNG, тесты)
 export function makeCloudAtlas() { const g = atlasJobs(); let st; while (!(st = g.next()).done); return st.value; }
@@ -245,6 +245,18 @@ function* atlasJobs() {
       for (let y = Math.max(0, Math.floor(top - len)); y < top; y++) { const xx = Math.round(x - (top - y) * 0.12); if (xx < 0 || xx >= w) continue; const o = (y * w + xx) * 4; raw[o] = 128; raw[o + 3] = Math.max(raw[o + 3], Math.min(1, (y - (top - len)) / 60) * 200); } }
     items.push({ name: 'rain', w, h, raw }); }
 
+  // ================= Облако ущелья: длинный клубящийся вал -- голова (глубже в ущелье) выше всего, к выходу тает хвостом =================
+  // по золотому сечению: голова -- в точке 0.382 длины (или 0.236), каждый следующий клуб ниже прежнего, в хвосте -- отставшие клочья
+  for (let k = 0; k < 4; k++) { const w = 600, h = 120, base = 4;
+    sprite('val' + k, w, h, (T, C) => { const hm = (h - base - 8) * rr(0.66, 0.82), x0 = rr(10, 24), x1 = w - rr(70, 120), pk = k % 2 ? IPHI * IPHI : IPHI * IPHI * IPHI * PHI, P = [];
+      const env = (t) => (t < pk ? Math.pow(Math.sin((Math.PI / 2) * t / pk), 0.55) : Math.pow(1 - (t - pk) / (1 - pk), 0.75) * 0.82 + 0.18);
+      for (let x = x0; x < x1;) { const t = (x - x0) / (x1 - x0), hh = Math.max(9, hm * env(t) * rr(0.82, 1.04)), ww = hh * PHI * rr(0.85, 1.1);
+        P.push(mound({ cx: x + ww * 0.45, base, wl: ww * 0.62, wr: ww * 0.72, hm: hh, a: rr(1.8, 2.3), b: rr(1.4, 2), v0: rr(0.45, 0.6) })); x += ww * rr(0.5, 0.72); }
+      for (const sd of [-1, 1]) lumpsSide(P, w, h, { side: sd, y0: base + 3, y1: base + hm * 0.6, rel: [IPHI ** 4, IPHI ** 3], r0: 3, r1: 14, sink: [IPHI * IPHI, IPHI], gap: [1, PHI] });
+      for (let q = 1; q <= 3; q++) { const f = IPHI ** (q + 1); lumps(P, w, h, { x0: 6, x1: w - 6, r0: q === 1 ? 4 : 2.5, r1: 40, rel: [f * 0.85, f * 1.15], base, ymin: base + 3, dz: -0.4, gap: [1, PHI], sink: [IPHI * IPHI, IPHI], crease: q === 1 ? 0.35 : 0.1, skip: [0, 0.25, 0.5][q - 1] }); }
+      paint(T, C, w, h, clampParts(P, w, h), { grad: 0.42, band: 4, k: 5 });
+      let x = x1 + rr(4, 14); for (let f = 0; f < 3 && x < w - 16; f++) { const rad = rr(5, 10) * IPHI ** (f * 0.5), y = base + rad * rr(0.6, 1.2) + rr(0, 8), Q = [{ x, y, rx: rad * rr(1.3, 1.8), ry: rad }, { x: x + rad * rr(-0.5, 0.6), y: y + rad * 0.55, rx: rad * 0.8, ry: rad * 0.7 }];
+        paint(T, C, w, h, clampParts(Q, w, h), { grad: 0.4, band: 2, k: 3 }); x += rad * rr(2.6, 4.2); } }); }
   for (const it of items) if (it.fill) { it.T = new Float32Array(it.w * it.h); it.C = new Uint8Array(it.w * it.h); it.fill(it.T, it.C); yield; }
   // ---------- упаковка полками (по убыванию высоты) и запись: тон, кайма, расстояние до края ----------
   items.sort((a, b) => b.h - a.h); let sx = 0, sy = 0, sh = 0;

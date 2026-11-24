@@ -21,6 +21,7 @@ import { RIVER_HOLES } from './rivermode.js';
 import { makeJailoo } from './jailoo.js';
 import { FAR_PX } from './corridorart.js';
 import { makeSpriteClouds } from './clouds.js';
+import { analyzeBasin } from './cloudgeo.js';
 import { makeRidges, setRidgeRes } from './ridges.js';
 
 const $ = (id) => document.getElementById(id);
@@ -123,7 +124,7 @@ async function init() {
   G.hVis = (x, y) => { let v = demT.userData.meshH(x, y); if (v !== null) return v; if (x > NX0 && x < NX1 && y > NY0 && y < NY1) { v = nearT.userData.meshH(x, y); if (v !== null) return v; } v = far.userData.meshH(x, y); return v === null ? hA(x, y) : v; };
   G.holes = RIVER_HOLES;
   G.jailoo = makeJailoo({ G, scene, camera, toast, ach: X.ach, store }); // джайлоо: юрты, отары, табуны, яки (jailoo.js)
-  G.clouds = makeSpriteClouds(scene, hA); // рисованные кучевые облака (clouds.js)
+  G.clouds = makeSpriteClouds(scene, hA, analyzeBasin(far.userData.grid, lake)); // рисованные кучевые облака (clouds.js)
   G.mini = makeMinimap(hA); G.mmZ = store.get('mmZ') ?? 1; // миникарта в компасе; масштаб -- тапом по компасу
   $('dialwrap').addEventListener('pointerdown', (e) => { e.stopPropagation(); }); $('dialwrap').onclick = (e) => { e.stopPropagation(); G.mmZ = (G.mmZ + 1) % 3; store.set('mmZ', G.mmZ); audio.tick && audio.tick(); };
   G.mmRange = (para) => (para ? [240, 1500, 6000] : [400, 1500, 5000])[G.mmZ];

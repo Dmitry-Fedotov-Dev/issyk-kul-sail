@@ -16,6 +16,11 @@
 //    кучево-дождевые растут до тропопаузы (~12 км) и растекаются наковальней.
 //  * Перистые -- 8.5-10.5 км, вытянуты по ветру наверху и бегут быстрее нижних.
 //  * Вдали облака сливаются в гряды у горизонта и тонут в дымке, как дальние горы.
+//  * Расстановка (cloudgeo.js): облачность садится на хребты, зеркало воды остаётся чистым. В ущельях облако рождается
+//    первым и вытекает по руслу длинным клубящимся валом -- через прорезь переднего хребта его видно с озера.
+//    Непогода приходит либо на всю котловину (тогда и над водой валы слоисто-кучевых), либо на один берег:
+//    там свинцовые тучи и кучево-дождевые, а озеро и другой берег -- под солнцем.
+//  * Заметность как у гор: вдали ступени тона сближаются, контур тоньше и светлее -- облако не перебивает хребет.
 // Каждое облако живёт своей жизнью: растёт, держится, тает (за пару минут -- игровой час идёт минуту),
 // и рождается снова в другом месте своей клетки. Облачность в целом -- «поле погоды», плывущее по ветру.
 import * as THREE from 'three';
@@ -41,7 +46,8 @@ void pal(out vec3 L, out vec3 M, out vec3 S, out vec3 D, out vec3 I, float storm
   L=mix(L,vec3(1.0,0.66,0.30),dusk); M=mix(M,vec3(0.92,0.32,0.26),dusk); S=mix(S,vec3(0.24,0.10,0.42),dusk); D=mix(D,vec3(0.08,0.03,0.22),dusk); I=mix(I,vec3(0.04,0.01,0.07),dusk); // закат
   L=mix(L,vec3(0.14,0.25,0.52),night); M=mix(M,vec3(0.04,0.09,0.25),night); S=mix(S,vec3(0.012,0.025,0.075),night); D=mix(D,vec3(0.004,0.008,0.03),night); I=mix(I,vec3(0.30,0.48,0.85),night); // ночь: кайма -- от луны
   L=mix(L,vec3(0.32,0.37,0.50),storm); M=mix(M,vec3(0.09,0.12,0.24),storm); S=mix(S,vec3(0.025,0.04,0.10),storm); D=mix(D,vec3(0.01,0.016,0.04),storm); I=mix(I,vec3(0.004,0.008,0.02),storm); }
-void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(uStorm*1.2+vL.y,0.,1.);
+void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(vL.y,0.,1.); // непогода -- у каждого облака своя: туча на одном берегу, на другом солнце
+  float dist=length(vP-cameraPosition), fk=smoothstep(2500.,45000.,dist); // даль: тон и контур мягче, как у гор -- облако не спорит с хребтом
   vec3 L,M,S,D,I; pal(L,M,S,D,I,storm); vec3 c; float al=1.;
   if(vKind>1.5 && vKind<2.5){ al=t.a*0.5*(1.-vThr); if(al<0.02) discard; c=mix(S,M,0.4); } // полосы дождя
   else { float f=t.a, aa=fwidth(f)*1.2+1e-4, thr=0.03+vThr*0.22; // рождение и таяние -- прозрачностью и лёгким сжатием, а не обгрызанием краёв: силуэт и контур целые
@@ -49,8 +55,10 @@ void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(uStorm*1.2+vL.y,0.,1.
     float h=t.r-vBack*0.32-storm*0.2+(uDay<0.5?-0.1:0.);  // контражур и гроза -- облако темнее
     float w=fwidth(t.r)*0.7+2e-3; float dp=smoothstep(0.17-w,0.17+w,h), mid=smoothstep(0.32-w,0.32+w,h), hi=smoothstep(0.56-w,0.56+w,h);
     c=mix(D,S,dp); c=mix(c,M,mid); c=mix(c,L,hi); // 4 тона: глубокая тень, тень, основной, свет
+    c=mix(c, mix(M,L,0.5), fk*0.4);                                                   // воздушная перспектива: ступени тона сближаются
     float rim=t.g*smoothstep(0.,0.4,f-thr+0.4); c=mix(c,L*1.05,rim*vBack*0.9); // серебряная кайма против солнца
-    float edge=1.-smoothstep(thr+aa*1.8,thr+aa*3.,f); c=mix(c,I,edge*(vKind<0.5?0.9:0.)); if(vKind>0.5 && vKind<1.5) al*=0.45*(0.35+0.65*clamp(uDay,0.,1.)); if(vKind>2.5) al*=0.85; }
+    float edge=1.-smoothstep(thr+aa*mix(1.8,1.05,fk),thr+aa*mix(3.,1.7,fk),f);        // контур: вблизи -- тушь в пару пикселей, вдали -- волосок
+    c=mix(c,mix(I,S*0.85,fk*0.75),edge*(vKind<0.5?0.9*mix(1.,0.4,fk):0.)); if(vKind>0.5 && vKind<1.5) al*=0.45*(0.35+0.65*clamp(uDay,0.,1.)); if(vKind>2.5) al*=0.85; }
   c*=0.78+0.22*uSunI;
   vec3 fogd=applyFog(c,length(vP-cameraPosition)*vL.z,vP.y); c=mix(fogd,uHor,vL.x); // дальние -- в дымке, как горы
   gl_FragColor=vec4(c,al); ${END} }`;
@@ -64,7 +72,7 @@ const field = (x, y, t) => { const k = t * 0.002, f = k - Math.floor(k), n = Mat
   const a = g(n), b = g(n + 1); return a + (b - a) * f; };
 const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-export function makeSpriteClouds(scene, h = () => 1000) {
+export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- разбор котловины (cloudgeo.js): озеро, берега, ущелья
   const MAX = 2400; let rects = null, meta = null; // атлас рисуется по кусочкам между кадрами; до готовности неба нет
   const tex = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat);
   makeCloudAtlasAsync().then((A) => { const t = new THREE.DataTexture(A.data, AW, AH, THREE.RGBAFormat); t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = true; t.needsUpdate = true;
@@ -74,7 +82,7 @@ export function makeSpriteClouds(scene, h = () => 1000) {
   const at = {}; for (const k of ['aC', 'aS', 'aR', 'aL']) { at[k] = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 4), 4); at[k].setUsage(THREE.DynamicDrawUsage); geo.setAttribute(k, at[k]); } geo.instanceCount = 0;
   const mat = new THREE.ShaderMaterial({ uniforms: { ...ENV, uMap: { value: tex } }, defines: { FBM_OCT: 2, RIP_OCT: 2, SHN: 4 }, vertexShader: V, fragmentShader: F, transparent: true, depthWrite: false, side: THREE.DoubleSide, extensions: { derivatives: true } });
   const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = -1; scene.add(mesh);
-  const out = []; let ox = 0, oy = 0, T = 0, fr = 0;
+  const out = []; let ox = 0, oy = 0, T = 0, fr = 0, reg = 0, sOn = false; // reg -- куда пришла непогода: 0 -- вся котловина, 1 -- северный берег, -1 -- южный
   const push = (X, Y, Z, W, H, rc, thr, kind, fog, heavy, d, tilt = 0.6, fd = 1, fl = 0) => out.push({ X, Y, Z, W, H, rc, thr, kind, fog, heavy, d, tilt, fd, fl });
   const hOf = (rc, W) => W * rc[3] / rc[2] * AH / AW; // высота спрайта по пропорциям заготовки
   // слой клеток: в каждой клетке (сетка плывёт с ветром) -- не больше одного облака/кластера
@@ -86,7 +94,7 @@ export function makeSpriteClouds(scene, h = () => 1000) {
   function demo(cx, cy, D, Zb, w) { const fx = Math.sin(D.th), fy = Math.cos(D.th), rx = fy, ry = -fx, at = (a, s) => [D.x + fx * a + rx * s, D.y + fy * a + ry * s];
     const wl = Math.hypot(w.wind?.sx || 1, w.wind?.sy || 0), wx = (w.wind?.sx ?? 1) / wl, wy = (w.wind?.sy ?? 0) / wl;
     const side = (X, Y) => { const dX = X - cx, dY = Y - cy, n = Math.hypot(dX, dY) || 1; return Math.sign((wx * dY - wy * dX) / n) || 1; }; // +1: ветер на экране вправо
-    const put = (X, Y, Z, W, rc, { kind = 0, fd = 0.25, fog = 0, fl = 0 } = {}) => push(X, Y, Z, W, hOf(rc, W), rc, 0, kind, fog, 0, Math.hypot(X - cx, Y - cy), kind === 1 ? 0.8 : 0.6, fd, fl);
+    const put = (X, Y, Z, W, rc, { kind = 0, fd = 0.25, fog = 0, fl = 0 } = {}) => push(X, Y, Z, W, hOf(rc, W), rc, 0, kind, fog, (w.storm || 0) * 1.2, Math.hypot(X - cx, Y - cy), kind === 1 ? 0.8 : 0.6, fd, fl);
     const P = (a, s, Z, W, rc, o) => { const [X, Y] = at(a, s); put(X, Y, Z, W, rc, o); };
     const byWind = (a, s, Z, W, rc, o = {}) => { const [X, Y] = at(a, s); put(X, Y, Z, W, rc, { ...o, fl: side(X, Y) > 0 ? 1 : 2 }); };
     P(4000, -1600, Zb, 900, rects.hum0); P(6500, 2600, Zb + 150, 700, rects.hum3); P(7500, -300, Zb + 80, 1900, rects.cu1); P(9500, 3800, Zb - 100, 1500, rects.cu4);
@@ -101,7 +109,7 @@ export function makeSpriteClouds(scene, h = () => 1000) {
     if (p1) { const rc = rects.cap0, W = 3800, H = hOf(rc, W); push(p1.X, p1.Y, p1.g - meta.cap0.ay * H + 40, W, H, rc, 0, 0, 0, 0, Math.hypot(p1.X - cx, p1.Y - cy) - 200, 0.6, 0.25, side(p1.X, p1.Y) > 0 ? 1 : 2); }
     if (p2) { const rc = rects.ban1, W = 4200, H = hOf(rc, W), sd = side(p2.X, p2.Y), dX = p2.X - cx, dY = p2.Y - cy, n = Math.hypot(dX, dY), off = sd * (0.5 - meta.ban1.ax) * W;
       push(p2.X + dY / n * off, p2.Y - dX / n * off, p2.g - meta.ban1.ay * H + 60, W, H, rc, 0, 0, 0, 0, n - 200, 0.6, 0.25, sd > 0 ? 1 : 2); } }
-  const api = { mesh, demo: false,
+  const api = { mesh, demo: false, out, B, // out, B, reg -- для проверок
     // w: { cover 0..1, storm 0..1, cirrus 0..1, wind {sx, sy}, clock -- часы }
     update(dt, camera, w) { T += dt; ox += (w.wind ? w.wind.sx : 2) * dt; oy += (w.wind ? w.wind.sy : 1) * dt; if (!rects || (fr++ % 2 && geo.instanceCount)) return; // список -- через кадр: облака еле ползут
       const cx = camera.position.x, cy = -camera.position.z, cz = camera.position.y; out.length = 0;
@@ -111,50 +119,84 @@ export function makeSpriteClouds(scene, h = () => 1000) {
       const Zb = (1700 + 900 * conv) * (1 - storm) + 1300 * storm;                     // основание над озером: 3300 -> 4200 м н.у.м., в грозу ~2900
       const thr = 1 - Math.min(0.62, 0.18 + A * 0.6);                                   // выше порог -- больше чистого неба
       if (api.demo) { const D = api.demo; if (D.x === undefined || D.follow) { camera.getWorldDirection(fwd); const th = Math.atan2(fwd.x, -fwd.z); if (D.th === undefined || Math.abs(th - D.th) > 0.02 || Math.hypot(cx - D.x, cy - D.y) > 500) D.pk = null; Object.assign(D, { x: cx, y: cy, th }); } demo(cx, cy, D, Zb, w); } else {
-      // ---- кучевые: клетки 4 км до 64 км (с озера видно облака над обоими хребтами) ----
-      layer(cx, cy, 4000, 0, 64000, 1, (i, j, x0, y0, C) => { const rh = (k) => hash(i * 31 + k, j * 17 + k * 7);
+      // ---- где непогода: эпизод грозы приходит либо на всю котловину, либо на один берег ----
+      if (storm > 0.25 && !sOn) { sOn = true; const r = hash(Math.floor(T * 7), 911); reg = r < 0.4 ? 0 : r < 0.7 ? 1 : -1; } else if (storm < 0.12) sOn = false; if (api.reg !== undefined) reg = api.reg; // для проверки: api.reg = 0 | 1 | -1
+      const sideW = (X, Y) => (reg === 0 || !B ? 1 : sm(-7000, 9000, reg * B.side(X, Y)));  // 1 -- под непогодой
+      const lakeD = (X, Y, g) => (B ? B.lakeD(X, Y) : g > 0 ? 5000 : 0);
+      const overcast = reg === 0 && storm > 0.3;                                             // вся котловина под тучей -- можно и над водой
+      // ---- кучевые: «садятся» на хребты. Над зеркалом воды пусто, над склонами густо: в ближнем кольце клетки 4 км,
+      //      дальше 6 км -- с озера видно облака над обоими хребтами, до 110 км ----
+      const cumulus = (ring, R0, R1) => (i, j, x0, y0, C) => { const rh = (k) => hash(i * 31 + k + ring * 977, j * 17 + k * 7);
         // жизнь облака: растёт -- держится -- тает; новое рождается в другом месте клетки
-        const per = 90 + rh(1) * 110, q = T / per + rh(2), gen = Math.floor(q), ph = q - gen, rg = (k) => hash(i * 13 + gen * 7 + k, j * 29 + gen * 3 + k * 5);
-        const X = x0 + (0.1 + 0.8 * rg(1)) * C, Y = y0 + (0.1 + 0.8 * rg(2)) * C, d = Math.hypot(X - cx, Y - cy); if (d > 64000) return;
+        const per = 90 + rh(1) * 110, q = T / per + rh(2), gen = Math.floor(q), ph = q - gen, rg = (k) => hash(i * 13 + gen * 7 + k + ring * 577, j * 29 + gen * 3 + k * 5);
+        const X = x0 + (0.1 + 0.8 * rg(1)) * C, Y = y0 + (0.1 + 0.8 * rg(2)) * C, d = Math.hypot(X - cx, Y - cy); if (d > R1 || d < R0) return;
         if (rg(11) < 0.3) return; // случайные окна чистого неба -- без ровных цепочек
-        const g = h(X, Y), land = g > 0;
-        // над прогретыми склонами гуще, над холодным озером днём пусто, ночью -- наоборот чуть-чуть
-        const F = field(X - ox, Y - oy, T) + (land ? 0.1 * Math.min(1, g / 1500) * (0.4 + conv) : -0.32 * conv + 0.06 * night) + (rg(3) - 0.5) * 0.14, m = (F - thr) / 0.2; if (m <= 0) return;
-        const grow = Math.sin(Math.PI * ph), I = Math.min(1, m) * (0.35 + 0.8 * conv) - eve * (1 - conv) * 0.4; // мощность облака (вечером -- плоские)
-        let life = Math.max(1 - Math.min(1, m * 1.5) * sm(0, 0.35, grow), sm(56000, 64000, d), 1 - sm(250, 1300, Math.hypot(d, cz - Zb - 400)));
-        const Zg = Math.max(Zb + 0.2 * Math.max(0, g - 1500), g + 150) + (rg(7) - 0.5) * 500; // основание: над горами чуть выше, у каждого облака своё
+        const g = h(X, Y), lk = lakeD(X, Y, g), sw = sideW(X, Y), sl = storm * sw, water = 1 - sm(500, 2500, lk);
+        if (water > 0.5 && !overcast) return;                                                // зеркало озера чистое: облачность -- на берегах
+        // над склонами гуще (прогретые склоны, подъём воздуха), над прибрежной равниной -- редко, на берегу без непогоды -- ясно
+        const mf = sm(500, 2200, g), F = field(X - ox, Y - oy, T) + 0.36 * mf * (0.4 + 0.6 * conv) - 0.4 * (1 - mf) * (1 - sl) + 0.45 * sl - 0.3 * storm * (1 - sw) + (overcast ? 0.3 * storm * water : 0) + (rg(3) - 0.5) * 0.14, m = (F - thr) / 0.2; if (m <= 0) return;
+        const grow = Math.sin(Math.PI * ph), I = Math.min(1, m) * (0.35 + 0.8 * Math.max(conv, sl)) - eve * (1 - conv) * 0.4; // мощность облака (вечером -- плоские)
+        const ZbL = (1700 + 900 * conv) * (1 - sl) + 1300 * sl;                               // основание -- уровень конденсации; в непогоду ниже
+        let life = Math.max(1 - Math.min(1, m * 1.5) * sm(0, 0.35, grow), ring ? Math.max(1 - sm(R0, R0 + 8000, d), sm(R1 - 10000, R1, d)) : sm(R1 - 8000, R1, d), 1 - sm(250, 1300, Math.hypot(d, cz - ZbL - 400)));
+        const Z0 = Math.max(ZbL + 0.2 * Math.max(0, g - 1500), g + 150) + (rg(7) - 0.5) * 500, Zg = Z0 + (Math.min(Z0, g + 160 + rg(7) * 420) - Z0) * sm(250, 1400, g);
+        // над горами облако садится на склон (воздух упирается в хребет и конденсируется у земли): ближний гребень закрывает низ -- облако встаёт из-за гор
         // прямо над головой спрайт снизу не нарисовать -- такое облако уходит в мягкий «потолок» неба
         const el = (Zg - cz) / Math.max(d, 1), lifeO = sm(0.35, 0.75, el); if (lifeO >= 0.97) return; life = Math.max(life, lifeO);
-        const fz = 0.25 + 0.15 * sm(30000, 64000, d);
-        // размер: много мелких, мало крупных; крупные массы -- днём над хребтами и в непогоду
+        const fz = 0.45 + 0.35 * sm(30000, 100000, d), hv = sl * 1.2;
         const sz = rg(4) ** 1.6; let W, rc;
-        if (storm > 0.4 && rg(8) < storm * 0.6) { W = 2500 + sz * 6000; rc = pick('st', 4, rg(5)); const Hs = hOf(rc, W) * 1.6; push(X, Y, Zg, W, Hs, rc, life, 0, 0, 0, d, 0.6, fz); return; } // в непогоду -- плоские тяжёлые массы
-        const lv = Math.min(4, Math.floor(rg(4) ** 0.75 * 5)); W = 3600 * IPHI ** lv * (0.6 + 0.6 * Math.min(1, I)) * (0.92 + 0.16 * rg(9)); rc = W < 1100 || I < 0.45 ? pick('hum', 5, rg(5)) : pick('cu', 6, rg(5)); // размеры -- ряд золотого сечения: 3600, 2200, 1400, 850, 520 м
-        if (W < d * 0.02) return; // вдали мелочь не видна -- без «крошек» у горизонта
-        push(X, Y, Zg, W, hOf(rc, W), rc, life, 0, 0, 0, d, 0.6, fz);
-        // спутники -- 0-2 маленьких облачка поодаль, свои размеры и высоты
+        if (water > 0.5) { if ((Zg - cz) / Math.max(d, 1) > 0.12) return; W = (3000 + sz * 4000) * (0.8 + 0.4 * Math.min(1, m)); rc = pick('val', 4, rg(5)); const fl = rg(12) < 0.5 ? 1 : 2; // над водой в сплошную непогоду -- валы слоисто-кучевых внахлёст
+          push(X, Y, Zg - water * 300, W, hOf(rc, W) * (1.2 + 0.5 * rg(13)), rc, life, 0, 0, hv, d, 0.6, fz, fl); return; }
+        if (sl > 0.4 && rg(8) < sl * 0.6) { W = 2500 + sz * 6000; rc = pick('st', 4, rg(5)); const Hs = hOf(rc, W) * 1.6; push(X, Y, Zg, W, Hs, rc, life, 0, 0, hv, d, 0.6, fz); return; } // в непогоду -- плоские тяжёлые массы
+        if (water > 0.5) return;                                                              // над водой -- только сплошная пелена
+        const lv = Math.min(4, Math.floor(rg(4) ** 0.75 * 5)); W = 3600 * IPHI ** Math.max(0, lv - ring) * (0.6 + 0.6 * Math.min(1, I)) * (1 + 0.4 * mf * conv) * (0.92 + 0.16 * rg(9)); rc = W < 1100 || I < 0.45 ? pick('hum', 5, rg(5)) : pick('cu', 6, rg(5)); // размеры -- ряд золотого сечения: 3600, 2200, 1400, 850, 520 м
+        if (W < d * 0.018) return; // вдали мелочь не видна -- без «крошек» у горизонта
+        push(X, Y, Zg, W, hOf(rc, W) * (1 + 0.5 * mf * conv * Math.min(1, I)), rc, life, 0, 0, hv, d, 0.6, fz); // над хребтом днём растут ввысь (congestus) -- макушки встают из-за гребня
         // спутники по «подсолнуху»: k-й -- под золотым углом 137.5° к предыдущему, на расстоянии W·φ^(k/2), размером W/φ^(k+1)
         const n = W > d * 0.05 ? Math.floor(rg(6) * 4 * Math.min(1, m)) : 0, a0 = rg(10) * 6.28; for (let k = 1; k <= n; k++) { const a = a0 + k * 2.39996, rr = W * (0.75 + 0.35 * PHI ** (k * 0.5)), Ws = W * IPHI ** (k + 1), px = X + Math.cos(a) * rr, py = Y + Math.sin(a) * rr * 0.7, rc2 = pick('hum', 5, rg(50 + k));
-          push(px, py, Zg + (rg(40 + k) - 0.5) * 300, Ws, hOf(rc2, Ws), rc2, Math.min(0.97, life + 0.08), 0, 0, 0, Math.hypot(px - cx, py - cy), 0.6, fz); } });
-      // ---- кучево-дождевые: редкие крупные системы, 1-3 на всё небо, только вдали ----
+          if (B && B.lakeD(px, py) < 1500) continue;
+          push(px, py, Zg + (rg(40 + k) - 0.5) * 300, Ws, hOf(rc2, Ws), rc2, Math.min(0.97, life + 0.08), 0, 0, hv, Math.hypot(px - cx, py - cy), 0.6, fz); } };
+      layer(cx, cy, 4000, 0, 60000, 1, cumulus(0, 0, 60000)); layer(cx, cy, 6000, 52000, 110000, 1, cumulus(1, 52000, 110000));
+      // ---- облака ущелий: в ущельях облако рождается первым (утром -- после ночной прохлады, днём -- от прогретых бортов)
+      //      и выходит длинным клубящимся валом: голова глубже в ущелье, тело идёт вниз по руслу почти на одной высоте --
+      //      дно уходит из-под него, борта закрывают низ, -- а хвост выползает из устья к озеру и тает ----
+      const morn = sm(6, 7.5, hr) * (1 - sm(10.5, 12.5, hr)), Av = Math.min(1, w.cover * (0.25 + 0.75 * Math.max(conv, morn)) + 0.35 * morn * (1 - night) + storm * 0.5);
+      if (B && Av > 0.05) B.gorges.forEach((q, gi) => { const rh = (k) => hash(gi * 71 + k, 3 + k * 13), d0 = Math.hypot(q.X - cx, q.Y - cy); if (d0 > 120000) return;
+        const sw = sideW(q.X, q.Y), act = Av * (reg !== 0 && storm > 0.3 ? 0.35 + 0.65 * sw : 1); if (rh(1) > act * 1.2) return;
+        const per = 160 + rh(2) * 160, qq = T / per + rh(3), gen = Math.floor(qq), ph = qq - gen, rg = (k) => hash(gi * 19 + gen * 7 + k, gen * 3 + k * 11);
+        if (rg(1) > 0.7 + act * 0.3) return;                                                // ущелье то в облаке, то чистое
+        const W0 = (2400 + rg(3) * 2000) * (0.75 + 0.5 * Math.min(1, q.v / 500)), grow = Math.sin(Math.PI * ph), sl = storm * sw, born = 1 - sm(0, 0.4, grow);
+        const Z0 = q.wall - 150 + rg(5) * 300, P = q.path, n = Math.min(P.length, 3 + Math.floor(rg(4) * P.length));    // как далеко вал вытек к озеру
+        let lx = 1e9, ly = 1e9;
+        if (rg(2) < 0.5) { const X = q.X - q.dx * 1700, Y = q.Y - q.dy * 1700; put1(X, Y, Math.max(h(X, Y), 0), -1); }         // голова глубже в ущелье
+        for (let k = 0; k < n; k++) put1(P[k].X, P[k].Y, P[k].g, k);
+        function put1(X, Y, g, k) { const d = Math.hypot(X - cx, Y - cy), j = Math.max(0, k), tail = n > 1 ? k / (n - 1) : 0;
+          const W = W0 * IPHI ** (j * 0.3) * (k < 0 ? 1.1 : 1);
+          if (Math.abs(((X - cx) * (ly - cy) - (Y - cy) * (lx - cx)) / Math.max(1, Math.hypot(lx - cx, ly - cy))) < W * 0.3 && k < n - 1) return; // вдоль взгляда звенья встали бы стопкой -- лишние пропускаем
+          lx = X; ly = Y; const rc = pick('val', 4, rg(16 + k)), Hs = hOf(rc, W) * (1.5 + 0.4 * sl) * (1 - 0.35 * tail);
+          const dX = X - cx, dY = Y - cy, rs = (q.dx * dY - q.dy * dX) / (Math.hypot(dX, dY) || 1);    // хвост спрайта -- вниз по ущелью
+          const life = Math.max(born, sm(105000, 120000, d), 1 - sm(400, 2000, Math.hypot(d, cz - g)), sm(0.55, 1, tail) * 0.6);
+          push(X, Y, Math.max(g + 150, Z0 - j * 1500 * 0.07) + rg(26 + k) * 100, W, Hs, rc, Math.min(0.96, life), 0, 0, sl * 1.2, d, 0.6, 0.45 + 0.35 * sm(30000, 100000, d), rs > 0 ? 1 : 2); } });
+      // ---- кучево-дождевые: редкие крупные системы, 1-3 на всё небо, только вдали и только там, где непогода, -- над хребтами ----
       if (storm > 0.35) layer(cx, cy, 36000, 25000, 130000, 1, (i, j, x0, y0, C) => { const rh = (k) => hash(i * 53 + k, j * 37 + k * 11); if (rh(1) > storm * 0.55) return;
         const X = x0 + (0.2 + 0.6 * rh(2)) * C, Y = y0 + (0.2 + 0.6 * rh(3)) * C, d = Math.hypot(X - cx, Y - cy); if (d < 25000 || d > 130000) return;
-        const Wt = 10000 + rh(4) * 6000, Zc = Zb + Math.max(0, h(X, Y)) * 0.15, life = Math.max(1 - sm(25000, 32000, d), sm(115000, 130000, d)), fg = 0.05 + sm(40000, 130000, d) * 0.35;
+        const g = h(X, Y), sw = sideW(X, Y); if (sw < 0.5 || (!overcast && lakeD(X, Y, g) < 4000)) return;
+        const Wt = 10000 + rh(4) * 6000, Zc = Zb + Math.max(0, g) * 0.15, life = Math.max(1 - sm(25000, 32000, d), sm(115000, 130000, d)), fg = 0.05 + sm(40000, 130000, d) * 0.35;
         const rcb = pick(rh(6) < 0.6 ? 'cbA' : 'cbT', 2, rh(5)), Wc = rcb === rects.cbA0 || rcb === rects.cbA1 ? Wt * 1.5 : Wt * 0.7; const dX = X - cx, dY = Y - cy, ws = Math.sign((w.wind?.sx ?? 1) * dY - (w.wind?.sy ?? 0) * dX) || 1;
-        push(X, Y, Zc, Wc, hOf(rcb, Wc), rcb, life, 0, fg, 0.15, d, 0.25, 0.3, ws > 0 ? 1 : 2);
-        push(X + Wt * 0.05, Y, Zc - Wt * 0.3, Wt * 0.45, Wt * 0.35, rects.rain, Math.max(life, 1 - storm), 2, fg, 0, d - 1, 0, 0.3); });
-      // ---- вдали: гряды слоисто-кучевых с разрывами, ниже и в дымке ----
-      layer(cx, cy, 9000, 60000, 150000, 1, (i, j, x0, y0, C) => { const rh = (k) => hash(i * 19 + k, j * 23 + k * 3); if (rh(8) > 0.35 + A * 0.3) return;
-        const X = x0 + (0.1 + 0.8 * rh(1)) * C, Y = y0 + (0.1 + 0.8 * rh(2)) * C, d = Math.hypot(X - cx, Y - cy); if (d < 60000 || d > 150000) return;
-        const g = h(X, Y), F = field(X - ox, Y - oy, T) + (g > 0 ? 0.1 : -0.25 * conv) + (rh(3) - 0.5) * 0.14; if (F < thr) return;
-        const life = Math.max(1 - sm(60000, 68000, d), sm(135000, 150000, d), 1 - Math.min(1, (F - thr) / 0.12)), Zf = Zb * (0.75 - 0.25 * sm(60000, 150000, d)) + Math.max(0, g) * 0.2 + (rh(9) - 0.5) * 400;
-        const fg = 0.1 + sm(60000, 150000, d) * 0.4;
-        if (rh(5) < 0.35) { const Wc = 2500 + rh(4) * 4000, rc = pick('cu', 6, rh(6)); push(X, Y, Zf, Wc, hOf(rc, Wc), rc, life, 0, fg, storm * 0.2, d, 0, 0.3); }
-        else { const Wb = 5000 + rh(4) * 11000, rs = pick('st', 4, rh(6)); push(X, Y, Zf, Wb, hOf(rs, Wb) * (0.8 + A * 0.6), rs, life, 0, fg, storm * 0.2, d, 0, 0.3); } });
+        push(X, Y, Zc, Wc, hOf(rcb, Wc), rcb, life, 0, fg, storm * 1.2, d, 0.25, 0.3, ws > 0 ? 1 : 2);
+        push(X + Wt * 0.05, Y, Zc - Wt * 0.3, Wt * 0.45, Wt * 0.35, rects.rain, Math.max(life, 1 - storm), 2, fg, storm, d - 1, 0, 0.3); });
+      // ---- у горизонта: гряды слоисто-кучевых с разрывами над дальними хребтами, ниже и в дымке ----
+      layer(cx, cy, 9000, 100000, 160000, 1, (i, j, x0, y0, C) => { const rh = (k) => hash(i * 19 + k, j * 23 + k * 3); if (rh(8) > 0.35 + A * 0.3) return;
+        const X = x0 + (0.1 + 0.8 * rh(1)) * C, Y = y0 + (0.1 + 0.8 * rh(2)) * C, d = Math.hypot(X - cx, Y - cy); if (d < 100000 || d > 160000) return;
+        const g = h(X, Y), sw = sideW(X, Y); if (!overcast && lakeD(X, Y, g) < 2500) return;
+        const F = field(X - ox, Y - oy, T) + (g > 300 ? 0.1 : -0.1) + 0.4 * storm * sw - 0.3 * storm * (1 - sw) + (rh(3) - 0.5) * 0.14; if (F < thr) return;
+        const life = Math.max(1 - sm(100000, 110000, d), sm(145000, 160000, d), 1 - Math.min(1, (F - thr) / 0.12)), Zf = Zb * (0.75 - 0.25 * sm(100000, 160000, d)) + Math.max(0, g) * 0.2 + (rh(9) - 0.5) * 400;
+        const fg = 0.1 + sm(100000, 160000, d) * 0.4, hv = storm * sw;
+        if (rh(5) < 0.35) { const Wc = 2500 + rh(4) * 4000, rc = pick('cu', 6, rh(6)); push(X, Y, Zf, Wc, hOf(rc, Wc), rc, life, 0, fg, hv, d, 0, 0.5); }
+        else { const Wb = 5000 + rh(4) * 11000, rs = pick('st', 4, rh(6)); push(X, Y, Zf, Wb, hOf(rs, Wb) * (0.8 + A * 0.6), rs, life, 0, fg, hv, d, 0, 0.5); } });
       // ---- перистые: клетки 22 км, высоко, быстро ----
       if (w.cirrus > 0.02) layer(cx, cy, 22000, 0, 100000, 4, (i, j, x0, y0, C) => { const rh = (k) => hash(i * 41 + k, j * 29 + k * 5); if (rh(1) > w.cirrus * 2.5) return;
         const X = x0 + rh(6) * C, Y = y0 + rh(7) * C, d = Math.hypot(X - cx, Y - cy), Wc = 9000 + rh(2) * 14000;
-        const rci = pick('ci', 4, rh(4)); push(X, Y, 7000 + rh(3) * 2000, Wc, hOf(rci, Wc) * 0.6, rci, Math.max(0.25, sm(80000, 100000, d)), 1, 0.3, 0, d + 50000, 0.8, 0.5); }); }
+        const rci = pick('ci', 4, rh(4)); push(X, Y, 7000 + rh(3) * 2000, Wc, hOf(rci, Wc) * 0.6, rci, Math.max(0.25, sm(80000, 100000, d)), 1, 0.3, storm, d + 50000, 0.8, 0.5); }); }
       out.sort((a, b) => b.d - a.d); let n = 0;
       for (const q of out) { if (n >= MAX) break; if (q.thr >= 0.97) continue; at.aC.setXYZW(n, q.X, q.Z, -q.Y, q.thr); at.aS.setXYZW(n, q.W, q.H, q.tilt, q.kind); at.aR.setXYZW(n, q.rc[0], q.rc[1], q.rc[2], q.rc[3]); at.aL.setXYZW(n, q.fog, q.heavy, q.fd, q.fl); n++; }
       geo.instanceCount = n; mesh.visible = n > 0; for (const k in at) at[k].needsUpdate = true; } };
