@@ -29,13 +29,14 @@ import { makeCloudAtlasAsync, AW, AH, PHI, IPHI } from './cloudart.js';
 import { PEAKS } from './peaks.js';
 
 const V = CURVE + `attribute vec4 aC; attribute vec4 aS; attribute vec4 aR; attribute vec4 aL;
-uniform vec3 uSun; varying vec2 vUv; varying vec3 vP; varying float vThr; varying float vBack; varying float vY; varying vec4 vL; varying float vKind; varying float vMoon; varying float vAz;
+uniform vec3 uSun; varying vec2 vUv; varying vec3 vP; varying float vThr; varying float vBack; varying float vY; varying vec4 vL; varying float vKind; varying float vMoon; varying float vAz; varying float vU;
 void main(){ vec3 c=aC.xyz; vec3 dir=c-cameraPosition; vec3 rt=normalize(vec3(-dir.z,0.,dir.x)+1e-4);
   vec3 up=normalize(mix(vec3(0.,1.,0.), normalize(cross(rt,normalize(dir))), aS.z*smoothstep(0.,600.,cameraPosition.y-c.y))); // сверху облако наклоняется к камере (не «картонка»), снизу стоит, как на референсе
   vec3 p=c+rt*position.x*aS.x+up*(position.y+0.5)*aS.y; vP=p;
   // свет: днём -- солнце, ночью -- луна (в игре она на противоположной стороне неба, высоко); светлая сторона облака -- к ней
   float dayK=smoothstep(-0.05,0.05,uSun.y); vec3 Lt=normalize(mix(normalize(vec3(-uSun.x,0.55,-uSun.z)),uSun,dayK));
   float sr=dot(Lt,rt); float u=position.x+0.5; if(aL.w<0.5){ if(sr>0. && aS.w<1.5) u=1.-u; } else if(aL.w>1.5) u=1.-u; // светлая сторона -- к солнцу; флаг, шапка, наковальня -- по ветру (решает CPU)
+  vU=u; // 0 -- край к свету (в заготовке свет слева), 1 -- от света
   vUv=vec2(aR.x+u*aR.z, aR.y+(position.y+0.5)*aR.w); vY=position.y+0.5;
   vBack=clamp(dot(uSun,normalize(vec3(dir.x,0.,dir.z)))*1.2,0.,1.)*clamp(1.-uSun.y*1.5,0.,1.)*smoothstep(-0.03,0.05,uSun.y); // солнце за облаком (после заката каймы нет -- иначе ночью светлая обводка)
   // лунная кромка: только край, обращённый к луне и вверх (не весь контур -- иначе снова «белая обводка»)
@@ -43,7 +44,7 @@ void main(){ vec3 c=aC.xyz; vec3 dir=c-cameraPosition; vec3 rt=normalize(vec3(-d
   vAz=dot(normalize(uSun.xz+1e-5),normalize(dir.xz+1e-5)); // 1 -- облако против солнца, -1 -- солнце за спиной
   vThr=aC.w; vL=aL; vKind=aS.w; p.y-=curve(p);
   gl_Position=projectionMatrix*viewMatrix*vec4(p,1.); if(aC.w>0.97) gl_Position=vec4(2.,2.,2.,1.); }`;
-const F = GLSL_COMMON + `uniform sampler2D uMap; varying vec2 vUv; varying vec3 vP; varying float vThr; varying float vBack; varying float vY; varying vec4 vL; varying float vKind; varying float vMoon; varying float vAz;
+const F = GLSL_COMMON + `uniform sampler2D uMap; varying vec2 vUv; varying vec3 vP; varying float vThr; varying float vBack; varying float vY; varying vec4 vL; varying float vKind; varying float vMoon; varying float vAz; varying float vU;
 // палитры (линейные): свет, средний, тень, контур
 void pal(out vec3 L, out vec3 M, out vec3 S, out vec3 D, out vec3 I, float storm){
   float day=clamp(uDay,0.,1.), dusk=clamp(uDusk*1.15,0.,1.), night=1.-day;
@@ -69,8 +70,7 @@ void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(vL.y,0.,1.); // не�
     // близко: насыщеннее и контрастнее, свет чуть теплее; далеко: тона сближаются и холодеют в цвет горизонта
     c=mix(vec3(dot(c,vec3(0.3,0.59,0.11))), c, 1.+0.18*nk*(1.-storm)); c+=vec3(0.05,0.03,-0.02)*hi*nk*clamp(uDay,0.,1.)*(1.-storm);
     c=mix(c, mix(M,L,0.55), dl*0.6); c=mix(c, uHor*mix(1.,0.35,storm)*mix(0.15,1.,clamp(uDay,0.,1.)), 0.38*dl*dl);
-    float rim=t.g*smoothstep(0.,0.4,f-thr+0.4); c=mix(c,L*1.05,rim*vBack*0.9); // серебряная кайма против солнца
-    c=mix(c, vec3(0.36,0.42,0.56)*(1.-0.6*storm), rim*vMoon*0.85*(1.-dl*0.7)); // ночью -- холодная лунная кромка с одной стороны
+    float rim=t.g*smoothstep(0.,0.4,f-thr+0.4); // близость к краю силуэта
     // ---- свет по положению солнца ----
     float e=uSun.y, az=vAz, clr=1.-storm*0.85;
     // против солнца облако -- силуэт (свет проходит сквозь толщу), кайма светится; солнце за спиной -- облако освещено в лоб
@@ -91,6 +91,18 @@ void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(vL.y,0.,1.); // не�
       vec3 c0=mix(vec3(0.24,0.13,0.34), vec3(0.12,0.06,0.21), under), c1=mix(vec3(0.95,0.22,0.28), vec3(1.22,0.44,0.14), smoothstep(-0.06,0.08,e)), c2=vec3(1.32,0.80,0.34);
       vec3 fc=mix(c0,c1,b1); fc=mix(fc,c2,b2); // три жирных слоя: тень, огонь, золото
       c=mix(c, fc, burn*(0.85+0.15*fwd)*(1.-0.3*dl)); }
+    // ---- края: поверх всей окраски, такими же жирными полосами ----
+    // eb -- полоса в ~2.5 px у контура; ss -- край к свету (бок к солнцу и верх)
+    float eb=step(0.5,t.g)*step(thr+0.02,f), ss=step(0.42,(1.-vU)*0.65+vY*0.55-0.2), dk=smoothstep(-0.05,0.05,e);
+    vec3 gC=vec3(1.32,0.80,0.34), ember=mix(vec3(0.95,0.22,0.28), vec3(1.22,0.44,0.14), smoothstep(-0.06,0.08,e));
+    // кант света: днём край облака к солнцу -- самый светлый, на закате -- золотой
+    c=mix(c, mix(L*1.06, gC, burn), eb*ss*dk*clr*(0.45+0.5*burn)*(1.-0.5*dl));
+    // серебряная (на закате -- огненная) кайма против солнца: светится весь контур облака, стоящего на солнце
+    c=mix(c, mix(L*1.1, gC*1.1, burn), eb*step(0.25,vBack)*clr*0.9);
+    // рефлекс снизу: днём бирюза от воды, на закате -- отсвет огня, ночью нет
+    c=mix(c, mix(c, ember*0.85, burn), step(0.45,t.b)*burn*0.7);
+    // ночью -- холодная лунная кромка с одной стороны
+    c=mix(c, vec3(0.36,0.42,0.56)*(1.-0.6*storm), eb*step(0.3,vMoon)*0.85*(1.-dl*0.7));
     float edge=1.-smoothstep(thr+aa*mix(0.55,0.2,fk),thr+aa*mix(1.5,0.8,fk),f);       // контур как у гор: вблизи ~1 px, вдали -- волосок
     c=mix(c,mix(mix(I,D,0.5),S,fk*0.8),edge*(vKind<0.5?0.8*pow(1.-dl,1.3):0.)); if(vKind>0.5 && vKind<1.5) al*=0.45*(0.35+0.65*clamp(uDay,0.,1.)); if(vKind>2.5) al*=0.85; }
   c*=0.78+0.22*uSunI;
