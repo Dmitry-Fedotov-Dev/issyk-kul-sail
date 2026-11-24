@@ -11,15 +11,28 @@ const http = require('http'), fs = require('fs'), path = require('path'), crypto
 const port = process.env.PORT || 8080, file = path.join(__dirname, 'dist', 'index.html');
 const VIEW = 1800, MAX_NEAR = 16, MAX_RACE = 64, MAX_CLIENTS = 400, MAX_MSG = 6144, GRACE = 60000;
 
+// код игры: исходник, gzip и brotli -- один раз на файл; brotli считается в фоне, пока его нет -- отдаём gzip
+const zlib = require('zlib'), PACK = new Map();
+function packed(name, cb) { let e = PACK.get(name); if (e) return cb(e);
+  fs.readFile(path.join(__dirname, 'dist', name), (err, raw) => { if (err) return cb(null); if (PACK.get(name)) return cb(PACK.get(name));
+    e = { raw, gz: zlib.gzipSync(raw, { level: 9 }), br: null }; PACK.set(name, e); for (const k of PACK.keys()) if (k !== name) PACK.delete(k); // старые сборки не держим
+    zlib.brotliCompress(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length } }, (er, br) => { if (!er) e.br = br; }); cb(e); }); }
+// при старте -- сразу сжимаем текущую сборку, чтобы первый игрок не ждал
+try { const m = /"(game\.[0-9a-f]+\.js)"/.exec(fs.readFileSync(file, 'utf8')); if (m) setTimeout(() => packed(m[1], () => {}), 100); } catch (e) { /* сборки ещё нет */ }
+
 const server = http.createServer((req, res) => {
   if (req.url === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ online: clients.size })); return; }
   // маска природных зон (лес, ледники, кустарник) -- игра берёт её, только когда открывают подзорную трубу
   if (req.url === '/landcover.png') { fs.readFile(path.join(__dirname, 'dist', 'landcover.png'), (err, data) => { if (err) { res.writeHead(404); res.end(); return; }
     res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' }); res.end(data); }); return; }
   // код игры: имя с хэшем содержимого -- новая сборка получает новое имя, поэтому файл можно кэшировать навсегда
+  // отдаём заранее сжатым: сжать 6 МБ на лету на каждый заход -- это секунды процессора на загруженном сервере
+  // (прокси уже сжатый ответ повторно не трогает). Сжимаем один раз и держим в памяти
   const gm = /^\/(game\.[0-9a-f]+\.js)$/.exec(req.url.split('?')[0]);
-  if (gm) { fs.readFile(path.join(__dirname, 'dist', gm[1]), (err, data) => { if (err) { res.writeHead(404); res.end(); return; }
-    res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': data.length, 'Cache-Control': 'public, max-age=31536000, immutable' }); res.end(data); }); return; }
+  if (gm) { packed(gm[1], (e) => { if (!e) { res.writeHead(404); res.end(); return; }
+    const ae = String(req.headers['accept-encoding'] || ''), enc = e.br && /\bbr\b/.test(ae) ? 'br' : e.gz && /\bgzip\b/.test(ae) ? 'gzip' : null, body = enc === 'br' ? e.br : enc === 'gzip' ? e.gz : e.raw;
+    const hd = { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'public, max-age=31536000, immutable', Vary: 'Accept-Encoding' }; if (enc) hd['Content-Encoding'] = enc;
+    res.writeHead(200, hd); res.end(body); }); return; }
   // страница: с меткой версии -- повторный заход получает «не изменилось» (304) вместо всей страницы
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(500); res.end('dist/index.html не найден: сначала npm run build'); return; }
