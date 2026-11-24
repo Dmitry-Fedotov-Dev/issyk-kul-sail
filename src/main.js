@@ -251,7 +251,8 @@ function buildMenu() {
   for (const id in GFX) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'g_' + id; b.innerHTML = `<b>${GFX[id]}</b>`; b.onclick = () => setGfx(id); $('gfx').appendChild(b); }
   setGfx(store.get('gfx') || 'auto');
   // время суток старта: утро -- пусто и тихо, день -- толпа и торговцы, закат -- мягкий свет, ночь -- костры
-  const TOD = { morning: ['Утро', 7.5], day: ['День', 13], sunset: ['Закат', 19.3], night: ['Ночь', 22.3] }, setTod = (id) => { G.tod = TOD[id] ? id : 'day'; store.set('tod', G.tod); for (const c of $('tod').children) c.setAttribute('aria-pressed', c.dataset.id === G.tod); };
+  const TOD = { morning: ['Утро', 7.5], day: ['День', 13], sunset: ['Закат', 19.3], night: ['Ночь', 22.3] }, setTod = (id) => { G.tod = TOD[id] ? id : 'day'; store.set('tod', G.tod); for (const c of $('tod').children) c.setAttribute('aria-pressed', c.dataset.id === G.tod);
+    if (G.mode === 'menu') { G.clock = TOD[G.tod][1]; dayCycle(0); updateEnv(G.sky); } }; // меню сразу показывает выбранное время суток -- как выбор погоды
   for (const id in TOD) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${TOD[id][0]}</b>`; b.onclick = () => setTod(id); $('tod').appendChild(b); }
   setTod(store.get('tod') || 'day'); G.todHour = () => TOD[G.tod][1];
   $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if ((X.sel === 'para' && !PG) || (X.sel === 'jet' && !JM)) { toast('Этот снаряд не загрузился — выберите другой'); return; } if (X.sel === 'para') PG.startFree(X.startAt); else if (X.sel === 'jet') JM.startFree(); else startFree(); };
@@ -272,7 +273,7 @@ function setRivals(v) { for (const r of G.rivals) { const on = v && !r.out; r.mo
 function toMenu() {
   if (SPY) SPY.close(); if (FT) FT.stop(); if (PG) PG.stop(); if (JM) JM.stop();
   $('brief').hidden = true; $('mark').hidden = true; if (X) X.toMenuCraft();
-  G.mode = 'menu'; G.race = null; showGame(false); setRivals(false);
+  G.mode = 'menu'; G.race = null; showGame(false); setRivals(false); if (G.todHour) { G.clock = G.todHour(); dayCycle(0); }
   const Y0 = Math.min(G.shore.pierY - 260, -150); placeBoat(G.player, 60, Y0, openWaterHeading(60, Y0), 2.5);
   G.camYaw = G.player.b.th + 2.4;
 }
@@ -505,7 +506,7 @@ function splash(b, n) { const fx = Math.sin(b.th), fz = -Math.cos(b.th); for (le
 // Время суток, как в GTA: игровая минута идёт одну секунду, сутки -- 24 минуты. Солнце ходит по настоящей дуге для
 // широты Чолпон-Аты (42.6 с. ш.) в середине лета; от его высоты зависят свет, цвет неба, заря, звёзды и ночной полумрак.
 const LIGHT = new THREE.Vector3().copy(SUN); let envT = 0;
-function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; G.clock = (G.clock + dt / 60 * (G.clockK || 1)) % 24; const k = G.wx; if (!k) return;
+function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; G.clock = (G.clock + (G.mode === 'menu' ? 0 : dt / 60 * (G.clockK || 1))) % 24; const k = G.wx; if (!k) return; // в меню время стоит на выбранном
   const la = 42.6 * DEG, de = 20 * DEG, Hh = (G.clock - 13) * 15 * DEG, sinEl = Math.sin(la) * Math.sin(de) + Math.cos(la) * Math.cos(de) * Math.cos(Hh), el = Math.asin(sinEl);
   const az = Math.atan2(Math.sin(Hh), Math.cos(Hh) * Math.sin(la) - Math.tan(de) * Math.cos(la)) + Math.PI;
   SUN.set(Math.sin(az) * Math.cos(el), sinEl, -Math.cos(az) * Math.cos(el));
