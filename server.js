@@ -16,9 +16,16 @@ const server = http.createServer((req, res) => {
   // маска природных зон (лес, ледники, кустарник) -- игра берёт её, только когда открывают подзорную трубу
   if (req.url === '/landcover.png') { fs.readFile(path.join(__dirname, 'dist', 'landcover.png'), (err, data) => { if (err) { res.writeHead(404); res.end(); return; }
     res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' }); res.end(data); }); return; }
+  // код игры: имя с хэшем содержимого -- новая сборка получает новое имя, поэтому файл можно кэшировать навсегда
+  const gm = /^\/(game\.[0-9a-f]+\.js)$/.exec(req.url.split('?')[0]);
+  if (gm) { fs.readFile(path.join(__dirname, 'dist', gm[1]), (err, data) => { if (err) { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': data.length, 'Cache-Control': 'public, max-age=31536000, immutable' }); res.end(data); }); return; }
+  // страница: с меткой версии -- повторный заход получает «не изменилось» (304) вместо всей страницы
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(500); res.end('dist/index.html не найден: сначала npm run build'); return; }
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }); res.end(data);
+    const tag = '"' + crypto.createHash('sha1').update(data).digest('hex').slice(0, 16) + '"';
+    if (req.headers['if-none-match'] === tag) { res.writeHead(304, { ETag: tag, 'Cache-Control': 'no-cache' }); res.end(); return; }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', ETag: tag }); res.end(data);
   });
 });
 

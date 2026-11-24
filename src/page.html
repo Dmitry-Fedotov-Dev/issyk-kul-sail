@@ -290,4 +290,6 @@ window.__tipTimer=setInterval(function(){el.style.opacity=0;setTimeout(function(
 /* Ошибка при загрузке не должна оставлять экран висеть на «Поднимаем паруса»: показываем её и даём перезапустить */
 var L=document.getElementById('load'),fail=function(m){if(!L||L.classList.contains('done'))return;var g=document.getElementById('loadmsg');g.textContent='Не удалось запустить'+(m?': '+m:'')+'. Нажмите, чтобы попробовать ещё раз';L.style.cursor='pointer';L.onclick=function(){location.reload()};};
 window.addEventListener('error',function(e){fail(e&&e.message)});window.addEventListener('unhandledrejection',function(e){fail(e&&e.reason&&e.reason.message)});
-setTimeout(function(){if(L&&!L.classList.contains('done')&&!L.onclick){var g=document.getElementById('loadmsg');g.textContent+=' Загрузка затянулась: нажмите, чтобы начать заново';L.style.cursor='pointer';L.onclick=function(){location.reload()};}},45000);})();</script>
+/* сторож: подсказка «затянулось» -- только если надпись не менялась 45 с (медленная закачка с прогрессом -- не зависание) */
+var lastMsg='',still=0,wd=setInterval(function(){var g=document.getElementById('loadmsg');if(!L||L.classList.contains('done')||L.onclick){clearInterval(wd);return}
+if(g.textContent!==lastMsg){lastMsg=g.textContent;still=0;return}still+=5;if(still>=45){clearInterval(wd);g.textContent+=' Загрузка затянулась: нажмите, чтобы начать заново';L.style.cursor='pointer';L.onclick=function(){location.reload()};}},5000);})();</script>
