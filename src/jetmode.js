@@ -14,7 +14,7 @@ import { clamp, wrapPi } from './sim.js';
 
 const AIRPORT = { X: -4385, Y: 1809 };
 const CSS = `
-body.jet #speed,body.jet #dialwrap,body.jet #race,body.jet #bpro,body.jet #bfoot{display:none!important}body.jet #tools{position:fixed;right:max(16px,env(safe-area-inset-right,0px));top:12px}
+body.jet #speed>b,body.jet #speed>small,body.jet #pos,body.jet #wear,body.jet #dialwrap,body.jet #race,body.jet #bpro,body.jet #bfoot{display:none!important}body.jet #tools{position:fixed;right:max(16px,env(safe-area-inset-right,0px));top:12px}
 #jhud{left:max(16px,env(safe-area-inset-left,0px));top:14px;line-height:1.15}#jhud b.v{font-size:44px;font-weight:300;letter-spacing:-1px}#jhud small{font-size:13px;color:var(--dim);margin-left:4px}
 #jhud .r{font-size:14px;margin-top:3px}#jhud .r b{font-weight:600}#jhud .g{display:inline-block;min-width:54px}#jhud .thr{display:inline-block;padding:0 6px;border-radius:5px;background:rgba(255,255,255,.15);font-size:12px;font-weight:700;margin-left:6px}#jhud .thr.max{background:#ff8a2a;color:#2a1300}
 #jwarn{left:50%;top:28%;transform:translateX(-50%);font:800 clamp(20px,4.6vmin,34px) var(--ui);color:#ff5a3a;text-shadow:0 2px 12px rgba(0,0,0,.7);letter-spacing:.06em;animation:jblink .5s steps(2) infinite}

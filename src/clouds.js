@@ -28,10 +28,13 @@ import { CURVE, GLSL_COMMON, END, ENV } from './world.js';
 import { makeCloudAtlasWorker, AW, AH, PHI, IPHI } from './cloudart.js';
 import { PEAKS } from './peaks.js';
 
-const V = CURVE + `attribute vec4 aC; attribute vec4 aS; attribute vec4 aR; attribute vec4 aL;
+const V = CURVE + `attribute vec4 aC; attribute vec4 aS; attribute vec4 aR; attribute vec4 aL; attribute vec4 aD;
 uniform vec3 uSun; uniform vec4 uMoon; varying vec2 vUv; varying vec3 vP; varying float vThr; varying float vBack; varying float vY; varying vec4 vL; varying float vKind; varying float vMoon; varying float vAz; varying float vU;
-void main(){ vec3 c=aC.xyz; vec3 dir=c-cameraPosition; vec3 rt=normalize(vec3(-dir.z,0.,dir.x)+1e-4);
-  vec3 up=normalize(mix(vec3(0.,1.,0.), normalize(cross(rt,normalize(dir))), aS.z*smoothstep(0.,600.,cameraPosition.y-c.y))); // сверху облако наклоняется к камере (не «картонка»), снизу стоит, как на референсе
+void main(){ vec3 c=aC.xyz; vec3 dir=c-cameraPosition;
+  // вблизи (около километра) поворот замирает (aD -- направление, запомненное при подлёте): облако становится
+  // неподвижной рисованной декорацией -- облетаешь его, а не оно вертится за тобой; вдали -- как всегда, лицом к зрителю
+  vec3 fd=aD.w>0.5 ? aD.xyz*length(dir) : dir; vec3 rt=normalize(vec3(-fd.z,0.,fd.x)+1e-4);
+  vec3 up=normalize(mix(vec3(0.,1.,0.), normalize(cross(rt,normalize(fd))), aS.z*(aD.w>0.5 ? aD.w-1. : smoothstep(0.,600.,cameraPosition.y-c.y)))); // сверху облако наклоняется к камере (не «картонка»), снизу стоит, как на референсе
   vec3 p=c+rt*position.x*aS.x+up*(position.y+0.5)*aS.y; vP=p;
   // свет: днём -- солнце, ночью -- луна (в игре она на противоположной стороне неба, высоко); светлая сторона облака -- к ней
   float dayK=smoothstep(-0.05,0.05,uSun.y); vec3 Lt=normalize(mix(uMoon.y>0.?uMoon.xyz:vec3(0.,1.,0.),uSun,dayK)); // ночью -- настоящая Луна
@@ -125,9 +128,18 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
     mat.uniforms.uMap.value = t; tex.dispose(); rects = A.rects; meta = A.meta; api.atlasAt = performance.now(); });
   tex.needsUpdate = true;
   const base = new THREE.PlaneGeometry(1, 1), geo = new THREE.InstancedBufferGeometry(); geo.index = base.index; geo.attributes.position = base.attributes.position;
-  const at = {}; for (const k of ['aC', 'aS', 'aR', 'aL']) { at[k] = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 4), 4); at[k].setUsage(THREE.DynamicDrawUsage); geo.setAttribute(k, at[k]); } geo.instanceCount = 0;
+  const at = {}; for (const k of ['aC', 'aS', 'aR', 'aL', 'aD']) { at[k] = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 4), 4); at[k].setUsage(THREE.DynamicDrawUsage); geo.setAttribute(k, at[k]); } geo.instanceCount = 0;
   const mat = new THREE.ShaderMaterial({ uniforms: { ...ENV, uMap: { value: tex } }, defines: { FBM_OCT: 2, RIP_OCT: 2, SHN: 4 }, vertexShader: V, fragmentShader: F, transparent: true, depthWrite: true, side: THREE.DoubleSide, extensions: { derivatives: true } });
   const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = -1; scene.add(mesh);
+  // замирание поворота: ключ облака -- его заготовка и размер (место плывёт с ветром, а это -- нет)
+  const LOCK = new Map(), smo = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  function face(q, cx, cy, cz) { const dX = q.X - cx, dY = q.Y - cy, dh = Math.hypot(dX, dY), R = 700 + 0.3 * q.W, k = q.rc[0].toFixed(4) + q.rc[1].toFixed(4) + '|' + Math.round(q.W) + '|' + Math.round(q.H);
+    let e = LOCK.get(k); if (dh > R * 1.7) { if (e) LOCK.delete(k); return null; }
+    const lv = [dX, q.Z - cz, -dY], ll = Math.hypot(...lv) || 1; lv[0] /= ll; lv[1] /= ll; lv[2] /= ll;
+    const tilt = smo(0, 600, cz - q.Z);
+    if (!e) { if (dh > R) return null; e = { v: lv.slice(), t: tilt }; LOCK.set(k, e); } e.seen = fr;
+    const r = smo(R, R * 1.7, dh), v = [0, 1, 2].map((i) => e.v[i] + (lv[i] - e.v[i]) * r), vl = Math.hypot(...v) || 1; // уходишь -- плавно снова поворачивается к тебе
+    return [v[0] / vl, v[1] / vl, v[2] / vl, e.t + (tilt - e.t) * r]; }
   const out = []; let ox = 0, oy = 0, T = 0, fr = 0, reg = 1; // reg -- над каким хребтом гроза грозового дня: 1 -- Кунгей (север), -1 -- Терскей (юг)
   const push = (X, Y, Z, W, H, rc, thr, kind, fog, heavy, d, tilt = 0.6, fd = 1, fl = 0) => out.push({ X, Y, Z, W, H, rc, thr, kind, fog, heavy, d, tilt, fd, fl });
   const hOf = (rc, W) => W * rc[3] / rc[2] * AH / AW; // высота спрайта по пропорциям заготовки
@@ -275,7 +287,8 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
         const v = (cz - q.Z) / q.H; if (v < 0.05 || v > 0.75) continue; ins = Math.max(ins, (1 - sm(q.W * 0.25, q.W * 0.42, dh)) * sm(0.05, 0.2, v) * (1 - sm(0.6, 0.75, v)) * (1 - q.thr)); }
       api.inside += (ins - api.inside) * 0.25;
       out.sort((a, b) => b.d - a.d); let n = 0;
-      for (const q of out) { if (n >= MAX) break; if (q.thr >= 0.97) continue; at.aC.setXYZW(n, q.X, q.Z, -q.Y, q.thr); at.aS.setXYZW(n, q.W, q.H, q.tilt, q.kind); at.aR.setXYZW(n, q.rc[0], q.rc[1], q.rc[2], q.rc[3]); at.aL.setXYZW(n, q.fog, q.heavy, q.fd, q.fl); n++; }
+      for (const q of out) { if (n >= MAX) break; if (q.thr >= 0.97) continue; at.aC.setXYZW(n, q.X, q.Z, -q.Y, q.thr); at.aS.setXYZW(n, q.W, q.H, q.tilt, q.kind); at.aR.setXYZW(n, q.rc[0], q.rc[1], q.rc[2], q.rc[3]); at.aL.setXYZW(n, q.fog, q.heavy, q.fd, q.fl); const fz = q.kind === 0 || q.kind === 3 ? face(q, cx, cy, cz) : null; if (fz) at.aD.setXYZW(n, fz[0], fz[1], fz[2], 1 + fz[3]); else at.aD.setXYZW(n, 0, 0, 0, 0); n++; }
+      for (const [k, e] of LOCK) if (e.seen !== fr) LOCK.delete(k); // облако растаяло или ушло -- забываем
       geo.instanceCount = n; mesh.visible = n > 0; for (const k in at) at[k].needsUpdate = true; } };
   return api;
 }
