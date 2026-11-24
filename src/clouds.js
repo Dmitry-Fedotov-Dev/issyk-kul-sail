@@ -80,12 +80,17 @@ void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(vL.y,0.,1.); // не�
     // закат горит облаками: пока солнце над горизонтом -- золото и оранжевый на стороне к солнцу; за горизонтом облака
     // подсвечены снизу -- низ алый и малиновый, верх уходит в сиреневую тень; ярче всего -- в стороне заката
     float burn=smoothstep(0.34,0.08,e)*smoothstep(-0.15,-0.04,e)*clr;
-    if(burn>0.001){ vec3 fire=mix(vec3(0.80,0.12,0.36), vec3(1.25,0.36,0.10), smoothstep(-0.1,0.0,e)); fire=mix(fire, vec3(1.3,0.72,0.26), smoothstep(0.03,0.2,e));
-      float under=smoothstep(0.05,-0.05,e), yb=1.-smoothstep(0.,0.6,vY);
+    if(burn>0.001){
+      // окраска слоями, как в цел-шейдинге: не плавный градиент, а чёткие полосы -- сиреневая тень, малиновый,
+      // оранжевый, золото. Какие слои есть, решает высота солнца: высоко -- золото и оранжевый, за горизонтом --
+      // снизу малиновый, верх в тени
+      float under=smoothstep(0.05,-0.05,e), yb=1.-smoothstep(0.,0.6,vY), fwd=0.5+0.5*az;
       float lit=mix(smoothstep(0.2,0.6,h)*(0.6+0.4*smoothstep(-0.2,0.6,-az*0.5+0.5)), yb*0.85+0.15*(1.-smoothstep(0.15,0.5,h)), under);
-      float fwd=0.5+0.5*az;                                                     // в стороне солнца свет сильнее (рассеяние вперёд)
-      vec3 shade=mix(vec3(0.22,0.13,0.30), vec3(0.10,0.06,0.18), under)*(0.6+0.4*h);
-      c=mix(c, mix(shade, fire*(0.85+0.6*fwd), lit), burn*(0.85+0.15*fwd)*(1.-0.3*dl)); }
+      lit=clamp(lit*(0.8+0.4*fwd)+0.35*smoothstep(-0.06,0.22,e)-0.1,0.,1.);
+      float fw=fwidth(lit)*0.8+0.004, b1=smoothstep(0.24-fw,0.24+fw,lit), b2=smoothstep(0.48-fw,0.48+fw,lit), b3=smoothstep(0.72-fw,0.72+fw,lit);
+      vec3 c0=mix(vec3(0.22,0.13,0.32), vec3(0.11,0.06,0.20), under)*(0.7+0.3*h), c1=vec3(0.80,0.16,0.34), c2=vec3(1.22,0.44,0.14), c3=vec3(1.32,0.80,0.34);
+      vec3 fc=mix(c0,c1,b1); fc=mix(fc,c2,b2); fc=mix(fc,c3,b3);
+      c=mix(c, fc, burn*(0.85+0.15*fwd)*(1.-0.3*dl)); }
     float edge=1.-smoothstep(thr+aa*mix(0.55,0.2,fk),thr+aa*mix(1.5,0.8,fk),f);       // контур как у гор: вблизи ~1 px, вдали -- волосок
     c=mix(c,mix(mix(I,D,0.5),S,fk*0.8),edge*(vKind<0.5?0.8*pow(1.-dl,1.3):0.)); if(vKind>0.5 && vKind<1.5) al*=0.45*(0.35+0.65*clamp(uDay,0.,1.)); if(vKind>2.5) al*=0.85; }
   c*=0.78+0.22*uSunI;
