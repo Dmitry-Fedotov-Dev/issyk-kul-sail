@@ -47,11 +47,13 @@ void pal(out vec3 L, out vec3 M, out vec3 S, out vec3 D, out vec3 I, float storm
   L=mix(L,vec3(0.14,0.25,0.52),night); M=mix(M,vec3(0.04,0.09,0.25),night); S=mix(S,vec3(0.012,0.025,0.075),night); D=mix(D,vec3(0.004,0.008,0.03),night); I=mix(I,vec3(0.30,0.48,0.85),night); // ночь: кайма -- от луны
   L=mix(L,vec3(0.32,0.37,0.50),storm); M=mix(M,vec3(0.09,0.12,0.24),storm); S=mix(S,vec3(0.025,0.04,0.10),storm); D=mix(D,vec3(0.01,0.016,0.04),storm); I=mix(I,vec3(0.004,0.008,0.02),storm); }
 void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(vL.y,0.,1.); // непогода -- у каждого облака своя: туча на одном берегу, на другом солнце
-  float dist=length(vP-cameraPosition), fk=smoothstep(2500.,45000.,dist); // даль: тон и контур мягче, как у гор -- облако не спорит с хребтом
+  // глубина пространства, как в живописи: dl -- даль по логарифму (4 км -> 0, 120 км -> 1). Ближние облака -- полный контраст,
+  // тёплый свет, чёткий край с тушью; дальние -- ступени тона сближаются, цвет уходит в небо у горизонта, край мягкий, контур тает
+  float dist=length(vP-cameraPosition), dl=clamp(log(dist/4000.)/log(30.),0.,1.), fk=dl, nk=1.-smoothstep(0.,0.4,dl);
   vec3 L,M,S,D,I; pal(L,M,S,D,I,storm); vec3 c; float al=1.;
   if(vKind>1.5 && vKind<2.5){ al=t.a*0.5*(1.-vThr); if(al<0.02) discard; c=mix(S,M,0.4); } // полосы дождя
   else { float f=t.a, aa=fwidth(f)*1.2+1e-4, thr=0.03+vThr*0.22; // рождение и таяние -- прозрачностью и лёгким сжатием, а не обгрызанием краёв: силуэт и контур целые
-    al=smoothstep(thr,thr+aa,f)*clamp(1.15-vThr*1.25,0.,1.); if(al<0.02) discard;
+    al=smoothstep(thr,thr+aa*(1.+3.5*dl*dl),f)*clamp(1.15-vThr*1.25,0.,1.)*(1.-0.18*dl*dl); if(al<0.02) discard; // вдали край мягче, облако чуть прозрачнее
     float h=t.r-vBack*0.32-storm*0.2+(uDay<0.5?-0.1:0.);  // контражур и гроза -- облако темнее
     float w=fwidth(t.r)*0.7+2e-3; float dp=smoothstep(0.17-w,0.17+w,h), mid=smoothstep(0.32-w,0.32+w,h), hi=smoothstep(0.56-w,0.56+w,h);
     c=mix(D,S,dp); c=mix(c,M,mid); c=mix(c,L,hi); // 4 тона: глубокая тень, тень, основной, свет
@@ -59,10 +61,12 @@ void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(vL.y,0.,1.); // не�
     // собственной тени, но темнее освещённой части (правило живописи: рефлекс никогда не спорит со светом)
     vec3 Rf=mix(mix(S,M,0.55), vec3(0.24,0.62,0.68), 0.45*clamp(uDay,0.,1.)*(1.-storm)); Rf=mix(Rf, mix(S,M,0.35), clamp(uDusk,0.,1.)*0.6);
     c=mix(c, Rf, t.b*(1.-smoothstep(0.32,0.5,h))*0.85);
-    c=mix(c, mix(M,L,0.5), fk*0.4);                                                   // воздушная перспектива: ступени тона сближаются
+    // близко: насыщеннее и контрастнее, свет чуть теплее; далеко: тона сближаются и холодеют в цвет горизонта
+    c=mix(vec3(dot(c,vec3(0.3,0.59,0.11))), c, 1.+0.18*nk*(1.-storm)); c+=vec3(0.05,0.03,-0.02)*hi*nk*clamp(uDay,0.,1.)*(1.-storm);
+    c=mix(c, mix(M,L,0.55), dl*0.6); c=mix(c, uHor*mix(1.,0.35,storm)*mix(0.15,1.,clamp(uDay,0.,1.)), 0.38*dl*dl);
     float rim=t.g*smoothstep(0.,0.4,f-thr+0.4); c=mix(c,L*1.05,rim*vBack*0.9); // серебряная кайма против солнца
     float edge=1.-smoothstep(thr+aa*mix(0.55,0.2,fk),thr+aa*mix(1.5,0.8,fk),f);       // контур как у гор: вблизи ~1 px, вдали -- волосок
-    c=mix(c,mix(mix(I,D,0.5),S,fk*0.8),edge*(vKind<0.5?0.75*mix(1.,0.35,fk):0.)); if(vKind>0.5 && vKind<1.5) al*=0.45*(0.35+0.65*clamp(uDay,0.,1.)); if(vKind>2.5) al*=0.85; }
+    c=mix(c,mix(mix(I,D,0.5),S,fk*0.8),edge*(vKind<0.5?0.8*pow(1.-dl,1.3):0.)); if(vKind>0.5 && vKind<1.5) al*=0.45*(0.35+0.65*clamp(uDay,0.,1.)); if(vKind>2.5) al*=0.85; }
   c*=0.78+0.22*uSunI;
   vec3 fogd=applyFog(c,length(vP-cameraPosition)*vL.z,vP.y); c=mix(fogd,uHor,vL.x); // дальние -- в дымке, как горы
   gl_FragColor=vec4(c,al); ${END} }`;
