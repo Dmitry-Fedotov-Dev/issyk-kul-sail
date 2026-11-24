@@ -13,6 +13,7 @@
 // len -- Lenticularis, cap -- шапка на вершине, ban -- флаговое, rot -- роторное, st -- Stratocumulus,
 // fog -- туман и низкая облачность в долинах, cbT -- мощная кучевая / молодая грозовая, cbA -- грозовая с наковальней.
 export const AW = 2048, AH = 2048;
+export const PHI = (1 + Math.sqrt(5)) / 2, IPHI = PHI - 1; // золотое сечение
 export const CLOUD_KINDS = { hum: 5, cu: 6, ac: 4, ci: 4, len: 4, cap: 4, ban: 4, rot: 4, st: 4, fog: 3, cbT: 2, cbA: 2 };
 
 // синхронно (экспорт PNG, тесты)
@@ -88,18 +89,25 @@ function* atlasJobs() {
   const sprite = (name, w, h, fill, Rn) => items.push({ name, w, h, fill, Rn }); // рисуется позже, по одной заготовке за шаг
 
   // ================= Cumulus: широкое плоское тело, 1-3 неодинаковых купола, выступы двух масштабов =================
+  // Пропорции по золотому сечению φ: ширина силуэта к высоте -- φ (развитые) или φ² (плоские); вершина стоит в золотой
+  // точке ширины (0.382 от края); плечо на длинной стороне -- в её золотой точке, высотой hm/φ; выступы -- фрактал:
+  // каждый следующий ярус в φ раз мельче (0.382, 0.236, 0.146 местной толщины), шаг между ними -- от r до φ·r.
   function cumulus(w, h, o) {
-    const base = 4, H = h - base - 3, cx = w * rr(0.42, 0.58), hm = H * rr(...o.hm), P = [mound({ cx, base, wl: Math.min(cx - 8 - hm * 0.1, w * rr(...o.wd)), wr: Math.min(w - 8 - cx - hm * 0.1, w * rr(...o.wd)), hm, a: rr(1.8, 2.6), b: rr(...o.b), lean: rr(-0.1, 0.1), v0: rr(0.45, 0.6) })];
-    if (r() < (o.side ?? 0.5)) { const s = r() < 0.5 ? -1 : 1, x = cx + s * w * rr(0.2, 0.28), ww = Math.min(x - 6, w - 6 - x, w * rr(0.1, 0.16)); if (ww > 6) P.push(mound({ cx: x, base, wl: ww, wr: ww, hm: hm * rr(0.35, 0.6), b: rr(1.4, 2), v0: 0.5 })); } // соседний бугор -- асимметрия
-    faceBumps(P, P[0], o.face, { x0: cx - w * 0.25, x1: cx + w * 0.25, y0: base + hm * 0.25, y1: base + hm * 0.75, r0: o.l1[1] * 0.45, r1: o.l1[1] * 0.8, crease: 0.7 });
-    lumps(P, w, h, { x0: w * 0.04, x1: w * 0.96, r0: o.l1[0], r1: o.l1[1], rel: [0.25, 0.45], base, ymin: base + 4, dz: -0.4, gap: [0.9, 1.6], sink: [0.3, 0.6], crease: 0.35 });
-    lumps(P, w, h, { x0: w * 0.03, x1: w * 0.97, r0: o.l2[0], r1: o.l2[1], rel: [0.08, 0.16], base, ymin: base + 3, dz: -0.3, gap: [1.2, 2.6], skip: 0.3 });
+    const base = 4, H = h - base - 3, hm = H * rr(...o.hm), Wt = Math.min(w - 18, hm * o.asp * rr(0.94, 1.06)), lf = r() < 0.5;
+    const wl = Wt * (lf ? IPHI * IPHI : IPHI), wr = Wt - wl, cx = (w - Wt) / 2 + wl + rr(-4, 4), s = lf ? 1 : -1, wlong = Math.max(wl, wr), wsh = Math.min(wl, wr);
+    const P = [mound({ cx, base, wl, wr, hm, a: rr(1.8, 2.4), b: rr(...o.b), v0: rr(0.6, 0.72) })];
+    P.push(mound({ cx: cx + s * wlong * IPHI, base, wl: wlong * IPHI * IPHI * 1.3, wr: wlong * IPHI * IPHI * 1.3, hm: hm * IPHI * rr(0.9, 1.05), b: rr(1.4, 2), v0: 0.5 }));   // плечо -- hm/φ
+    if (r() < 0.6) P.push(mound({ cx: cx - s * wsh * IPHI, base, wl: wsh * IPHI, wr: wsh * IPHI, hm: hm * IPHI * IPHI * rr(0.9, 1.1), b: rr(1.4, 2), v0: 0.5 }));       // и hm/φ² с короткой стороны
+    faceBumps(P, P[0], o.face, { x0: cx - wl * 0.6, x1: cx + wr * 0.6, y0: base + hm * 0.3, y1: base + hm * 0.75, r0: hm * IPHI ** 4, r1: hm * IPHI ** 3, crease: 0.7 });
+    for (const sd of [-1, 1]) lumpsSide(P, w, h, { side: sd, y0: base + 3, y1: base + hm * 0.55, rel: [IPHI ** 5, IPHI ** 4], r0: 3, r1: 20, sink: [IPHI * IPHI, IPHI], gap: [1, PHI] }); // бока -- тоже клубами
+    for (let k = 1; k <= 3; k++) { const q = IPHI ** (k + 1); // фрактал выступов
+      lumps(P, w, h, { x0: w * 0.03, x1: w * 0.97, r0: k === 1 ? 4 : 2.5, r1: 60, rel: [q * 0.85, q * 1.15], base, ymin: base + 3, dz: -0.4, gap: [1, PHI], sink: [IPHI * IPHI, IPHI], crease: k === 1 ? 0.35 : 0.1, skip: [0, 0.25, 0.5][k - 1] }); }
     return clampParts(P, w, h);
   }
-  // humilis: плоские, вдвое шире высоты и больше
-  for (let k = 0; k < 5; k++) sprite('hum' + k, 192, 72, (T, C) => paint(T, C, 192, 72, cumulus(192, 72, { hm: [0.6, 0.85], wd: [0.36, 0.47], b: [1.6, 2.6], l1: [5, 16], l2: [2, 4], face: 1 }), { grad: 0.4, band: 3, k: 3 }));
-  // mediocris: пышнее, главный купол заметно выше
-  for (let k = 0; k < 6; k++) sprite('cu' + k, 256, 128, (T, C) => paint(T, C, 256, 128, cumulus(256, 128, { hm: [0.66, 0.88], wd: [0.32, 0.46], b: [1.3, 2], l1: [7, 32], l2: [2.5, 7], face: 3 }), { grad: 0.45, band: 4, k: 4 }));
+  // humilis: плоские, ширина к высоте -- φ²
+  for (let k = 0; k < 5; k++) sprite('hum' + k, 192, 72, (T, C) => paint(T, C, 192, 72, cumulus(192, 72, { hm: [0.62, 0.8], asp: PHI * PHI, b: [1.6, 2.4], face: 1 }), { grad: 0.4, band: 3, k: 3 }));
+  // mediocris: пышные, ширина к высоте -- φ
+  for (let k = 0; k < 6; k++) sprite('cu' + k, 256, 128, (T, C) => paint(T, C, 256, 128, cumulus(256, 128, { hm: [0.8, 0.92], asp: PHI * rr(1, 1.15), b: [1.3, 2], face: 3 }), { grad: 0.45, band: 4, k: 4 }));
 
   // ================= Altocumulus: поле мелких хлопьев рядами, по диагонали, с разрывами =================
   for (let k = 0; k < 4; k++) { const w = 512, h = 128;

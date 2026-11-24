@@ -36,7 +36,7 @@ export async function loadHeight() {
 export const ENV = {
   uSun: { value: SUN }, uHor: { value: new THREE.Vector3(0.56, 0.76, 0.97) }, uCover: { value: 0.4 }, uCirrus: { value: 0.3 },
   uStorm: { value: 0 }, uCuK: { value: 0.15 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
-  uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() },
+  uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() }, uFarH: { value: null },
   uRiv: { value: null }, uRivT: { value: new THREE.Vector4() }, uRivOn: { value: 0 }, uRT: { value: 0 }, // реки коридора -- маской (corridorart)
   uLC: { value: null }, uLCOn: { value: 0 }, uPaint: { value: 1 }, uLCT: { value: new THREE.Vector4(-141000, 63000, 1 / 273600, 1 / 180600) }, // маска зон OSM (по требованию) // съёмка карты сверху: дно плавно уходит в цвет озера на карте
 };
@@ -394,7 +394,8 @@ export async function makeFarTerrain(holes = []) {
 const GN = 128, GS = 20; // карта порывов: 128x128 клеток по 20 м. При 40 м клетки проступали на воде сеткой до горизонта
 export function makeWater(heightTex, quality) {
   // полярная сетка вокруг камеры: у лодки ячейки по 0.4 м, к горизонту растут экспоненциально
-  const NR = quality > 0 ? 150 : 100, NS = quality > 0 ? 192 : 128, A = 6, Bk = Math.log(34000 / A + 1) / NR;
+  // радиус 200 км -- всё озеро из любой точки: раньше сетка кончалась на 34 км, и дальше вместо воды было небо
+  const NR = quality > 0 ? 176 : 118, NS = quality > 0 ? 192 : 128, A = 6, Bk = Math.log(200000 / A + 1) / NR;
   const pos = new Float32Array((NR + 1) * NS * 3), idx = [];
   for (let i = 0; i <= NR; i++) for (let s = 0; s < NS; s++) {
     const r = A * (Math.exp(Bk * i) - 1), a = ((s + (i % 2) * 0.5) / NS) * Math.PI * 2, k = (i * NS + s) * 3;
@@ -416,8 +417,10 @@ export function makeWater(heightTex, quality) {
     uWindDir: { value: new THREE.Vector2(1, 0) }, uWind: { value: 5 }, uSpacing: { value: Bk },
   };
   const TERR = /* glsl */`
-uniform sampler2D uHeight;
-float terrH(vec2 xz){ vec2 uv=(vec2(xz.x,xz.y)/${MAP.M}+vec2(${MAP.OX}.5,${MAP.OY}.5))/${MAP.N}.; if(uv.y>1.) return -60.; if(uv.x<0.||uv.x>1.||uv.y<0.) return -30.;
+uniform sampler2D uHeight, uFarH; uniform vec4 uLakeT;
+// за подробной картой -- грубая карта всей котловины (600 м); низины вне Иссык-Куля в ней подняты над водой
+float farH(vec2 xz){ return texture2D(uFarH, vec2((xz.x-uLakeT.x)*uLakeT.z, (uLakeT.y+xz.y)*uLakeT.w)).r; }
+float terrH(vec2 xz){ vec2 uv=(vec2(xz.x,xz.y)/${MAP.M}+vec2(${MAP.OX}.5,${MAP.OY}.5))/${MAP.N}.; if(uv.x<0.||uv.x>1.||uv.y<0.||uv.y>1.) return farH(xz);
   vec4 t=texture2D(uHeight,uv); return (t.r*65280.+t.g*255.)/4.-64.; }`;
   const mat = new THREE.ShaderMaterial({ defines: { ...QUALITY_DEFS[2] },
     uniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide, extensions: { derivatives: true },

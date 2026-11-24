@@ -83,6 +83,8 @@ async function init() {
   // маска озера для карты: заливка от середины Иссык-Куля по клеткам ниже уреза (низины за хребтами в неё не попадают)
   const lake = (() => { const { hs, W, H, X0, Y1, STEP } = far.userData.grid, m = new Uint8Array(W * H), st = [Math.round((Y1 + 25000) / STEP) * W + Math.round((10000 - X0) / STEP)];
     while (st.length) { const k = st.pop(); if (m[k] || hs[k] >= 0) continue; m[k] = 255; const i = k % W, j = (k / W) | 0; if (i > 0) st.push(k - 1); if (i < W - 1) st.push(k + 1); if (j > 0) st.push(k - W); if (j < H - 1) st.push(k + W); }
+    { const fh = new Uint16Array(W * H); for (let k = 0; k < W * H; k++) fh[k] = THREE.DataUtils.toHalfFloat(m[k] ? hs[k] : Math.max(hs[k], 6)); // для воды вдали: дно озера, остальное -- суша
+      const t = new THREE.DataTexture(fh, W, H, THREE.RedFormat, THREE.HalfFloatType); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true; ENV.uFarH.value = t; }
     for (let r = 0; r < 2; r++) { const c = m.slice(); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (c[k]) continue; // расширяем на 2 клетки: береговая полоса целиком внутри
         if ((i > 0 && c[k - 1]) || (i < W - 1 && c[k + 1]) || (j > 0 && c[k - W]) || (j < H - 1 && c[k + W])) m[k] = 255; } }
     const t = new THREE.DataTexture(m, W, H, THREE.RedFormat); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true;

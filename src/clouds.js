@@ -20,7 +20,7 @@
 // и рождается снова в другом месте своей клетки. Облачность в целом -- «поле погоды», плывущее по ветру.
 import * as THREE from 'three';
 import { CURVE, GLSL_COMMON, END, ENV } from './world.js';
-import { makeCloudAtlasAsync, AW, AH } from './cloudart.js';
+import { makeCloudAtlasAsync, AW, AH, PHI, IPHI } from './cloudart.js';
 import { PEAKS } from './peaks.js';
 
 const V = CURVE + `attribute vec4 aC; attribute vec4 aS; attribute vec4 aR; attribute vec4 aL;
@@ -44,8 +44,8 @@ void pal(out vec3 L, out vec3 M, out vec3 S, out vec3 D, out vec3 I, float storm
 void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(uStorm*1.2+vL.y,0.,1.);
   vec3 L,M,S,D,I; pal(L,M,S,D,I,storm); vec3 c; float al=1.;
   if(vKind>1.5 && vKind<2.5){ al=t.a*0.5*(1.-vThr); if(al<0.02) discard; c=mix(S,M,0.4); } // полосы дождя
-  else { float f=t.a, aa=fwidth(f)*1.2+1e-4, thr=0.03+vThr*0.94;
-    al=smoothstep(thr,thr+aa,f); if(al<0.02) discard;
+  else { float f=t.a, aa=fwidth(f)*1.2+1e-4, thr=0.03+vThr*0.22; // рождение и таяние -- прозрачностью и лёгким сжатием, а не обгрызанием краёв: силуэт и контур целые
+    al=smoothstep(thr,thr+aa,f)*clamp(1.15-vThr*1.25,0.,1.); if(al<0.02) discard;
     float h=t.r-vBack*0.32-storm*0.2+(uDay<0.5?-0.1:0.);  // контражур и гроза -- облако темнее
     float w=fwidth(t.r)*0.7+2e-3; float dp=smoothstep(0.17-w,0.17+w,h), mid=smoothstep(0.32-w,0.32+w,h), hi=smoothstep(0.56-w,0.56+w,h);
     c=mix(D,S,dp); c=mix(c,M,mid); c=mix(c,L,hi); // 4 тона: глубокая тень, тень, основной, свет
@@ -129,11 +129,12 @@ export function makeSpriteClouds(scene, h = () => 1000) {
         // размер: много мелких, мало крупных; крупные массы -- днём над хребтами и в непогоду
         const sz = rg(4) ** 1.6; let W, rc;
         if (storm > 0.4 && rg(8) < storm * 0.6) { W = 2500 + sz * 6000; rc = pick('st', 4, rg(5)); const Hs = hOf(rc, W) * 1.6; push(X, Y, Zg, W, Hs, rc, life, 0, 0, 0, d, 0.6, fz); return; } // в непогоду -- плоские тяжёлые массы
-        W = 500 + sz * 2000 * (0.6 + 0.6 * Math.min(1, I)) * (I > 0.8 && rg(8) < 0.3 ? 1.8 : 1); rc = W < 1100 || I < 0.45 ? pick('hum', 5, rg(5)) : pick('cu', 6, rg(5));
+        const lv = Math.min(4, Math.floor(rg(4) ** 0.75 * 5)); W = 3600 * IPHI ** lv * (0.6 + 0.6 * Math.min(1, I)) * (0.92 + 0.16 * rg(9)); rc = W < 1100 || I < 0.45 ? pick('hum', 5, rg(5)) : pick('cu', 6, rg(5)); // размеры -- ряд золотого сечения: 3600, 2200, 1400, 850, 520 м
         if (W < d * 0.02) return; // вдали мелочь не видна -- без «крошек» у горизонта
         push(X, Y, Zg, W, hOf(rc, W), rc, life, 0, 0, 0, d, 0.6, fz);
         // спутники -- 0-2 маленьких облачка поодаль, свои размеры и высоты
-        const n = W > d * 0.05 ? Math.floor(rg(6) * 3 * Math.min(1, m)) : 0; for (let k = 0; k < n; k++) { const a = rg(10 + k) * 6.28, rr = W * (0.9 + rg(20 + k) * 1.4), Ws = W * (0.18 + rg(30 + k) * 0.3), px = X + Math.cos(a) * rr, py = Y + Math.sin(a) * rr * 0.7, rc2 = pick('hum', 5, rg(50 + k));
+        // спутники по «подсолнуху»: k-й -- под золотым углом 137.5° к предыдущему, на расстоянии W·φ^(k/2), размером W/φ^(k+1)
+        const n = W > d * 0.05 ? Math.floor(rg(6) * 4 * Math.min(1, m)) : 0, a0 = rg(10) * 6.28; for (let k = 1; k <= n; k++) { const a = a0 + k * 2.39996, rr = W * (0.75 + 0.35 * PHI ** (k * 0.5)), Ws = W * IPHI ** (k + 1), px = X + Math.cos(a) * rr, py = Y + Math.sin(a) * rr * 0.7, rc2 = pick('hum', 5, rg(50 + k));
           push(px, py, Zg + (rg(40 + k) - 0.5) * 300, Ws, hOf(rc2, Ws), rc2, Math.min(0.97, life + 0.08), 0, 0, 0, Math.hypot(px - cx, py - cy), 0.6, fz); } });
       // ---- кучево-дождевые: редкие крупные системы, 1-3 на всё небо, только вдали ----
       if (storm > 0.35) layer(cx, cy, 36000, 25000, 130000, 1, (i, j, x0, y0, C) => { const rh = (k) => hash(i * 53 + k, j * 37 + k * 11); if (rh(1) > storm * 0.55) return;
