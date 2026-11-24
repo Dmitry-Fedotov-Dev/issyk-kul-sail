@@ -104,7 +104,7 @@ void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(vL.y,0.,1.); // не�
     // ночью -- холодная лунная кромка с одной стороны
     c=mix(c, vec3(0.36,0.42,0.56)*(1.-0.6*storm), eb*step(0.3,vMoon)*0.85*(1.-dl*0.7));
     float edge=1.-smoothstep(thr+aa*mix(0.55,0.2,fk),thr+aa*mix(1.5,0.8,fk),f);       // контур как у гор: вблизи ~1 px, вдали -- волосок
-    c=mix(c,mix(mix(I,D,0.5),S,fk*0.8),edge*(vKind<0.5?0.8*pow(1.-dl,1.3):0.)); if(vKind>0.5 && vKind<1.5) al*=0.45*(0.35+0.65*clamp(uDay,0.,1.)); if(vKind>2.5) al*=0.85; }
+    c=mix(c,mix(mix(I,D,0.5),S,fk*0.8),edge*(vKind<0.5?0.8*pow(1.-dl,1.3):0.)); if(vKind>0.5 && vKind<1.5) al*=0.45*(0.1+0.9*smoothstep(0.05,0.5,uDay)); if(vKind>2.5) al*=0.85; } // перистые ночью -- едва заметная вуаль
   c*=0.78+0.22*uSunI;
   vec3 fogd=applyFog(c,length(vP-cameraPosition)*vL.z,vP.y); c=mix(fogd,uHor,vL.x); // дальние -- в дымке, как горы
   gl_FragColor=vec4(c,al); ${END} }`;

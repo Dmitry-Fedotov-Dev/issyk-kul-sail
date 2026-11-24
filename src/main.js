@@ -22,7 +22,7 @@ import { makeJailoo } from './jailoo.js';
 import { FAR_PX } from './corridorart.js';
 import { makeSpriteClouds } from './clouds.js';
 import { analyzeBasinAsync } from './cloudgeo.js';
-import { makeStars } from './stars.js';
+import { makeStars, sunDir as astroSun } from './stars.js';
 import { makeRidges, setRidgeRes } from './ridges.js';
 
 const $ = (id) => document.getElementById(id);
@@ -85,6 +85,7 @@ async function init() {
   const { h, tex } = await loadHeight();
   const sky = makeSky(); scene.add(sky);
   const stars = makeStars(); scene.add(stars.mesh); // настоящее звёздное небо (stars.js)
+  ENV.uCine.value = store.get('skyCine') ?? 1; // режим неба: 1 -- кино (по умолчанию), 0 -- природное
   const dem = await loadDem(DEM, h); // подробный коридор Кургак-Сай -- берег
   const nearT = makeTerrain(h, { x0: dem.X0, x1: dem.X1, y0: dem.Y0, y1: dem.Y1 }); scene.add(nearT);
   const demT = makeDemTerrain(dem, TOUCH); scene.add(demT);
@@ -385,7 +386,9 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') input.bar = true; if (e.code === 'ArrowDown' || e.code === 'KeyS') input.flare = true; // параплан: акселератор и обе клеванты
   if (KEY[e.code]) { input[KEY[e.code]] = true; e.preventDefault(); return; }
   if (!G || e.repeat) return;
-  if (e.code === 'KeyZ' && G.mode !== 'menu') SPY.toggle();
+  if (e.code === 'KeyN') { ENV.uCine.value = ENV.uCine.value > 0.5 ? 0 : 1; store.set('skyCine', ENV.uCine.value); toast(ENV.uCine.value ? 'Небо: кино (выразительнее)' : 'Небо: природное (как глазом)'); }
+  else if (e.code === 'KeyC') { G.cLines = !G.cLines; toast(G.cLines ? 'Созвездия: линии включены' : 'Созвездия: линии скрыты'); }
+  else if (e.code === 'KeyZ' && G.mode !== 'menu') SPY.toggle();
   else if (e.code === 'KeyE' && SPY && SPY.on) SPY.holdStart(); // E -- зажать с клавиатуры
   else if (e.code === 'Escape' && SPY && SPY.on) SPY.close();
   else if (e.code === 'KeyC') { G.cam = (G.cam + 1) % 3; resetView(); }
@@ -505,10 +508,8 @@ function splash(b, n) { const fx = Math.sin(b.th), fz = -Math.cos(b.th); for (le
 // Время суток, как в GTA: игровая минута идёт одну секунду, сутки -- 24 минуты. Солнце ходит по настоящей дуге для
 // широты Чолпон-Аты (42.6 с. ш.) в середине лета; от его высоты зависят свет, цвет неба, заря, звёзды и ночной полумрак.
 const LIGHT = new THREE.Vector3().copy(SUN); let envT = 0;
-function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; G.clock = (G.clock + (G.mode === 'menu' ? 0 : dt / 60 * (G.clockK || 1))) % 24; const k = G.wx; if (!k) return; // в меню время стоит на выбранном
-  const la = 42.6 * DEG, de = 20 * DEG, Hh = (G.clock - 13) * 15 * DEG, sinEl = Math.sin(la) * Math.sin(de) + Math.cos(la) * Math.cos(de) * Math.cos(Hh), el = Math.asin(sinEl);
-  const az = Math.atan2(Math.sin(Hh), Math.cos(Hh) * Math.sin(la) - Math.tan(de) * Math.cos(la)) + Math.PI;
-  SUN.set(Math.sin(az) * Math.cos(el), sinEl, -Math.cos(az) * Math.cos(el));
+function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; { const c = G.clock + (G.mode === 'menu' ? 0 : dt / 60 * (G.clockK || 1)); if (c >= 24) G.day = (G.day || 0) + 1; G.clock = c % 24; } const k = G.wx; if (!k) return; // G.day -- игровые сутки от 23 июля: идут сезоны; в меню время стоит на выбранном
+  astroSun(G.day || 0, G.clock, SUN); const sinEl = SUN.y; // Солнце -- по эфемериде на игровую дату (astro.js): долгота дня и заря меняются с сезоном
   const day = smooth(-0.1, 0.14, sinEl), dusk = clamp(1 - Math.abs(sinEl - 0.04) / 0.26, 0, 1), sI = k.sun * smooth(-0.02, 0.22, sinEl), st = k.storm;
   ENV.uDay.value = day; ENV.uDusk.value = dusk; ENV.uSunI.value = sI; G.night = day < 0.35;
   const d2 = dusk * 0.55 * (1 - st), m = 0.03 + 0.97 * day; ENV.uHor.value.set((k.hor[0] * (1 - d2) + 0.98 * d2) * m, (k.hor[1] * (1 - d2) + 0.56 * d2) * m, (k.hor[2] * (1 - d2) + 0.36 * d2) * m + 0.012 * (1 - day)); scene.fog.color.setRGB(ENV.uHor.value.x, ENV.uHor.value.y, ENV.uHor.value.z); // Color.copy от вектора дала бы NaN и чёрные лодки
@@ -559,7 +560,7 @@ function loop(now) {
   if (!G.freeze) tick(dt); // freeze -- только для тестов: мир стоит, картинка рисуется
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
-  G.stars.update(camera.position.x, -camera.position.z, G.clock ?? 13, renderer.getPixelRatio(), now / 1000); // звёзды -- для той точки карты, где камера
+  G.stars.update(camera.position.x, -camera.position.z, G.clock ?? 13, renderer.getPixelRatio(), now / 1000, G.day || 0); G.stars.showLines(G.cLines || (SPY && SPY.on)); // звёзды -- для той точки карты, где камера
   { const k = PG && PG.on ? 0 : Math.min(0.94, G.clouds.inside * 1.05), el = $('cfog'); if (Math.abs(k - (G.cfogK || 0)) > 0.01) { G.cfogK = k; el.style.opacity = k.toFixed(2); // внутри облака -- мгла (у параплана своя)
     el.style.background = ENV.uDay.value > 0.3 ? 'rgba(236,241,248,1)' : 'rgba(40,46,70,1)'; } }
   lodTick(dt);   if (G.jailoo) G.jailoo.update(dt, G.t); G.clouds.update(dt, camera, { cover: Math.min(1, Math.max(0, (ENV.uCover.value + 0.62) / 1.48)), storm: ENV.uStorm.value, cirrus: ENV.uCirrus.value, wind: G.wind, clock: G.clock, preset: G.preset }); // облачность погоды (-0.62..0.86) -> 0..1; пресет -- какой ветер (улан, санташ, бриз)

@@ -38,13 +38,13 @@ export async function loadHeight() {
 // Общее состояние неба и света: одни и те же объекты uniform'ов разделяют небо, рельеф и вода.
 export const ENV = {
   uSun: { value: SUN }, uHor: { value: new THREE.Vector3(0.56, 0.76, 0.97) }, uCover: { value: 0.4 }, uCirrus: { value: 0.3 },
-  uStorm: { value: 0 }, uEq: { value: new THREE.Matrix3() }, uMoon: { value: new THREE.Vector4(0, -1, 0, 0) }, uNT: { value: 0 }, uCuK: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() }, // Луна: направление и освещённая доля; uNT -- время для метеоров
+  uStorm: { value: 0 }, uEq: { value: new THREE.Matrix3() }, uMoon: { value: new THREE.Vector4(0, -1, 0, 0) }, uNT: { value: 0 }, uCine: { value: 1 }, uCuK: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() }, // Луна: направление и освещённая доля; uNT -- время для метеоров
   uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() }, uFarH: { value: null },
   uRiv: { value: null }, uRivT: { value: new THREE.Vector4() }, uRivOn: { value: 0 }, uRT: { value: 0 }, // реки коридора -- маской (corridorart)
   uLC: { value: null }, uLCOn: { value: 0 }, uPaint: { value: 1 }, uLCT: { value: new THREE.Vector4(-141000, 63000, 1 / 273600, 1 / 180600) }, // маска зон OSM (по требованию) // съёмка карты сверху: дно плавно уходит в цвет озера на карте
 };
 export const GLSL_COMMON = /* glsl */`
-uniform vec3 uSun, uHor; uniform vec4 uMoon; uniform float uNT; uniform float uCuK; uniform float uCover, uCirrus, uStorm, uCloudScale, uSunI, uDay, uDusk; uniform vec2 uCloud;
+uniform vec3 uSun, uHor; uniform vec4 uMoon; uniform float uNT, uCine; uniform float uCuK; uniform float uCover, uCirrus, uStorm, uCloudScale, uSunI, uDay, uDusk; uniform vec2 uCloud;
 #define HOR uHor
 float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -57,8 +57,9 @@ vec3 skyBase(vec3 d){ float y=max(d.y,0.);
   c=mix(c, vec3(0.20,0.24,0.30)*(0.75+0.5*y), uStorm*0.85);
   // ночь по палитре референса: зенит глубокий синий, ниже синий, у горизонта сине-фиолетовый с тонким свечением воздуха;
   // при Луне небо светлеет холодным синим
-  vec3 nc=mix(vec3(0.030,0.032,0.085), vec3(0.016,0.026,0.085), smoothstep(0.,0.3,y)); nc=mix(nc, vec3(0.006,0.010,0.042), smoothstep(0.25,0.9,y));
-  nc+=vec3(0.020,0.018,0.040)*exp(-y*9.); nc+=vec3(0.020,0.034,0.080)*uMoon.w*smoothstep(-0.05,0.2,uMoon.y); nc=mix(nc, vec3(0.012,0.014,0.020), uStorm*0.85);
+  // зенит #020820 -> глубокое небо #07153D -> синее #0C2B6B -> дымка горизонта #7E8CCB (линейные, под экспозицию сцены)
+  vec3 nc=mix(vec3(0.075,0.085,0.20), vec3(0.018,0.050,0.165), smoothstep(0.,0.16,y)); nc=mix(nc, vec3(0.008,0.022,0.080), smoothstep(0.12,0.5,y)); nc=mix(nc, vec3(0.002,0.006,0.026), smoothstep(0.45,1.,y));
+  nc+=vec3(0.035,0.030,0.075)*exp(-y*14.)*(1.+0.6*uCine); nc+=vec3(0.020,0.034,0.080)*uMoon.w*smoothstep(-0.05,0.2,uMoon.y); nc=mix(nc, vec3(0.012,0.014,0.020), uStorm*0.85);
   c=mix(nc, c*mix(0.025,1.,uDay), smoothstep(0.02,0.35,uDay));
   { float sg=max(dot(normalize(d.xz+1e-4),normalize(uSun.xz)),0.); c+=vec3(1.,0.42,0.14)*uDusk*(1.-uStorm)*pow(1.-y,5.)*(0.25+0.75*sg*sg); } // заря у горизонта со стороны солнца
   // солнце высокогорья: слепящий диск и широкое сияние вокруг
@@ -91,12 +92,26 @@ void main(){ vec3 d=normalize(vDir); vec3 c=skyBase(d); float dk=mix(0.05,1.,uDa
   // Млечный Путь -- на настоящем месте: направление переводим в галактические координаты (экватор J2000 -> галактика)
   // и рисуем полосу вдоль галактического экватора с пылевыми прожилками; ярче к центру Галактики (Стрелец, летом -- на юге)
   if(uDay<0.6 && d.y>0.){ vec3 q=transpose(uEq)*d; vec3 g=mat3(-0.0548756,0.4941094,-0.8676661, -0.8734371,-0.4448296,-0.1980764, -0.4838350,0.7469822,0.4559838)*q;
-    float b=asin(clamp(g.z,-1.,1.)), l=atan(g.y,g.x), w=0.13+0.05*cos(l);
-    float band=exp(-b*b/(w*w))*(0.35+0.65*exp(-l*l/0.9)), dust=smoothstep(0.4,0.7,fbm(vec2(l*4.,b*8.)+7.))*exp(-pow((b-0.03)/0.035,2.))*(0.4+0.6*exp(-l*l/1.6));
-    float clouds=0.55+0.45*fbm(vec2(l*3.,b*6.)+3.), grain=smoothstep(0.62,0.95,vnoise(vec2(l,b)*220.))*0.6+smoothstep(0.55,0.9,vnoise(vec2(l,b)*90.+5.))*0.4; // звёздные облака и неразрешённые звёзды
-    float mw=band*clouds*(1.-0.75*dust)*(0.8+0.5*grain), core=exp(-b*b/0.006-l*l/0.25)*(1.-0.6*dust);              // яркое ядро в Стрельце
-    float dark=smoothstep(0.6,0.02,uDay)*(1.-uStorm)*smoothstep(0.,0.3,d.y)*(1.-0.7*uMoon.w*smoothstep(-0.05,0.2,uMoon.y)); // Луна гасит Млечный Путь
-    c+=(vec3(0.56,0.50,0.86)*mw*0.2+vec3(0.95,0.82,0.75)*core*0.12)*dark; }
+    float b=asin(clamp(g.z,-1.,1.)), l=atan(g.y,g.x); vec2 gp=vec2(l,b);
+    // структура галактики: диск с утолщением к центру, балдж в Стрельце, звёздные облака (Щит, Лебедь, Стрелец),
+    // Большой Провал -- тёмная пылевая река от Лебедя к Стрельцу -- и рваные пылевые волокна
+    float warp=0.025*sin(l*2.3)+0.02*(fbm(vec2(l*2.,3.))-0.5), bb=b-warp, w=0.085+0.06*exp(-l*l/1.2);
+    float disk=exp(-bb*bb/(w*w)), halo=exp(-bb*bb/(w*w*5.));
+    float bulge=exp(-l*l/0.09-b*b/0.012);
+    float sc=fbm(gp*vec2(7.,13.)+1.7), sc2=fbm(gp*vec2(18.,30.)+4.1);
+    float clouds=smoothstep(0.32,0.82,sc*0.65+sc2*0.35);                                                       // звёздные облака -- пятнами, не ровной полосой
+    float rn=fbm(gp*vec2(5.,11.)+9.), rift=exp(-pow((bb-0.045-0.03*(rn-0.5))/(0.028+0.02*rn),2.))*smoothstep(1.6,0.3,abs(l-0.55));   // Большой Провал
+    float fil=smoothstep(0.55,0.75,fbm(gp*vec2(9.,22.)+2.))*smoothstep(0.4,0.6,fbm(gp*vec2(20.,44.)+8.))*disk;     // пылевые облака -- рваными пятнами
+    float dust=clamp(rift*0.85+fil*0.6,0.,0.92);
+    float grain=smoothstep(0.7,0.98,vnoise(gp*260.))*0.7+smoothstep(0.6,0.95,vnoise(gp*120.+5.))*0.5;           // неразрешённые звёзды -- зерно
+    float knots=smoothstep(0.62,0.85,fbm(gp*vec2(26.,40.)+21.))*disk;                                          // плотные яркие узлы звёздных облаков
+    float mott=0.55+0.9*fbm(gp*vec2(45.,80.)+31.);                                                              // мелкая рябь звёздных облаков
+    float lum=(disk*(0.12+1.1*clouds*clouds)*(0.7+0.55*grain)*mott+knots*0.9+bulge*1.6+halo*0.1)*(1.-dust)*(1.-0.35*fil);
+    float dark=smoothstep(0.6,0.02,uDay)*(1.-uStorm)*smoothstep(0.,0.25,d.y)*(1.-0.75*uMoon.w*smoothstep(-0.05,0.2,uMoon.y)); // Луна гасит Млечный Путь
+    float pinkK=smoothstep(0.45,0.75,fbm(gp*vec2(6.,10.)+13.))*disk, blueK=smoothstep(0.5,0.8,sc2)*disk;
+    vec3 mwc=mix(vec3(0.62,0.66,1.0), vec3(1.0,0.80,0.70), bulge/(bulge+disk*0.5+1e-3));                   // холодный диск, тёплое ядро
+    mwc=mix(mwc, vec3(1.0,0.48,0.82), pinkK*0.7); mwc=mix(mwc, vec3(0.58,0.80,1.1), blueK*0.5); mwc=mix(mwc, vec3(0.60,0.42,0.95), (1.-clouds)*disk*0.4); // розовые, голубые и фиолетовые области            // розовые и голубые области
+    c+=(mwc*lum*0.075+vec3(0.36,0.24,0.62)*halo*0.03*(1.-dust))*dark*mix(0.75,1.5,uCine); }
   // Луна: настоящая фаза (освещённая сторона -- к солнцу), холодный рисованный диск с морями и пепельным светом, ореол
   { vec3 m=uMoon.xyz; float cm=dot(d,m); if(cm>0.995 && m.y>-0.03){ vec3 t1=normalize(cross(vec3(0.,1.,0.),m)), t2=cross(m,t1); vec2 pp=vec2(dot(d,t1),dot(d,t2))/0.0145; float r=length(pp);
       float day=smoothstep(0.35,0.,uDay), cl=1.-uStorm;
@@ -353,7 +368,7 @@ void main(){ vec3 N=normalize(vN); float h=vH;
     col=mix(col, pcol, pk); }
   // в шторм вершины уходят в тучу
   col=mix(col, vec3(0.24,0.27,0.31), uStorm*smoothstep(1300.,2600.,h)*0.8);
-  col*=mix(vec3(0.045,0.06,0.11), vec3(1.), uDay); // ночью -- синий полумрак
+  col*=mix(vec3(0.085,0.10,0.19)*(1.+0.9*uMoon.w*smoothstep(-0.05,0.2,uMoon.y)), vec3(1.), uDay); // ночью -- сине-фиолетовый полумрак: хребты читаются, в полнолуние светлее
   // живописная даль: своя лёгкая воздушная перспектива -- планы светлеют и холодеют, но цвет не тонет в дымке
   { vec3 fogd=applyFog(col, dist, h); if(pk>0.){ float f2=min((1.-exp(-dist/100000.))*mix(1.,0.45,smoothstep(150.,2600.,h)),0.17);
       vec3 lay=mix(col, HOR*mix(0.04,1.,uDay)*vec3(0.80,0.84,0.95), f2); fogd=mix(fogd, lay, pk*0.92*(1.-uStorm)); } col=fogd; }
@@ -516,6 +531,8 @@ void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
   sky=mix(sky, mix(vec3(0.86,0.88,0.90), vec3(0.16,0.18,0.21), uStorm)*mix(0.05,1.,uDay), cr*0.75);
   float sd=max(dot(R,uSun),0.), far=smoothstep(100.,4000.,dist);
   vec3 spec=vec3(1.,.93,.78)*(pow(sd,mix(700.,90.,far))*mix(8.,1.2,far))*uSunI;
+  // лунная дорожка: та же блестящая полоса, только от Луны -- холодная, ярче в полнолуние
+  { float md=max(dot(R,uMoon.xyz),0.); spec+=vec3(0.62,0.72,1.)*pow(md,mix(500.,70.,far))*mix(5.,0.9,far)*uMoon.w*smoothstep(-0.02,0.08,uMoon.y)*(1.-smoothstep(0.,0.3,uDay))*(1.-uStorm); }
   vec3 deep=vec3(0.004,0.075,0.34), turq=vec3(0.0,0.34,0.60), shal=vec3(0.06,0.72,0.70);
   deep=mix(deep, vec3(0.012,0.045,0.07), uStorm*0.85); turq=mix(turq, vec3(0.03,0.16,0.20), uStorm*0.8);
   vec3 body=mix(shal, mix(turq,deep,smoothstep(7.,42.,depth)), smoothstep(0.4,9.,depth));
@@ -537,7 +554,7 @@ void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
   // ложбины темнее; мелкая фактура -- через уклон ряби к солнцу. Сам решётчатый шум в цвет не идёт: он давал клетчатые пятна
   body*=clamp(0.94+hh*0.22+dot(ds,normalize(uSun.xz))*0.05*rip,0.72,1.22);
   body*=mix(1.10,0.74,smoothstep(0.80,1.60,g));
-  body*=mix(0.07,1.,uDay); body*=1.-0.42*shd;
+  body=mix(vec3(0.010,0.026,0.085)*(1.+1.2*uMoon.w*step(0.,uMoon.y)), body, smoothstep(0.,0.35,uDay)); // ночью озеро тёмно-синее (отражение неба и дорожки -- сверху), а не чёрное и не бирюзовое body*=1.-0.42*shd;
   vec3 col=mix(body,sky,F*(1.-0.25*shd))+spec*(1.-shd);
   float fn=fvn(o*0.9+uTime*0.05)*0.65+fvn(o*2.6-uTime*0.04)*0.35, lc=0.;
   float wf=clamp((uWind*g-4.)/8.,0.,1.), cth=mix(1.0,0.30,wf);
