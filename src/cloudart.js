@@ -19,6 +19,13 @@ export const CLOUD_KINDS = { hum: 5, cu: 6, ac: 4, ci: 4, len: 4, cap: 4, ban: 4
 // синхронно (экспорт PNG, тесты)
 export function makeCloudAtlas() { const g = atlasJobs(); let st; while (!(st = g.next()).done); return st.value; }
 // по кусочкам между кадрами: генерация ~1 с не подвешивает загрузку игры
+// в отдельном потоке, если сборка его встроила; иначе -- по кусочкам между кадрами
+/* global __CLOUD_WORKER__ */
+export function makeCloudAtlasWorker() { try { if (typeof __CLOUD_WORKER__ === 'string' && typeof Worker !== 'undefined') {
+    const url = URL.createObjectURL(new Blob([__CLOUD_WORKER__], { type: 'text/javascript' })), w = new Worker(url);
+    return new Promise((res) => { const done = (A) => { w.terminate(); URL.revokeObjectURL(url); res(A); };
+      w.onmessage = (e) => done(e.data); w.onerror = (e) => { e.preventDefault && e.preventDefault(); makeCloudAtlasAsync().then(done); }; w.postMessage(1); }); } } catch (e) { /* без потоков */ }
+  return makeCloudAtlasAsync(); }
 export function makeCloudAtlasAsync(budget = 10) { return new Promise((res) => { const g = atlasJobs();
   const step = () => { const t = performance.now(); let st; while (!(st = g.next()).done) if (performance.now() - t > budget) { setTimeout(step, 0); return; } res(st.value); }; step(); }); }
 

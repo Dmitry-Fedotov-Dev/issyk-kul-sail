@@ -25,7 +25,7 @@
 // и рождается снова в другом месте своей клетки. Облачность в целом -- «поле погоды», плывущее по ветру.
 import * as THREE from 'three';
 import { CURVE, GLSL_COMMON, END, ENV } from './world.js';
-import { makeCloudAtlasAsync, AW, AH, PHI, IPHI } from './cloudart.js';
+import { makeCloudAtlasWorker, AW, AH, PHI, IPHI } from './cloudart.js';
 import { PEAKS } from './peaks.js';
 
 const V = CURVE + `attribute vec4 aC; attribute vec4 aS; attribute vec4 aR; attribute vec4 aL;
@@ -121,7 +121,7 @@ const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
 export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- разбор котловины (cloudgeo.js): озеро, берега, ущелья
   const MAX = 2400; let rects = null, meta = null; // атлас рисуется по кусочкам между кадрами; до готовности неба нет
   const tex = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat);
-  makeCloudAtlasAsync().then((A) => { const t = new THREE.DataTexture(A.data, AW, AH, THREE.RGBAFormat); t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = true; t.needsUpdate = true;
+  const atlasReady = makeCloudAtlasWorker().then((A) => { const t = new THREE.DataTexture(A.data, AW, AH, THREE.RGBAFormat); t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = true; t.needsUpdate = true;
     mat.uniforms.uMap.value = t; tex.dispose(); rects = A.rects; meta = A.meta; api.atlasAt = performance.now(); });
   tex.needsUpdate = true;
   const base = new THREE.PlaneGeometry(1, 1), geo = new THREE.InstancedBufferGeometry(); geo.index = base.index; geo.attributes.position = base.attributes.position;
@@ -155,7 +155,7 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
     if (p1) { const rc = rects.cap0, W = 3800, H = hOf(rc, W); push(p1.X, p1.Y, p1.g - meta.cap0.ay * H + 40, W, H, rc, 0, 0, 0, 0, Math.hypot(p1.X - cx, p1.Y - cy) - 200, 0.6, 0.25, side(p1.X, p1.Y) > 0 ? 1 : 2); }
     if (p2) { const rc = rects.ban1, W = 4200, H = hOf(rc, W), sd = side(p2.X, p2.Y), dX = p2.X - cx, dY = p2.Y - cy, n = Math.hypot(dX, dY), off = sd * (0.5 - meta.ban1.ax) * W;
       push(p2.X + dY / n * off, p2.Y - dX / n * off, p2.g - meta.ban1.ay * H + 60, W, H, rc, 0, 0, 0, 0, n - 200, 0.6, 0.25, sd > 0 ? 1 : 2); } }
-  const api = { mesh, demo: false, out, B, setBasin(b) { B = b; api.B = b; }, // разбор котловины можно отдать позже (после показа меню); out, B -- для проверок; api.reg = 1 | -1 -- грозовой день над Кунгеем / Терскеем, 0 -- без грозы
+  const api = { mesh, atlasReady, demo: false, out, B, setBasin(b) { B = b; api.B = b; }, // разбор котловины можно отдать позже (после показа меню); out, B -- для проверок; api.reg = 1 | -1 -- грозовой день над Кунгеем / Терскеем, 0 -- без грозы
     // w: { cover 0..1, storm 0..1, cirrus 0..1, wind {sx, sy}, clock -- часы }
     update(dt, camera, w) { T += dt; ox += (w.wind ? w.wind.sx : 2) * dt; oy += (w.wind ? w.wind.sy : 1) * dt; if (!rects || (fr++ % 2 && geo.instanceCount)) return; // список -- через кадр: облака еле ползут
       const cx = camera.position.x, cy = -camera.position.z, cz = camera.position.y; out.length = 0;

@@ -134,38 +134,36 @@ async function init() {
   // Шейдеры собираются при первом показе каждого объекта, и это подвешивало меню на несколько секунд. Собираем всё
   // заранее, пока ещё виден экран загрузки, включая соперников и знаки, которые в меню скрыты (иначе фриз был бы
   // на старте регаты). Потом рисуем один кадр -- и только после этого открываем меню.
-  await loadStep(74, 'Настраиваем свет, воду и небо…');
-  setRivals(true); G.player.b.updatePose(G.waves, 0, G.h); for (const e of [G.player, ...G.rivals]) e.model.update(e.b, 0.016, 0);
-  // Ждём сборку не дольше 10 с: если браузер отобрал контекст, three.js ждал бы готовности шейдеров вечно (загрузка «висела»)
-  try { if (renderer.compileAsync) await Promise.race([renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 10000))]); else renderer.compile(scene, camera); } catch (e) { console.warn('предварительная сборка шейдеров не удалась, соберутся по ходу', e); }
-  updateCamera(0.016, G.player.b, 0); if (post) post.render(scene, camera); else renderer.render(scene, camera); setRivals(false);
-  await loadStep(100, 'Отдать швартовы!');
-  // снимок растворяется в живой сцене; меню появляется уже поверх неё
-  clearInterval(window.__tipTimer); $('load').classList.add('done'); setTimeout(() => { $('load').hidden = true; }, 1500);
-  requestAnimationFrame(loop);
-  // ---- догрузка в фоне: меню уже на экране, яхта качается; остальное собирается по кусочку между кадрами ----
-  // Всего этого в меню нет: река и валуны Кургак-Сая, подзорная труба, живой пляж и находки, пеший Дымок, джайлоо,
-  // параплан и Як-130. Кнопки старта до готовности не теряют нажатие -- выполняют его, как только всё собрано.
+  // ---- Занавес не открываем, пока сцена не готова ----
+  // Всё тяжёлое -- за экраном загрузки: части мира, атлас облаков (в отдельном потоке), разбор котловины (тоже в потоке),
+  // сборка всех шейдеров и несколько «прогревочных» кадров. Меню открывается, когда кадры уже идут ровно: первые
+  // секунды игры без фризов. Раньше часть работы шла уже в меню -- и первые 3 секунды картинка дёргалась.
   const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
-  // каждая часть -- отдельно: если в каком-то браузере одна упадёт, остальные соберутся, а старт всё равно откроется
-  // (раньше одна ошибка оставляла кнопку старта ждать вечно -- в Safari это выглядело как «нажал, и ничего»)
-  G.intro = { t0: performance.now() + 700, stage: 0 }; // падение -- когда экран загрузки уже почти растворился let lateN = 0; G.lateLog = []; const late = async (name, fn) => { G.intro && (G.intro.stage = ++lateN / 5); await frame(); const t = performance.now(); try { fn(); } catch (e) { console.error('догрузка:', name, e); toast('Не удалось подготовить: ' + name); } G.lateLog.push([name, Math.round(performance.now() - t)]); }; // lateLog -- сколько мс заняла каждая часть
-  const lateFrom = new Set(scene.children);
+  // каждая часть -- отдельно: если в каком-то браузере одна упадёт, остальные соберутся, а игра всё равно откроется
+  G.lateLog = []; const late = async (name, fn) => { await frame(); const t = performance.now(); try { fn(); } catch (e) { console.error('загрузка:', name, e); } G.lateLog.push([name, Math.round(performance.now() - t)]); };
   G.buildCorridor = () => { if (!G.corridor) G.corridor = makeCorridorArt(scene, dem, dem.h); if (!G.jailoo) G.jailoo = makeJailoo({ G, scene, camera, toast, ach: X.ach, store }); }; // река Кургак-Сая и джайлоо: в меню их не видно -- строим при выходе в игру
-  try {
-    await late('подзорную трубу', () => { SPY = makeSpyglass({ G, camera, post, audio, store, ach: X.ach, $, extra: X }); SPY.renderAtlas(); });
-    await late('пляж', () => { G.beach = makeBeach({ G, scene, camera, audio, toast }); G.finds = makeFinds({ G, scene, camera, beach: G.beach, audio, toast, store, ach: X.ach, onTake: (k) => FT && FT.found(k) }); });
-    await late('пеший режим', () => { FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach, store, ach: X.ach, finds: G.finds }); $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey(); });
-    await late('Як-130', () => { JM = makeJetMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt }); });
-    await late('параплан', () => { PG = makeParaMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, lens }); });
-    analyzeBasinAsync(far.userData.grid, lake).then((bs) => G.clouds.setBasin(bs)); // облака: разбор котловины -- в отдельном потоке, кадры меню не ждут
-    // шейдеры догруженного -- заранее, но по одному объекту за кадр: собрать всё разом -- это секундный стоп меню
-    // на телефонах без параллельной сборки шейдеров (уже собранные программы пропускаются мгновенно)
-    for (const o of scene.children) if (!lateFrom.has(o)) { await frame(); const t = performance.now(); try { renderer.compile(o, camera, scene); } catch (e) { /* соберётся при первом показе */ } const ms = Math.round(performance.now() - t); if (ms > 30) G.lateLog.push(['шейдеры ' + (o.name || o.type), ms]); }
-  } finally {
-  G.ready = true; document.body.classList.remove('loading2');
-  for (const b of document.querySelectorAll('#menu .wait')) { b.classList.remove('wait'); if (b === waitBtn) setTimeout(() => b.click(), 0); }
-  }
+  const basin = analyzeBasinAsync(far.userData.grid, lake).then((bs) => G.clouds.setBasin(bs)); // облака: озеро, берега, ущелья -- в потоке
+  await loadStep(78, 'Готовим берег и снаряды…');
+  await late('подзорную трубу', () => { SPY = makeSpyglass({ G, camera, post, audio, store, ach: X.ach, $, extra: X }); SPY.renderAtlas(); });
+  await late('пляж', () => { G.beach = makeBeach({ G, scene, camera, audio, toast }); G.finds = makeFinds({ G, scene, camera, beach: G.beach, audio, toast, store, ach: X.ach, onTake: (k) => FT && FT.found(k) }); });
+  await late('пеший режим', () => { FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach, store, ach: X.ach, finds: G.finds }); $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey(); });
+  await late('Як-130', () => { JM = makeJetMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt }); });
+  await late('параплан', () => { PG = makeParaMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, lens }); });
+  await loadStep(86, 'Рисуем облака…');
+  const cap = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(r, ms))]); // не ждём вечно, если поток не ответил
+  await cap(Promise.all([G.clouds.atlasReady, basin]), 25000);
+  // все шейдеры -- разом и параллельно (KHR_parallel_shader_compile), включая скрытых соперников и знаки
+  await loadStep(92, 'Прогреваем сцену…');
+  setRivals(true); G.player.b.updatePose(G.waves, 0, G.h); for (const e of [G.player, ...G.rivals]) e.model.update(e.b, 0.016, 0);
+  try { if (renderer.compileAsync) await cap(renderer.compileAsync(scene, camera), 10000); else renderer.compile(scene, camera); } catch (e) { console.warn('предварительная сборка шейдеров:', e); }
+  updateCamera(0.016, G.player.b, 0); if (post) post.render(scene, camera); else renderer.render(scene, camera); setRivals(false);
+  // прогрев: игра уже идёт под заставкой (облака встают на места, вода, брызги); ждём 10 ровных кадров подряд, но не дольше 4 с
+  G.ready = true; document.body.classList.remove('loading2'); requestAnimationFrame(loop);
+  await new Promise((res) => { const t0 = performance.now(); let prev = t0, ok = 0; const f = (t) => { ok = t - prev < 40 ? ok + 1 : 0; prev = t; if (ok >= 10 || t - t0 > 4000) res(); else requestAnimationFrame(f); }; requestAnimationFrame(f); });
+  await loadStep(100, 'Отдать швартовы!');
+  // снимок растворяется в живой сцене; меню появляется уже поверх неё, яхта падает в воду
+  clearInterval(window.__tipTimer); $('load').classList.add('done'); setTimeout(() => { $('load').hidden = true; }, 1500);
+  G.intro = { t0: performance.now() + 700 }; // падение -- когда экран загрузки уже почти растворился
   X.openLink(); // открыли ссылку друга -- сразу на воду, к нему
 }
 // пока догружается остальное: нажатие на старт (или журнал) запоминаем и выполняем, когда всё готово
@@ -553,22 +551,13 @@ let last = performance.now(), acc = 0, fpsT = 0, fpsN = 0; const sunDir = new TH
 // Экран 120 Гц и выше на телефоне: рисуем через кадр (60 к/с). Глазу разницы почти нет, а видеокарта работает
 // вдвое меньше -- телефон не греется и дольше держит заряд. 90 Гц не трогаем: там через кадр было бы 45 к/с.
 let rafPrev = 0, rafIv = 16.7, rafOdd = false;
-// ---- вступление меню: яхта падает в воду с полуметра, а картинка проявляется от неё к краям ----
-// Пока в фоне догружается остальной мир (и кадры могут подлагивать), всё, кроме яхты, под размытием; чёткий круг
-// растёт от яхты по мере готовности частей и исчезает, когда готово всё. Время -- по настоящим часам, а не по dt:
-// подлагивающие кадры не растягивают падение.
-const introV = new THREE.Vector3();
+// ---- вступление меню: яхта падает в воду с полуметра ----
+// Время -- по настоящим часам, а не по dt.
 function introDrop(b) { const I = G.intro, t = Math.max(0, (performance.now() - I.t0) / 1000), root = G.player.model.root;
   const H = 0.5, tf = Math.sqrt(2 * H / 9.81); let y; // свободное падение с полуметра ~0.32 с, потом осадка и затухающее покачивание
   if (t < tf) y = H - 4.905 * t * t; else { const u = t - tf; y = -0.22 * Math.exp(-u * 2.6) * Math.cos(u * 7.5) - 0.06 * Math.exp(-u * 1.2) * Math.sin(u * 3.1); if (!I.splash) { I.splash = 1; for (let i = 0; i < 140; i++) { const a = Math.random() * 6.283, r = 1 + Math.random() * 2.2, v = 1.5 + Math.random() * 3; G.spray.emit(b.X + Math.cos(a) * r, (b.y || 0) + 0.15, -b.Y + Math.sin(a) * r, Math.cos(a) * v, 2 + Math.random() * 3.5, Math.sin(a) * v, 0.3, 1); } audio.thump && audio.thump(0.5); } }
   root.position.y += y; if (t > tf + 3) I.dropped = 1;
-  // проявление: радиус чёткого круга -- доля готовности (части догрузки), но не быстрее 2.5 с и не раньше падения
-  const el = $('reveal'); if (!el) return; root.getWorldPosition(introV); introV.y += 3; introV.project(camera);
-  const W = window.innerWidth, Hh = window.innerHeight, x = (introV.x * 0.5 + 0.5) * W, yy = (-introV.y * 0.5 + 0.5) * Hh, diag = Math.hypot(W, Hh);
-  const want = Math.min(G.ready ? 1 : 0.88 * (I.stage || 0), Math.max(0, (t - tf * 0.6) / 2.5)); I.k = (I.k || 0) + (want - (I.k || 0)) * 0.12;
-  const R = 70 + I.k * diag * 1.15; el.style.setProperty('--rx', x.toFixed(0) + 'px'); el.style.setProperty('--ry', yy.toFixed(0) + 'px'); el.style.setProperty('--rr', R.toFixed(0) + 'px');
-  el.style.setProperty('--rb', (10 * (1 - I.k * 0.6)).toFixed(1) + 'px');
-  if (G.ready && I.k > 0.985 && I.dropped) { el.remove(); G.intro = null; } }
+  if (I.dropped) G.intro = null; }
 function loop(now) {
   requestAnimationFrame(loop);
   if (TOUCH) { const iv = now - rafPrev; rafPrev = now; if (iv > 2 && iv < 40) rafIv += (iv - rafIv) * 0.05;
