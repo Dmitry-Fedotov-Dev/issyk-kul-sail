@@ -60,12 +60,12 @@ void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(vL.y,0.,1.); // не�
   else { float f=t.a, aa=fwidth(f)*1.2+1e-4, thr=0.03+vThr*0.22; // рождение и таяние -- прозрачностью и лёгким сжатием, а не обгрызанием краёв: силуэт и контур целые
     al=smoothstep(thr,thr+aa*(1.+3.5*dl*dl),f)*clamp(1.15-vThr*1.25,0.,1.)*(1.-0.18*dl*dl); if(al<0.02) discard; // вдали край мягче, облако чуть прозрачнее
     float h=t.r-vBack*0.32-storm*0.2+(uDay<0.5?-0.1:0.);  // контражур и гроза -- облако темнее
-    float w=fwidth(t.r)*0.7+2e-3; float dp=smoothstep(0.17-w,0.17+w,h), mid=smoothstep(0.32-w,0.32+w,h), hi=smoothstep(0.56-w,0.56+w,h);
-    c=mix(D,S,dp); c=mix(c,M,mid); c=mix(c,L,hi); // 4 тона: глубокая тень, тень, основной, свет
+    float w=fwidth(t.r)*0.7+2e-3; float mid=smoothstep(0.30-w,0.30+w,h), hi=smoothstep(0.52-w,0.52+w,h);
+    c=mix(mix(D,S,0.55),M,mid); c=mix(c,L,hi); // 3 тона крупными пятнами: тень, основной, свет (грубее -- жирнее слои)
     // рефлекс: низ в тени подсвечен отражённым светом -- от бирюзовой воды и прогретых склонов; в тени он светлее
     // собственной тени, но темнее освещённой части (правило живописи: рефлекс никогда не спорит со светом)
     vec3 Rf=mix(mix(S,M,0.55), vec3(0.24,0.62,0.68), 0.45*clamp(uDay,0.,1.)*(1.-storm)); Rf=mix(Rf, mix(S,M,0.35), clamp(uDusk,0.,1.)*0.6);
-    c=mix(c, Rf, t.b*(1.-smoothstep(0.32,0.5,h))*0.85);
+    c=mix(c, Rf, step(0.45,t.b)*(1.-mid)*0.85); // рефлекс -- одной ровной полосой
     // близко: насыщеннее и контрастнее, свет чуть теплее; далеко: тона сближаются и холодеют в цвет горизонта
     c=mix(vec3(dot(c,vec3(0.3,0.59,0.11))), c, 1.+0.18*nk*(1.-storm)); c+=vec3(0.05,0.03,-0.02)*hi*nk*clamp(uDay,0.,1.)*(1.-storm);
     c=mix(c, mix(M,L,0.55), dl*0.6); c=mix(c, uHor*mix(1.,0.35,storm)*mix(0.15,1.,clamp(uDay,0.,1.)), 0.38*dl*dl);
@@ -87,9 +87,9 @@ void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(vL.y,0.,1.); // не�
       float under=smoothstep(0.05,-0.05,e), yb=1.-smoothstep(0.,0.6,vY), fwd=0.5+0.5*az;
       float lit=mix(smoothstep(0.2,0.6,h)*(0.6+0.4*smoothstep(-0.2,0.6,-az*0.5+0.5)), yb*0.85+0.15*(1.-smoothstep(0.15,0.5,h)), under);
       lit=clamp(lit*(0.8+0.4*fwd)+0.35*smoothstep(-0.06,0.22,e)-0.1,0.,1.);
-      float fw=fwidth(lit)*0.8+0.004, b1=smoothstep(0.24-fw,0.24+fw,lit), b2=smoothstep(0.48-fw,0.48+fw,lit), b3=smoothstep(0.72-fw,0.72+fw,lit);
-      vec3 c0=mix(vec3(0.22,0.13,0.32), vec3(0.11,0.06,0.20), under)*(0.7+0.3*h), c1=vec3(0.80,0.16,0.34), c2=vec3(1.22,0.44,0.14), c3=vec3(1.32,0.80,0.34);
-      vec3 fc=mix(c0,c1,b1); fc=mix(fc,c2,b2); fc=mix(fc,c3,b3);
+      float fw=fwidth(lit)*0.8+0.004, b1=smoothstep(0.34-fw,0.34+fw,lit), b2=smoothstep(0.68-fw,0.68+fw,lit);
+      vec3 c0=mix(vec3(0.24,0.13,0.34), vec3(0.12,0.06,0.21), under), c1=mix(vec3(0.95,0.22,0.28), vec3(1.22,0.44,0.14), smoothstep(-0.06,0.08,e)), c2=vec3(1.32,0.80,0.34);
+      vec3 fc=mix(c0,c1,b1); fc=mix(fc,c2,b2); // три жирных слоя: тень, огонь, золото
       c=mix(c, fc, burn*(0.85+0.15*fwd)*(1.-0.3*dl)); }
     float edge=1.-smoothstep(thr+aa*mix(0.55,0.2,fk),thr+aa*mix(1.5,0.8,fk),f);       // контур как у гор: вблизи ~1 px, вдали -- волосок
     c=mix(c,mix(mix(I,D,0.5),S,fk*0.8),edge*(vKind<0.5?0.8*pow(1.-dl,1.3):0.)); if(vKind>0.5 && vKind<1.5) al*=0.45*(0.35+0.65*clamp(uDay,0.,1.)); if(vKind>2.5) al*=0.85; }
