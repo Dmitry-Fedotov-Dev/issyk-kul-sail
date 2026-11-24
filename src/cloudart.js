@@ -108,9 +108,9 @@ function* atlasJobs() {
     return clampParts(P, w, h);
   }
   // humilis: плоские, ширина к высоте -- φ²
-  for (let k = 0; k < 5; k++) sprite('hum' + k, 192, 72, (T, C) => paint(T, C, 192, 72, cumulus(192, 72, { hm: [0.62, 0.8], asp: PHI * PHI, b: [1.6, 2.4], face: 1 }), { grad: 0.4, band: 5, k: 3 }));
+  for (let k = 0; k < 5; k++) sprite('hum' + k, 192, 72, (T, C) => paint(T, C, 192, 72, cumulus(192, 72, { hm: [0.52, 0.64], asp: PHI * PHI, b: [1.6, 2.4], face: 1 }), { grad: 0.4, band: 5, k: 3 }));
   // mediocris: пышные, ширина к высоте -- φ
-  for (let k = 0; k < 6; k++) sprite('cu' + k, 256, 128, (T, C) => paint(T, C, 256, 128, cumulus(256, 128, { hm: [0.8, 0.92], asp: PHI * rr(1, 1.15), b: [1.3, 2], face: 3 }), { grad: 0.45, band: 7, k: 4 }));
+  for (let k = 0; k < 6; k++) sprite('cu' + k, 256, 128, (T, C) => paint(T, C, 256, 128, cumulus(256, 128, { hm: [0.66, 0.76], asp: PHI * rr(1, 1.15), b: [1.3, 2], face: 3 }), { grad: 0.45, band: 7, k: 4 }));
 
   // ================= Altocumulus: поле мелких хлопьев рядами, по диагонали, с разрывами =================
   for (let k = 0; k < 4; k++) { const w = 512, h = 128;
@@ -209,7 +209,7 @@ function* atlasJobs() {
     cauli(F, w, h, base, { y0: base + fh * 0.15, y1: base + fh * 0.9, rmax: fw * 0.35, x0: fx - fw * 1.2, x1: fx + fw * 1.2 });
     paint(T, C, w, h, clampParts(F, w, h), { base, grad: 0.5, band: 6, k: 6 }); }
   // мощная кучевая / молодая грозовая без наковальни: широкий клубящийся холм, плоская тёмная подошва, ступени сбоку
-  for (let k = 0; k < 2; k++) { const w = 384, h = 352, base = 6, cx = w * rr(0.46, 0.54), hm = h - base - rr(14, 30), side = k ? 1 : -1;
+  for (let k = 0; k < 2; k++) { const w = 384, h = 352, base = 6, cx = w * rr(0.46, 0.54), hm = h - base - rr(44, 64), side = k ? 1 : -1;
     sprite('cbT' + k, w, h, (T, C) => {
       for (let f = 0, nf = 1 + k; f < nf; f++) flank(T, C, w, h, base, cx + side * w * rr(0.3, 0.36) * (1 + f * 0.45), w * rr(0.09, 0.12) / (1 + f * 0.3), hm * rr(0.28, 0.42) / (1 + f * 0.5));
       const env = mound({ cx, base, wl: w * rr(0.28, 0.34), wr: w * rr(0.28, 0.34), hm, a: rr(1.7, 2.2), b: rr(1.15, 1.5), lean: rr(-0.08, 0.08) });
