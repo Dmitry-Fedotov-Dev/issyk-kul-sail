@@ -38,7 +38,7 @@ export async function loadHeight() {
 // Общее состояние неба и света: одни и те же объекты uniform'ов разделяют небо, рельеф и вода.
 export const ENV = {
   uSun: { value: SUN }, uHor: { value: new THREE.Vector3(0.56, 0.76, 0.97) }, uCover: { value: 0.4 }, uCirrus: { value: 0.3 },
-  uStorm: { value: 0 }, uCuK: { value: 0.15 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
+  uStorm: { value: 0 }, uCuK: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
   uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() }, uFarH: { value: null },
   uRiv: { value: null }, uRivT: { value: new THREE.Vector4() }, uRivOn: { value: 0 }, uRT: { value: 0 }, // реки коридора -- маской (corridorart)
   uLC: { value: null }, uLCOn: { value: 0 }, uPaint: { value: 1 }, uLCT: { value: new THREE.Vector4(-141000, 63000, 1 / 273600, 1 / 180600) }, // маска зон OSM (по требованию) // съёмка карты сверху: дно плавно уходит в цвет озера на карте
@@ -86,22 +86,9 @@ uniform float uEnvW; varying vec3 vDir;
 void main(){ vec3 d=normalize(vDir); vec3 c=skyBase(d); float dk=mix(0.05,1.,uDay); vec3 dt3=mix(vec3(1.),vec3(1.2,0.72,0.5),uDusk)*dk;
   if(uDay<0.7 && d.y>0.){ vec2 sp=d.xz/(d.y+0.3)*110.; float hs=hash(floor(sp)); c+=vec3(0.9,0.95,1.)*step(0.982,hs)*smoothstep(0.4,0.05,length(fract(sp)-0.5))*smoothstep(0.42,0.04,uDay)*(1.-uStorm)*(0.6+2.*fract(hs*57.)); } // звёзды
   c+=vec3(1.,.95,.8)*smoothstep(0.99955,0.9998,dot(d,uSun))*6.*uSunI;
-  // перистые: высокий слой, волокна вытянуты вдоль потока
-  if(uCirrus>0.01 && d.y>0.02){ vec2 q=d.xz/(d.y+0.35)*0.6+uCloud*0.25; q=mat2(0.8,0.6,-0.6,0.8)*q;
-    float w=fbm(q*1.3); float n=fbm(vec2(q.x*0.6+w*1.6, q.y*4.2+w*0.8));
-    float a=smoothstep(0.46,0.80,n)*smoothstep(0.30,0.62,fbm(q*0.35+9.))*uCirrus*smoothstep(0.03,0.4,d.y);
-    c=mix(c, vec3(1.,0.99,0.97)*dt3, a*0.62); }
-  #ifndef LOW
-  // тонкая высокая пелена: едва заметные полосы, дают небу глубину
-  if(d.y>0.02){ vec2 v=d.xz/(d.y+0.5)*0.35+uCloud*0.12; float vl=fbm(vec2(v.x*0.7+v.y*0.4, v.y*2.6-v.x*0.3)+21.);
-    c=mix(c, vec3(0.93,0.96,1.)*dt3, smoothstep(0.45,0.9,vl)*0.20*(1.-uStorm)*uCirrus*smoothstep(0.02,0.3,d.y)); }
-  // средний ярус: мелкие высококучевые «барашки», идут быстрее и в другом масштабе -- при движении видна разница высот
-  if(d.y>0.03){ vec2 p2=d.xz/(d.y+0.24)*uCloudScale*2.7+uCloud*1.8+vec2(37.,11.); float n=fbm(p2)*0.6+vnoise(p2*3.1)*0.4, gate=smoothstep(0.42,0.62,fbm(p2*0.13+5.));
-    float a=smoothstep(0.60-uCover*0.08,0.74,n)*gate*smoothstep(0.03,0.25,d.y)*0.7*clamp(uCirrus*2.+uStorm,0.,1.);
-    c=mix(c, mix(mix(vec3(0.80,0.86,0.96),vec3(1.),smoothstep(0.6,0.85,n)), vec3(0.30,0.33,0.38), uStorm)*dt3, a); }
-  #endif
+  // старые процедурные слои неба (перистые, пелена, «барашки») убраны: облака рисуют спрайты clouds.js
   // кучевые: плотность -> покрытие, освещённость -- по перепаду плотности в сторону солнца
-  if(d.y>0.004){ vec2 p=cloudUV(d); float n=cloudDens(p), a=cloudCov(n);
+  if(uCuK>0.001 && d.y>0.004){ vec2 p=cloudUV(d); float n=cloudDens(p), a=cloudCov(n); // старые процедурные облака неба -- выключены (uCuK = 0): небо рисуют спрайтовые облака clouds.js
     if(a>0.002){ float n2=cloudDens(p+normalize(uSun.xz)*0.2);
       float lit=clamp(0.52+(n-n2)*3.4,0.,1.), core=smoothstep(0.,0.16,n-cloudLo());
       vec3 dark=mix(vec3(0.42,0.49,0.63), vec3(0.085,0.10,0.13), uStorm);
@@ -271,9 +258,9 @@ void main(){ vec3 N=normalize(vN); float h=vH;
   if(tw>0.){ float can=vnoise(vP.xz*0.075)*0.6+vnoise(vP.xz*0.21)*0.4; c=mix(c, vec3(0.07,0.20,0.07), tw*smoothstep(0.42,0.62,can)*0.85);
     vec2 cell=floor(vP.xz/11.); float rf=step(0.90,hash(cell))*step(can,0.5)*tw*(1.-smoothstep(1500.,5000.,dc));
     c=mix(c, mix(vec3(0.80,0.78,0.74), vec3(0.55,0.22,0.16), step(0.5,hash(cell+7.))), rf*0.8); }
-  // ущелья и подножия стен темнее -- рассеянный свет туда не добирается; по склонам ползут тени облаков
+  // ущелья и подножия стен темнее -- рассеянный свет туда не добирается
   float ao=mix(1., 0.72+0.28*smoothstep(0.15,0.75,r0), mt);
-  float cs=1.; if(mt>0.) cs-=0.55*cloudCov(cloudDens(vP.xz*0.00011*uCloudScale+uCloud))*mt;
+  float cs=1.; // тени старых процедурных облаков убраны
   float l=max(dot(N,uSun),0.)*uSunI*cs; vec3 amb=vec3(0.22,0.29,0.44)*mix(1.,0.62,uStorm)*ao;
   // живопись светом: солнечные склоны тёплые, золотистые; тени холодные, сине-фиолетовые; цвета гуще
   // погодный фильтр: на солнце краски сочные, в шторм -- выцветшие и холодные, на заре -- тёплые
@@ -341,9 +328,6 @@ void main(){ vec3 N=normalize(vN); float h=vH;
       pcol=mix(pcol, ink, ip*dK*0.8); }
     pcol*=0.66; // под экспозицию сцены: краски гуще, без пастельной засветки
     col=mix(col, pcol, pk); }
-  // облака цепляются за хребты: полоса тумана на высоте, рваная, плывёт по ветру
-  float band=exp(-pow((h-1500.-380.*n)/260.,2.))*smoothstep(6000.,16000.,dist); band=band>0.002 ? band*smoothstep(0.52,0.74,fbm(vP.xz*0.00045+uCloud*0.6+3.)) : 0.; // вне полосы шум не считаем
-  col=mix(col, mix(vec3(0.93,0.95,0.99),vec3(0.30,0.33,0.37),uStorm), band*(0.42+0.45*uStorm));
   // в шторм вершины уходят в тучу
   col=mix(col, vec3(0.24,0.27,0.31), uStorm*smoothstep(1300.,2600.,h)*0.8);
   col*=mix(vec3(0.045,0.06,0.11), vec3(1.), uDay); // ночью -- синий полумрак
@@ -502,13 +486,7 @@ void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
   float F=0.02+0.98*pow(1.-max(dot(N,V),0.),5.); F=min(F,0.55)*mix(1.,0.82,smoothstep(0.,0.6,rip));
   vec3 R=reflect(-V,N); R.y=abs(R.y)*0.8+0.22; R=normalize(R);
   vec3 sky=skyBase(R);
-  #ifdef LOW
-  float cr=cloudCov(vnoise(cloudUV(R)*0.6+3.1)*0.55+0.2);
-  #else
-  float cr=cloudCov(fbm(cloudUV(R)*0.45+3.1)*0.62+0.18);
-  #endif
-  // у горизонта отражения облаков сжаты в полоски тоньше пикселя: там берём среднюю облачность, а не рисунок
-  cr=mix(cr, uCover*0.45, smoothstep(0.8,10.,pxw));
+  float cr=uStorm*0.6; // старые облака в отражении убраны; в грозу вода отражает только общую пелену
   sky=mix(sky, mix(vec3(0.86,0.88,0.90), vec3(0.16,0.18,0.21), uStorm)*mix(0.05,1.,uDay), cr*0.75);
   float sd=max(dot(R,uSun),0.), far=smoothstep(100.,4000.,dist);
   vec3 spec=vec3(1.,.93,.78)*(pow(sd,mix(700.,90.,far))*mix(8.,1.2,far))*uSunI;

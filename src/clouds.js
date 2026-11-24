@@ -121,7 +121,7 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
     // w: { cover 0..1, storm 0..1, cirrus 0..1, wind {sx, sy}, clock -- часы }
     update(dt, camera, w) { T += dt; ox += (w.wind ? w.wind.sx : 2) * dt; oy += (w.wind ? w.wind.sy : 1) * dt; if (!rects || (fr++ % 2 && geo.instanceCount)) return; // список -- через кадр: облака еле ползут
       const cx = camera.position.x, cy = -camera.position.z, cz = camera.position.y; out.length = 0;
-      const storm = w.storm || 0, hr = w.clock ?? 13; ENV.uCuK.value = storm * 0.6; // старые мягкие облака неба -- только фоном в непогоду
+      const storm = w.storm || 0, hr = w.clock ?? 13; ENV.uCuK.value = 0; // старые процедурные облака неба выключены совсем
       const conv = sm(8.5, 13, hr) * (1 - sm(18, 21.5, hr)), eve = sm(16.5, 18.5, hr) * (1 - sm(21, 22.5, hr)), night = 1 - sm(6, 8, hr) * (1 - sm(20, 22, hr)); // конвекция днём; ночь
       const A = Math.max((0.15 + 0.85 * w.cover) * (0.2 + 0.8 * Math.max(conv, eve)), storm); // сколько кучевых: днём растут, вечером оседают и догорают закатом
       const Zb = (1700 + 900 * conv) * (1 - storm) + 1300 * storm;                     // основание над озером: 3300 -> 4200 м н.у.м., в грозу ~2900
