@@ -38,13 +38,13 @@ export async function loadHeight() {
 // Общее состояние неба и света: одни и те же объекты uniform'ов разделяют небо, рельеф и вода.
 export const ENV = {
   uSun: { value: SUN }, uHor: { value: new THREE.Vector3(0.56, 0.76, 0.97) }, uCover: { value: 0.4 }, uCirrus: { value: 0.3 },
-  uStorm: { value: 0 }, uEq: { value: new THREE.Matrix3() }, uCuK: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
+  uStorm: { value: 0 }, uEq: { value: new THREE.Matrix3() }, uMoon: { value: new THREE.Vector4(0, -1, 0, 0) }, uNT: { value: 0 }, uCuK: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() }, // Луна: направление и освещённая доля; uNT -- время для метеоров
   uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() }, uFarH: { value: null },
   uRiv: { value: null }, uRivT: { value: new THREE.Vector4() }, uRivOn: { value: 0 }, uRT: { value: 0 }, // реки коридора -- маской (corridorart)
   uLC: { value: null }, uLCOn: { value: 0 }, uPaint: { value: 1 }, uLCT: { value: new THREE.Vector4(-141000, 63000, 1 / 273600, 1 / 180600) }, // маска зон OSM (по требованию) // съёмка карты сверху: дно плавно уходит в цвет озера на карте
 };
 export const GLSL_COMMON = /* glsl */`
-uniform vec3 uSun, uHor; uniform float uCuK; uniform float uCover, uCirrus, uStorm, uCloudScale, uSunI, uDay, uDusk; uniform vec2 uCloud;
+uniform vec3 uSun, uHor; uniform vec4 uMoon; uniform float uNT; uniform float uCuK; uniform float uCover, uCirrus, uStorm, uCloudScale, uSunI, uDay, uDusk; uniform vec2 uCloud;
 #define HOR uHor
 float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -55,7 +55,11 @@ vec3 skyBase(vec3 d){ float y=max(d.y,0.);
   // высокогорное небо: воздуха над головой меньше, поэтому зенит тёмный, густо-синий с фиолетовым оттенком
   vec3 c=mix(uHor, vec3(0.045,0.235,0.78), smoothstep(0.,0.24,y)); c=mix(c, vec3(0.010,0.085,0.50), smoothstep(0.10,0.55,y)); c=mix(c, vec3(0.006,0.030,0.27), smoothstep(0.40,1.,y));
   c=mix(c, vec3(0.20,0.24,0.30)*(0.75+0.5*y), uStorm*0.85);
-  c*=mix(0.025,1.,uDay); // ночь
+  // ночь по палитре референса: зенит глубокий синий, ниже синий, у горизонта сине-фиолетовый с тонким свечением воздуха;
+  // при Луне небо светлеет холодным синим
+  vec3 nc=mix(vec3(0.030,0.032,0.085), vec3(0.016,0.026,0.085), smoothstep(0.,0.3,y)); nc=mix(nc, vec3(0.006,0.010,0.042), smoothstep(0.25,0.9,y));
+  nc+=vec3(0.020,0.018,0.040)*exp(-y*9.); nc+=vec3(0.020,0.034,0.080)*uMoon.w*smoothstep(-0.05,0.2,uMoon.y); nc=mix(nc, vec3(0.012,0.014,0.020), uStorm*0.85);
+  c=mix(nc, c*mix(0.025,1.,uDay), smoothstep(0.02,0.35,uDay));
   { float sg=max(dot(normalize(d.xz+1e-4),normalize(uSun.xz)),0.); c+=vec3(1.,0.42,0.14)*uDusk*(1.-uStorm)*pow(1.-y,5.)*(0.25+0.75*sg*sg); } // заря у горизонта со стороны солнца
   // солнце высокогорья: слепящий диск и широкое сияние вокруг
   float s=max(dot(d,uSun),0.), sunny=uSunI*(1.-uStorm); c+=vec3(1.,.86,.62)*(pow(s,10.)*.16+pow(s,220.)*.55)*uSunI+vec3(1.,.9,.7)*(pow(s,3.)*.10+pow(s,40.)*.35+pow(s,900.)*2.5)*sunny; return c; }
@@ -89,8 +93,21 @@ void main(){ vec3 d=normalize(vDir); vec3 c=skyBase(d); float dk=mix(0.05,1.,uDa
   if(uDay<0.6 && d.y>0.){ vec3 q=transpose(uEq)*d; vec3 g=mat3(-0.0548756,0.4941094,-0.8676661, -0.8734371,-0.4448296,-0.1980764, -0.4838350,0.7469822,0.4559838)*q;
     float b=asin(clamp(g.z,-1.,1.)), l=atan(g.y,g.x), w=0.13+0.05*cos(l);
     float band=exp(-b*b/(w*w))*(0.35+0.65*exp(-l*l/0.9)), dust=smoothstep(0.4,0.7,fbm(vec2(l*4.,b*8.)+7.))*exp(-pow((b-0.03)/0.035,2.))*(0.4+0.6*exp(-l*l/1.6));
-    float mw=band*(0.6+0.4*fbm(vec2(l*3.,b*6.)+3.))*(1.-0.7*dust); // облачная, а не полосатая: шум крупный, одинаковый вдоль и поперёк
-    c+=vec3(0.62,0.68,0.86)*mw*0.11*smoothstep(0.6,0.02,uDay)*(1.-uStorm)*smoothstep(0.,0.3,d.y); }
+    float clouds=0.55+0.45*fbm(vec2(l*3.,b*6.)+3.), grain=smoothstep(0.62,0.95,vnoise(vec2(l,b)*220.))*0.6+smoothstep(0.55,0.9,vnoise(vec2(l,b)*90.+5.))*0.4; // звёздные облака и неразрешённые звёзды
+    float mw=band*clouds*(1.-0.75*dust)*(0.8+0.5*grain), core=exp(-b*b/0.006-l*l/0.25)*(1.-0.6*dust);              // яркое ядро в Стрельце
+    float dark=smoothstep(0.6,0.02,uDay)*(1.-uStorm)*smoothstep(0.,0.3,d.y)*(1.-0.7*uMoon.w*smoothstep(-0.05,0.2,uMoon.y)); // Луна гасит Млечный Путь
+    c+=(vec3(0.56,0.50,0.86)*mw*0.2+vec3(0.95,0.82,0.75)*core*0.12)*dark; }
+  // Луна: настоящая фаза (освещённая сторона -- к солнцу), холодный рисованный диск с морями и пепельным светом, ореол
+  { vec3 m=uMoon.xyz; float cm=dot(d,m); if(cm>0.995 && m.y>-0.03){ vec3 t1=normalize(cross(vec3(0.,1.,0.),m)), t2=cross(m,t1); vec2 pp=vec2(dot(d,t1),dot(d,t2))/0.0145; float r=length(pp);
+      float day=smoothstep(0.35,0.,uDay), cl=1.-uStorm;
+      if(r<1.){ vec3 n=t1*pp.x+t2*pp.y-m*sqrt(1.-r*r); float lit=smoothstep(-0.02,0.04,dot(n,uSun)); float maria=smoothstep(0.45,0.7,fbm(pp*2.3+4.));
+        vec3 mc=mix(vec3(0.05,0.06,0.10), mix(vec3(0.92,0.95,1.05),vec3(0.66,0.72,0.86),maria), lit); c=mix(c, mc*(0.5+0.5*day)+c*0.2, (0.35+0.65*day)*cl*smoothstep(1.,0.93,r)); }
+      c+=vec3(0.45,0.55,0.85)*uMoon.w*exp(-max(r-1.,0.)*0.6)*0.12*day*cl*step(1.,r); } }
+  // метеоры: раз в ~20 с короткий росчерк в верхней части неба
+  if(uDay<0.4 && d.y>0.1){ float P=19., k=floor(uNT/P), f=(uNT-k*P)/0.8; if(f<1.){ float a1=hash(vec2(k,1.))*6.283, h1=0.45+0.4*hash(vec2(k,2.)), a2=a1+(hash(vec2(k,3.))-0.5)*0.6;
+      vec3 S=normalize(vec3(sin(a1)*cos(h1),sin(h1),cos(a1)*cos(h1))), Dv=normalize(vec3(sin(a2),-0.9,cos(a2))-S*dot(vec3(sin(a2),-0.9,cos(a2)),S)), E=normalize(S+Dv*0.22*f);
+      vec3 se=E-S; float tt=clamp(dot(d-S,se)/max(dot(se,se),1e-6),0.,1.), dd=length(d-(S+se*tt));
+      c+=vec3(0.85,0.92,1.)*exp(-dd*dd/2.5e-6)*tt*tt*(1.-f)*1.6*(1.-uStorm)*smoothstep(0.4,0.,uDay); } }
   c+=vec3(1.,.95,.8)*smoothstep(0.99955,0.9998,dot(d,uSun))*6.*uSunI;
   // старые процедурные слои неба (перистые, пелена, «барашки») убраны: облака рисуют спрайты clouds.js
   // кучевые: плотность -> покрытие, освещённость -- по перепаду плотности в сторону солнца

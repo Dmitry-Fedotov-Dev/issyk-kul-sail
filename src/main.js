@@ -512,8 +512,7 @@ function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; G.clock = (G.cl
   const day = smooth(-0.1, 0.14, sinEl), dusk = clamp(1 - Math.abs(sinEl - 0.04) / 0.26, 0, 1), sI = k.sun * smooth(-0.02, 0.22, sinEl), st = k.storm;
   ENV.uDay.value = day; ENV.uDusk.value = dusk; ENV.uSunI.value = sI; G.night = day < 0.35;
   const d2 = dusk * 0.55 * (1 - st), m = 0.03 + 0.97 * day; ENV.uHor.value.set((k.hor[0] * (1 - d2) + 0.98 * d2) * m, (k.hor[1] * (1 - d2) + 0.56 * d2) * m, (k.hor[2] * (1 - d2) + 0.36 * d2) * m + 0.012 * (1 - day)); scene.fog.color.setRGB(ENV.uHor.value.x, ENV.uHor.value.y, ENV.uHor.value.z); // Color.copy от вектора дала бы NaN и чёрные лодки
-  // ночью светит луна: слабый холодный свет с противоположной стороны неба
-  if (sinEl > 0.02) { LIGHT.copy(SUN); sunL.color.setRGB(1, 0.95 - 0.33 * dusk, 0.86 - 0.5 * dusk); sunL.intensity = 3.1 * sI; } else { LIGHT.set(-SUN.x, 0.55, -SUN.z).normalize(); sunL.color.setRGB(0.6, 0.72, 1); sunL.intensity = 0.32 * (1 - st); }
+  if (sinEl > 0.02) { LIGHT.copy(SUN); sunL.color.setRGB(1, 0.95 - 0.33 * dusk, 0.86 - 0.5 * dusk); sunL.intensity = 3.1 * sI; } else { const M = ENV.uMoon.value; if (M.y > 0.02) { LIGHT.set(M.x, M.y, M.z); sunL.intensity = (0.06 + 0.4 * M.w) * (1 - st); } else { LIGHT.set(0.2, 1, 0.1).normalize(); sunL.intensity = 0.05 * (1 - st); } sunL.color.setRGB(0.6, 0.72, 1); } // ночью светит настоящая Луна (stars.js): ярче в полнолуние, без Луны -- только свет неба
   hemi.intensity = 1.9 * (1 - 0.35 * st) * (0.1 + 0.9 * day); G.spray.uniforms.uLight.value = 0.12 + 0.88 * sI; WAKE_LIGHT.value = 0.1 + 0.9 * day;
   envT -= dt; if (dt > 0 && envT <= 0) { envT = 12; updateEnv(G.sky); } }
 // ---------- топографическая карта: квадраты, снятые сверху с настоящего 3D-мира ----------

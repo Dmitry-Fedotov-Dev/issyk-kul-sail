@@ -29,18 +29,18 @@ import { makeCloudAtlasWorker, AW, AH, PHI, IPHI } from './cloudart.js';
 import { PEAKS } from './peaks.js';
 
 const V = CURVE + `attribute vec4 aC; attribute vec4 aS; attribute vec4 aR; attribute vec4 aL;
-uniform vec3 uSun; varying vec2 vUv; varying vec3 vP; varying float vThr; varying float vBack; varying float vY; varying vec4 vL; varying float vKind; varying float vMoon; varying float vAz; varying float vU;
+uniform vec3 uSun; uniform vec4 uMoon; varying vec2 vUv; varying vec3 vP; varying float vThr; varying float vBack; varying float vY; varying vec4 vL; varying float vKind; varying float vMoon; varying float vAz; varying float vU;
 void main(){ vec3 c=aC.xyz; vec3 dir=c-cameraPosition; vec3 rt=normalize(vec3(-dir.z,0.,dir.x)+1e-4);
   vec3 up=normalize(mix(vec3(0.,1.,0.), normalize(cross(rt,normalize(dir))), aS.z*smoothstep(0.,600.,cameraPosition.y-c.y))); // сверху облако наклоняется к камере (не «картонка»), снизу стоит, как на референсе
   vec3 p=c+rt*position.x*aS.x+up*(position.y+0.5)*aS.y; vP=p;
   // свет: днём -- солнце, ночью -- луна (в игре она на противоположной стороне неба, высоко); светлая сторона облака -- к ней
-  float dayK=smoothstep(-0.05,0.05,uSun.y); vec3 Lt=normalize(mix(normalize(vec3(-uSun.x,0.55,-uSun.z)),uSun,dayK));
+  float dayK=smoothstep(-0.05,0.05,uSun.y); vec3 Lt=normalize(mix(uMoon.y>0.?uMoon.xyz:vec3(0.,1.,0.),uSun,dayK)); // ночью -- настоящая Луна
   float sr=dot(Lt,rt); float u=position.x+0.5; if(aL.w<0.5){ if(sr>0. && aS.w<1.5) u=1.-u; } else if(aL.w>1.5) u=1.-u; // светлая сторона -- к солнцу; флаг, шапка, наковальня -- по ветру (решает CPU)
   vU=u; // 0 -- край к свету (в заготовке свет слева), 1 -- от света
   vUv=vec2(aR.x+u*aR.z, aR.y+(position.y+0.5)*aR.w); vY=position.y+0.5;
   vBack=clamp(dot(uSun,normalize(vec3(dir.x,0.,dir.z)))*1.2,0.,1.)*clamp(1.-uSun.y*1.5,0.,1.)*smoothstep(-0.03,0.05,uSun.y); // солнце за облаком (после заката каймы нет -- иначе ночью светлая обводка)
   // лунная кромка: только край, обращённый к луне и вверх (не весь контур -- иначе снова «белая обводка»)
-  float side=sr>0.?position.x+0.5:0.5-position.x; vMoon=(1.-dayK)*smoothstep(0.35,1.,0.55*side+0.45*(position.y+0.5))*(0.45+0.55*clamp(dot(Lt,normalize(vec3(dir.x,0.,dir.z)))*0.5+0.5,0.,1.));
+  float side=sr>0.?position.x+0.5:0.5-position.x; vMoon=(1.-dayK)*uMoon.w*step(0.,uMoon.y)*smoothstep(0.35,1.,0.55*side+0.45*(position.y+0.5))*(0.45+0.55*clamp(dot(Lt,normalize(vec3(dir.x,0.,dir.z)))*0.5+0.5,0.,1.));
   vAz=dot(normalize(uSun.xz+1e-5),normalize(dir.xz+1e-5)); // 1 -- облако против солнца, -1 -- солнце за спиной
   vThr=aC.w; vL=aL; vKind=aS.w; p.y-=curve(p);
   gl_Position=projectionMatrix*viewMatrix*vec4(p,1.); if(aC.w>0.97) gl_Position=vec4(2.,2.,2.,1.); }`;
