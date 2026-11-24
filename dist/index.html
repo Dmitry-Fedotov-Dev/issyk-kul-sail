@@ -87,6 +87,9 @@ body:not(.foot) #dstat{display:none}
 body.foot #speed>:not(#tools),body.foot #dialwrap,body.foot #race,body.foot #mark,body.foot #brief,body.foot #bpro,body.foot [id^="p_"]{display:none!important}
 body.touchdev.foot #joy{display:block;left:calc(28px + 66px);}body.touchdev.foot #ts{display:block;left:auto;right:28px;transform:none}
 body.touchdev #ts{display:block}
+/* вступление: всё, кроме яхты, под размытием; чёткий круг растёт от яхты, пока догружается мир (main.js, introDrop) */
+#reveal{position:fixed;inset:0;pointer-events:none;--rx:50%;--ry:45%;--rr:70px;--rb:10px;backdrop-filter:blur(var(--rb)) saturate(.9);-webkit-backdrop-filter:blur(var(--rb)) saturate(.9);
+  -webkit-mask-image:radial-gradient(circle at var(--rx) var(--ry),transparent calc(var(--rr) * .55),#000 var(--rr));mask-image:radial-gradient(circle at var(--rx) var(--ry),transparent calc(var(--rr) * .55),#000 var(--rr))}
 #joy{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(22px + env(safe-area-inset-bottom,0px));width:132px;height:132px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(7,26,58,.22);pointer-events:auto;touch-action:none}
 #joy i{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 2px 10px rgba(0,18,50,.4)}
 #joy.on i{background:rgba(255,138,42,.85)}
@@ -230,6 +233,7 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
 <body>
 
 <canvas id="gl"></canvas>
+<div id="reveal" aria-hidden="true"></div>
 <div id="vign"></div>
 <div id="lens"></div>
 <div id="game" hidden>
@@ -302,7 +306,7 @@ window.addEventListener('error',function(e){fail(e&&e.message)});window.addEvent
 var lastMsg='',still=0,wd=setInterval(function(){var g=document.getElementById('loadmsg');if(!L||L.classList.contains('done')||L.onclick){clearInterval(wd);return}
 if(g.textContent!==lastMsg){lastMsg=g.textContent;still=0;return}still+=5;if(still>=45){clearInterval(wd);g.textContent+=' Загрузка затянулась: нажмите, чтобы начать заново';L.style.cursor='pointer';L.onclick=function(){location.reload()};}},5000);})();</script>
 
-<script>(function(){var src="game.58d3f477ce.js",size=6453660,m=document.getElementById('loadmsg'),f=document.getElementById('loadfill'),mb=function(b){return (b/1048576).toFixed(1)};
+<script>(function(){var src="game.f561255c3d.js",size=6454491,m=document.getElementById('loadmsg'),f=document.getElementById('loadfill'),mb=function(b){return (b/1048576).toFixed(1)};
 function tag(){var s=document.createElement('script');s.src=src;s.onerror=function(){m.textContent='Не удалось скачать игру. Проверьте интернет и нажмите, чтобы попробовать ещё раз';var L=document.getElementById('load');L.style.cursor='pointer';L.onclick=function(){location.reload()}};document.body.appendChild(s)}
 if(location.protocol==='file:'||!window.fetch||!window.ReadableStream||!window.TextDecoder){tag();return}
 m.textContent='Загружаем игру…';

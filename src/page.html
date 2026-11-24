@@ -82,6 +82,9 @@ body:not(.foot) #dstat{display:none}
 body.foot #speed>:not(#tools),body.foot #dialwrap,body.foot #race,body.foot #mark,body.foot #brief,body.foot #bpro,body.foot [id^="p_"]{display:none!important}
 body.touchdev.foot #joy{display:block;left:calc(28px + 66px);}body.touchdev.foot #ts{display:block;left:auto;right:28px;transform:none}
 body.touchdev #ts{display:block}
+/* вступление: всё, кроме яхты, под размытием; чёткий круг растёт от яхты, пока догружается мир (main.js, introDrop) */
+#reveal{position:fixed;inset:0;pointer-events:none;--rx:50%;--ry:45%;--rr:70px;--rb:10px;backdrop-filter:blur(var(--rb)) saturate(.9);-webkit-backdrop-filter:blur(var(--rb)) saturate(.9);
+  -webkit-mask-image:radial-gradient(circle at var(--rx) var(--ry),transparent calc(var(--rr) * .55),#000 var(--rr));mask-image:radial-gradient(circle at var(--rx) var(--ry),transparent calc(var(--rr) * .55),#000 var(--rr))}
 #joy{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(22px + env(safe-area-inset-bottom,0px));width:132px;height:132px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(7,26,58,.22);pointer-events:auto;touch-action:none}
 #joy i{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 2px 10px rgba(0,18,50,.4)}
 #joy.on i{background:rgba(255,138,42,.85)}
@@ -222,6 +225,7 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
 @media (max-width:520px){#brief{width:150px;top:124px}#brief p{font-size:11px}#speed b{font-size:34px}#dial{width:92px;height:92px}#toast{font-size:18px;white-space:normal;width:86vw}#hint{font-size:13px}#race{top:86px}}
 </style>
 <canvas id="gl"></canvas>
+<div id="reveal" aria-hidden="true"></div>
 <div id="vign"></div>
 <div id="lens"></div>
 <div id="game" hidden>
