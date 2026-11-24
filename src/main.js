@@ -28,6 +28,10 @@ const $ = (id) => document.getElementById(id);
 const store = { get(k) { try { return JSON.parse(localStorage.getItem('issyk.' + k)); } catch (e) { return null; /* хранилище недоступно -- играем без рекордов */ } },
   set(k, v) { try { localStorage.setItem('issyk.' + k, JSON.stringify(v)); } catch (e) { /* то же: рекорд просто не сохранится */ } } };
 
+// Safari до 16 не знает roundRect у 2D-холста: подсказки параплана рисуются ею, и без замены сборка параплана падала
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+  r = Math.min(typeof r === 'number' ? r : (r && (r[0] && r[0].x !== undefined ? r[0].x : r[0])) || 0, Math.abs(w) / 2, Math.abs(h) / 2);
+  this.moveTo(x + r, y); this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r); this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r); this.closePath(); };
 const canvas = $('gl');
 // Если устройство умеет комикс-обработку, штатное сглаживание не включаем: контуры сглаживает сама обработка,
 // а четыре копии кадра под MSAA -- самая большая статья расхода видеопамяти.
@@ -141,20 +145,24 @@ async function init() {
   // Всего этого в меню нет: река и валуны Кургак-Сая, подзорная труба, живой пляж и находки, пеший Дымок, джайлоо,
   // параплан и Як-130. Кнопки старта до готовности не теряют нажатие -- выполняют его, как только всё собрано.
   const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
-  await frame(); G.corridor = makeCorridorArt(scene, dem, dem.h); // реки и валуны коридора Кургак-Сай
-  await frame(); SPY = makeSpyglass({ G, camera, post, audio, store, ach: X.ach, $, extra: X }); SPY.renderAtlas(); // подзорная труба (spyglass.js)
-  await frame(); G.beach = makeBeach({ G, scene, camera, audio, toast }); // живой берег: отдыхающие, торговцы, ночные костры (beach.js)
-  G.finds = makeFinds({ G, scene, camera, beach: G.beach, audio, toast, store, ach: X.ach, onTake: (k) => FT && FT.found(k) }); // находки на кромке воды (finds.js)
-  await frame(); FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach, store, ach: X.ach, finds: G.finds }); // пеший Дымок (footmode.js)
-  $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey();
-  await frame(); G.jailoo = makeJailoo({ G, scene, camera, toast, ach: X.ach, store }); // джайлоо: юрты, отары, табуны, яки (jailoo.js)
-  await frame(); JM = makeJetMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt }); // Як-130 (jetmode.js)
-  await frame(); PG = makeParaMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, lens }); // параплан (paramode.js)
-  await frame(); G.clouds.setBasin(analyzeBasin(far.userData.grid, lake)); // облака: озеро, берега, ущелья
-  // шейдеры догруженного -- заранее (уже собранные пропускаются), иначе первый кадр на пляже или в небе подвис бы
-  try { if (renderer.compileAsync) await Promise.race([renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 8000))]); } catch (e) { /* соберутся при первом показе */ }
+  // каждая часть -- отдельно: если в каком-то браузере одна упадёт, остальные соберутся, а старт всё равно откроется
+  // (раньше одна ошибка оставляла кнопку старта ждать вечно -- в Safari это выглядело как «нажал, и ничего»)
+  const late = async (name, fn) => { await frame(); try { fn(); } catch (e) { console.error('догрузка:', name, e); toast('Не удалось подготовить: ' + name); } };
+  try {
+    await late('реку Кургак-Сая', () => { G.corridor = makeCorridorArt(scene, dem, dem.h); });
+    await late('подзорную трубу', () => { SPY = makeSpyglass({ G, camera, post, audio, store, ach: X.ach, $, extra: X }); SPY.renderAtlas(); });
+    await late('пляж', () => { G.beach = makeBeach({ G, scene, camera, audio, toast }); G.finds = makeFinds({ G, scene, camera, beach: G.beach, audio, toast, store, ach: X.ach, onTake: (k) => FT && FT.found(k) }); });
+    await late('пеший режим', () => { FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach, store, ach: X.ach, finds: G.finds }); $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey(); });
+    await late('джайлоо', () => { G.jailoo = makeJailoo({ G, scene, camera, toast, ach: X.ach, store }); });
+    await late('Як-130', () => { JM = makeJetMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt }); });
+    await late('параплан', () => { PG = makeParaMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, lens }); });
+    await late('облака', () => { G.clouds.setBasin(analyzeBasin(far.userData.grid, lake)); });
+    // шейдеры догруженного -- заранее (уже собранные пропускаются), иначе первый кадр на пляже или в небе подвис бы
+    try { if (renderer.compileAsync) await Promise.race([renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 8000))]); } catch (e) { /* соберутся при первом показе */ }
+  } finally {
   G.ready = true; document.body.classList.remove('loading2');
   for (const b of document.querySelectorAll('#menu .wait')) { b.classList.remove('wait'); if (b === waitBtn) setTimeout(() => b.click(), 0); }
+  }
   X.openLink(); // открыли ссылку друга -- сразу на воду, к нему
 }
 // пока догружается остальное: нажатие на старт (или журнал) запоминаем и выполняем, когда всё готово
@@ -245,7 +253,7 @@ function buildMenu() {
   const TOD = { morning: ['Утро', 7.5], day: ['День', 13], sunset: ['Закат', 19.3], night: ['Ночь', 22.3] }, setTod = (id) => { G.tod = TOD[id] ? id : 'day'; store.set('tod', G.tod); for (const c of $('tod').children) c.setAttribute('aria-pressed', c.dataset.id === G.tod); };
   for (const id in TOD) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${TOD[id][0]}</b>`; b.onclick = () => setTod(id); $('tod').appendChild(b); }
   setTod(store.get('tod') || 'day'); G.todHour = () => TOD[G.tod][1];
-  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if (X.sel === 'para') PG.startFree(X.startAt); else if (X.sel === 'jet') JM.startFree(); else startFree(); };
+  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if ((X.sel === 'para' && !PG) || (X.sel === 'jet' && !JM)) { toast('Этот снаряд не загрузился — выберите другой'); return; } if (X.sel === 'para') PG.startFree(X.startAt); else if (X.sel === 'jet') JM.startFree(); else startFree(); };
   $('brace').onclick = () => { audio.start(); X.compete(); };
   $('ragain').onclick = () => { if (JM && JM.on) JM.again(); else if (PG && PG.on) PG.again(); else if (G.mode === 'river') { $('result').hidden = true; $('briver').click(); } else X.compete(); }; $('rmenu').onclick = () => toMenu();
 }

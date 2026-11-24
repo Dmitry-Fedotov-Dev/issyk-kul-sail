@@ -13,8 +13,11 @@ export const HAZE = new THREE.Color(0.56, 0.76, 0.97);
 // на d^2/2R. Отсюда настоящий горизонт (с высоты 4 м он в 7-8 км) и берега, уходящие под него. Радиус взят
 // с поправкой на рефракцию (7/6 R). Одна формула на всё -- иначе берег разойдётся с водой.
 export const CURVE = 'float curve(vec3 p){ vec2 d=p.xz-cameraPosition.xz; return dot(d,d)/14866000.; }\n';
+// картинка из строки: через onload, а не img.decode() -- в Safari decode() больших встроенных картинок бывает,
+// что не завершается вовсе (загрузка молча вставала); ошибка -- понятным сообщением на экране загрузки
+function loadImg(src) { return new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => rej(new Error('не прочиталась карта рельефа')); img.src = src; if (img.complete && img.naturalWidth) res(img); }); }
 export async function loadHeight() {
-  const img = new Image(); img.src = HEIGHTMAP_PNG; await img.decode();
+  const img = await loadImg(HEIGHTMAP_PNG);
   const c = document.createElement('canvas'); c.width = c.height = MAP.N;
   const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
   const d = g.getImageData(0, 0, MAP.N, MAP.N).data, H = new Float32Array(MAP.N * MAP.N);
@@ -174,7 +177,7 @@ export function loadLandcover() { if (lcLoad) return; lcLoad = true; const img =
 // гребни, кулуары и осыпи видны чётко. К краям заплатка плавно переходит в обычный рельеф (300 м), над водой --
 // дно из обычной карты (в данных рельефа озеро -- ровная гладь).
 export async function loadDem(D, hNear) {
-  const img = new Image(); img.src = D.png; await img.decode(); const c = document.createElement('canvas'); c.width = D.W; c.height = D.H; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
+  const img = await loadImg(D.png); const c = document.createElement('canvas'); c.width = D.W; c.height = D.H; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
   const d = g.getImageData(0, 0, D.W, D.H).data, H = new Float32Array(D.W * D.H); for (let i = 0; i < H.length; i++) H[i] = (d[i * 4] * 256 + d[i * 4 + 1]) / 4 - 64;
   const { W, STEP, X0, Y1 } = D, Hh = D.H, X1 = X0 + (W - 1) * STEP, Y0 = Y1 - (Hh - 1) * STEP, B = 300;
   const raw = (X, Y) => { const fx = (X - X0) / STEP, fy = (Y1 - Y) / STEP, i = Math.min(W - 2, Math.max(0, fx | 0)), j = Math.min(Hh - 2, Math.max(0, fy | 0)), u = fx - i, v = fy - j, k = j * W + i;
@@ -362,7 +365,7 @@ void main(){ vec3 N=normalize(vN); float h=vH;
 // Масштаб высот дальних хребтов. 1 -- как на карте; геометрию гор не искажаем.
 export const FAR_EXAGGERATION = 1;
 export async function makeFarTerrain(holes = []) {
-  const img = new Image(); img.src = FARMAP_PNG; await img.decode();
+  const img = await loadImg(FARMAP_PNG);
   const { W, H, X0, Y1, STEP } = FAR, c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
   const d = g.getImageData(0, 0, W, H).data, hs = new Float32Array(W * H), pos = new Float32Array(W * H * 3), nor = new Float32Array(W * H * 3);

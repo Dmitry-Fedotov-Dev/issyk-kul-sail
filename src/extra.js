@@ -472,7 +472,7 @@ export function installExtra(A) {
       return R.motor ? aiMotor(e.b, c.X, c.Y, 0.72 + 0.28 * e.skill) : aiPaddle(e.b, c.X, c.Y, e.ai, dt, e.skill); },
     toMenuCraft() { if (G.mode !== 'menu') saveWear(); leaveModes(); for (const k in crafts) show(crafts[k], k === 'yacht'); G.player = yacht; document.body.classList.remove('motor'); refreshMenu(); },
     useYacht() { leaveModes(); setPlayer('yacht'); },
-    compete() { if (sel === 'jet') A.jet().startRace(); else if (sel === 'para') A.para().startRace(); else if (sel === 'yacht') A.startRace(); else startRace2(); }, get startAt() { return startAt; },
+    compete() { if ((sel === 'jet' && !A.jet()) || (sel === 'para' && !A.para())) { toast('Этот снаряд не загрузился — выберите другой'); return; } if (sel === 'jet') A.jet().startRace(); else if (sel === 'para') A.para().startRace(); else if (sel === 'yacht') A.startRace(); else startRace2(); }, get startAt() { return startAt; },
     onFreePre() { leaveModes(); setPlayer(sel); },
     onFree() { G.modeT = 0; const P = G.player; let cx = 0, cy = -600;
       if (startAt) { A.placeBoat(P, startAt.X, startAt.Y, A.openWaterHeading(startAt.X, startAt.Y), startAt.land ? 0 : 1); G.camYaw = P.b.th; if (!startAt.land) { cx = startAt.X; cy = startAt.Y; } }
