@@ -101,7 +101,6 @@ async function init() {
   const water = makeWater(tex, 1); scene.add(water.mesh);
   const before = new Set(scene.children), shore = makeShore(h, scene), shoreObjs = scene.children.filter((o) => !before.has(o));
   const shoreArt = makeShoreArt(scene, hA);
-  const corridor = makeCorridorArt(scene, dem, dem.h); // реки и валуны коридора Кургак-Сай -- берег // берег Чолпон-Аты по OpenStreetMap: дома, аллеи, сады, зонтики, тушь уреза и дорог
   const hb = (x, y) => Math.max(hA(x, y), shore.pierH(x, y)); // дно + причал: то, обо что можно удариться
   const wind = new Wind(PRESETS.santash, hA), waves = new Waves();
   const spray = makeSpray(); scene.add(spray.mesh);
@@ -111,28 +110,20 @@ async function init() {
   const rivals = [], ensureRivals = () => { if (!rivals.length) rivals.push(mk({ hull: 0xf4f3ee, accent: '#1f6fd0', text: 'KGZ 21' }, 'Ала-Тоо', 0.95), mk({ hull: 0xe9c33c, accent: '#20242b', text: 'KGZ 4' }, 'Манас', 0.9), mk({ hull: 0x2f8f5a, accent: '#f4f3ee', text: 'KGZ 33' }, 'Чайка', 0.86)); };
   const marks = { W: makeMark(0xff7a1a), L: makeMark(0xffd21f), pin: makeMark(0xff3b30), com: makeMark(0x2f7de2) };
   for (const k in marks) { marks[k].visible = false; scene.add(marks[k]); }
-  G = { shoreArt, corridor, lake, mapObjs: [nearT, demT, far, ...shoreObjs], ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
+  G = { shoreArt, corridor: null, lake, mapObjs: [nearT, demT, far, ...shoreObjs], ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
     cam: 0, camYaw: 0, orbit: 0, orbitP: 0, zoom: 1, orbitV: 0, shake: 0, hintT: 0, free: null, toastT: 0, frame: 0, slow: 0 };
   if (!PRESETS[G.preset]) G.preset = 'santash';
   X = installExtra({ mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
     setPreset: (id) => { if (PRESETS[id]) { G.preset = id; applyPreset(); } }, para: () => PG, jet: () => JM });
-  SPY = makeSpyglass({ G, camera, post, audio, store, ach: X.ach, $, extra: X }); SPY.renderAtlas(); // подзорная труба (spyglass.js)
-  G.beach = makeBeach({ G, scene, camera, audio, toast }); // живой берег: отдыхающие, торговцы, ночные костры (beach.js)
-  G.finds = makeFinds({ G, scene, camera, beach: G.beach, audio, toast, store, ach: X.ach, onTake: (k) => FT && FT.found(k) }); // находки на кромке воды (finds.js)
-  FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach, store, ach: X.ach, finds: G.finds }); // пеший Дымок (footmode.js)
-  $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey();
   G.pro = !!store.get('pro'); $('bpro').classList.toggle('on', G.pro);
   G.hMesh = (x, y) => { const v = demT.userData.meshH(x, y); return v === null ? hA(x, y) : v; }; // высота видимой земли -- для персонажей
   // высота нарисованной земли везде: ущелье -- подробная сетка, у Чолпон-Аты -- ближняя, дальше -- грубая (по её треугольникам)
   G.hVis = (x, y) => { let v = demT.userData.meshH(x, y); if (v !== null) return v; if (x > NX0 && x < NX1 && y > NY0 && y < NY1) { v = nearT.userData.meshH(x, y); if (v !== null) return v; } v = far.userData.meshH(x, y); return v === null ? hA(x, y) : v; };
   G.holes = RIVER_HOLES;
-  G.jailoo = makeJailoo({ G, scene, camera, toast, ach: X.ach, store }); // джайлоо: юрты, отары, табуны, яки (jailoo.js)
   G.clouds = makeSpriteClouds(scene, hA); // разбор котловины (озеро, берега, ущелья) -- уже после показа меню, см. ниже // рисованные кучевые облака (clouds.js)
   G.mini = makeMinimap(hA); G.mmZ = store.get('mmZ') ?? 1; // миникарта в компасе; масштаб -- тапом по компасу
   $('dialwrap').addEventListener('pointerdown', (e) => { e.stopPropagation(); }); $('dialwrap').onclick = (e) => { e.stopPropagation(); G.mmZ = (G.mmZ + 1) % 3; store.set('mmZ', G.mmZ); audio.tick && audio.tick(); };
   G.mmRange = (para) => (para ? [240, 1500, 6000] : [400, 1500, 5000])[G.mmZ];
-  JM = makeJetMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt }); // Як-130 (jetmode.js)
-  PG = makeParaMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, lens }); // параплан (paramode.js)
   buildMenu(); applyPreset(); toMenu(); resize();
   // Шейдеры собираются при первом показе каждого объекта, и это подвешивало меню на несколько секунд. Собираем всё
   // заранее, пока ещё виден экран загрузки, включая соперников и знаки, которые в меню скрыты (иначе фриз был бы
@@ -145,10 +136,31 @@ async function init() {
   await loadStep(100, 'Отдать швартовы!');
   // снимок растворяется в живой сцене; меню появляется уже поверх неё
   clearInterval(window.__tipTimer); $('load').classList.add('done'); setTimeout(() => { $('load').hidden = true; }, 1500);
-  setTimeout(() => G.clouds.setBasin(analyzeBasin(far.userData.grid, lake)), 600); // облака всё равно ждут атлас -- полсекунды разбора не держат загрузку
   requestAnimationFrame(loop);
+  // ---- догрузка в фоне: меню уже на экране, яхта качается; остальное собирается по кусочку между кадрами ----
+  // Всего этого в меню нет: река и валуны Кургак-Сая, подзорная труба, живой пляж и находки, пеший Дымок, джайлоо,
+  // параплан и Як-130. Кнопки старта до готовности не теряют нажатие -- выполняют его, как только всё собрано.
+  const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+  await frame(); G.corridor = makeCorridorArt(scene, dem, dem.h); // реки и валуны коридора Кургак-Сай
+  await frame(); SPY = makeSpyglass({ G, camera, post, audio, store, ach: X.ach, $, extra: X }); SPY.renderAtlas(); // подзорная труба (spyglass.js)
+  await frame(); G.beach = makeBeach({ G, scene, camera, audio, toast }); // живой берег: отдыхающие, торговцы, ночные костры (beach.js)
+  G.finds = makeFinds({ G, scene, camera, beach: G.beach, audio, toast, store, ach: X.ach, onTake: (k) => FT && FT.found(k) }); // находки на кромке воды (finds.js)
+  await frame(); FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach, store, ach: X.ach, finds: G.finds }); // пеший Дымок (footmode.js)
+  $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey();
+  await frame(); G.jailoo = makeJailoo({ G, scene, camera, toast, ach: X.ach, store }); // джайлоо: юрты, отары, табуны, яки (jailoo.js)
+  await frame(); JM = makeJetMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt }); // Як-130 (jetmode.js)
+  await frame(); PG = makeParaMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, lens }); // параплан (paramode.js)
+  await frame(); G.clouds.setBasin(analyzeBasin(far.userData.grid, lake)); // облака: озеро, берега, ущелья
+  // шейдеры догруженного -- заранее (уже собранные пропускаются), иначе первый кадр на пляже или в небе подвис бы
+  try { if (renderer.compileAsync) await Promise.race([renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 8000))]); } catch (e) { /* соберутся при первом показе */ }
+  G.ready = true; document.body.classList.remove('loading2');
+  for (const b of document.querySelectorAll('#menu .wait')) { b.classList.remove('wait'); if (b === waitBtn) setTimeout(() => b.click(), 0); }
   X.openLink(); // открыли ссылку друга -- сразу на воду, к нему
 }
+// пока догружается остальное: нажатие на старт (или журнал) запоминаем и выполняем, когда всё готово
+let waitBtn = null; document.body.classList.add('loading2');
+$('menu').addEventListener('click', (e) => { if (G && G.ready) return; const b = e.target.closest('.modes .btn, #bjournal'); if (!b) return;
+  e.preventDefault(); e.stopImmediatePropagation(); for (const o of document.querySelectorAll('#menu .wait')) o.classList.remove('wait'); b.classList.add('wait'); waitBtn = b; }, true);
 
 function applyPreset() {
   const p = PRESETS[G.preset]; G.wind.set(p); G.waves.setFromWind(p.speed, p.dir * DEG, p.fetch); G.water.setWaves(G.waves);
@@ -539,7 +551,7 @@ function loop(now) {
   if (!G.freeze) tick(dt); // freeze -- только для тестов: мир стоит, картинка рисуется
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
-  lodTick(dt);   G.jailoo.update(dt, G.t); G.clouds.update(dt, camera, { cover: Math.min(1, Math.max(0, (ENV.uCover.value + 0.62) / 1.48)), storm: ENV.uStorm.value, cirrus: ENV.uCirrus.value, wind: G.wind, clock: G.clock, preset: G.preset }); // облачность погоды (-0.62..0.86) -> 0..1; пресет -- какой ветер (улан, санташ, бриз)
+  lodTick(dt);   if (G.jailoo) G.jailoo.update(dt, G.t); G.clouds.update(dt, camera, { cover: Math.min(1, Math.max(0, (ENV.uCover.value + 0.62) / 1.48)), storm: ENV.uStorm.value, cirrus: ENV.uCirrus.value, wind: G.wind, clock: G.clock, preset: G.preset }); // облачность погоды (-0.62..0.86) -> 0..1; пресет -- какой ветер (улан, санташ, бриз)
   if (G.beach) G.beachHint = G.beach.update(dt, FT && FT.on ? FT.state : null);
   if (G.finds && G.mode !== 'menu') G.finds.update(dt, FT && FT.on && !FT.state.swim && FT.state.st !== 'dis' ? FT.state : null, G.beach.dayN, FT ? FT.magnet : 1.2);
   beachSound(dt, b);
