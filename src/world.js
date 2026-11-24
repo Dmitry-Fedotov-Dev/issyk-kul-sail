@@ -438,7 +438,10 @@ uniform sampler2D uHeight, uFarH; uniform vec4 uLakeT;
 // за подробной картой -- грубая карта всей котловины (600 м); низины вне Иссык-Куля в ней подняты над водой
 float farH(vec2 xz){ return texture2D(uFarH, vec2((xz.x-uLakeT.x)*uLakeT.z, (uLakeT.y+xz.y)*uLakeT.w)).r; }
 float terrH(vec2 xz){ vec2 uv=(vec2(xz.x,xz.y)/${MAP.M}+vec2(${MAP.OX}.5,${MAP.OY}.5))/${MAP.N}.; if(uv.x<0.||uv.x>1.||uv.y<0.||uv.y>1.) return farH(xz);
-  vec4 t=texture2D(uHeight,uv); return (t.r*65280.+t.g*255.)/4.-64.; }`;
+  vec4 t=texture2D(uHeight,uv); float hn=(t.r*65280.+t.g*255.)/4.-64.;
+  // ближняя карта хранит глубину только до -64 м: глубже -- берём настоящую из дальней, плавно, иначе на границе карт
+  // цвет воды скачком менялся и с высоты озеро делила прямая полоса
+  float hf=farH(xz); return mix(hn, hf, smoothstep(-12.,-40.,hn)); } // у берега -- подробная карта, на глубине -- общая`;
   const mat = new THREE.ShaderMaterial({ defines: { ...QUALITY_DEFS[2] },
     uniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide, extensions: { derivatives: true },
     vertexShader: CURVE + TERR + /* glsl */`

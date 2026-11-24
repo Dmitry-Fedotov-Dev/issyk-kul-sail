@@ -161,9 +161,8 @@ async function init() {
   G.ready = true; document.body.classList.remove('loading2'); requestAnimationFrame(loop);
   await new Promise((res) => { const t0 = performance.now(); let prev = t0, ok = 0; const f = (t) => { ok = t - prev < 40 ? ok + 1 : 0; prev = t; if (ok >= 10 || t - t0 > 4000) res(); else requestAnimationFrame(f); }; requestAnimationFrame(f); });
   await loadStep(100, 'Отдать швартовы!');
-  // снимок растворяется в живой сцене; меню появляется уже поверх неё, яхта падает в воду
+  // снимок растворяется в живой сцене; меню появляется уже поверх неё
   clearInterval(window.__tipTimer); $('load').classList.add('done'); setTimeout(() => { $('load').hidden = true; }, 1500);
-  G.intro = { t0: performance.now() + 700 }; // падение -- когда экран загрузки уже почти растворился
   X.openLink(); // открыли ссылку друга -- сразу на воду, к нему
 }
 // пока догружается остальное: нажатие на старт (или журнал) запоминаем и выполняем, когда всё готово
@@ -551,13 +550,6 @@ let last = performance.now(), acc = 0, fpsT = 0, fpsN = 0; const sunDir = new TH
 // Экран 120 Гц и выше на телефоне: рисуем через кадр (60 к/с). Глазу разницы почти нет, а видеокарта работает
 // вдвое меньше -- телефон не греется и дольше держит заряд. 90 Гц не трогаем: там через кадр было бы 45 к/с.
 let rafPrev = 0, rafIv = 16.7, rafOdd = false;
-// ---- вступление меню: яхта падает в воду с полуметра ----
-// Время -- по настоящим часам, а не по dt.
-function introDrop(b) { const I = G.intro, t = Math.max(0, (performance.now() - I.t0) / 1000), root = G.player.model.root;
-  const H = 0.5, tf = Math.sqrt(2 * H / 9.81); let y; // свободное падение с полуметра ~0.32 с, потом осадка и затухающее покачивание
-  if (t < tf) y = H - 4.905 * t * t; else { const u = t - tf; y = -0.22 * Math.exp(-u * 2.6) * Math.cos(u * 7.5) - 0.06 * Math.exp(-u * 1.2) * Math.sin(u * 3.1); if (!I.splash) { I.splash = 1; for (let i = 0; i < 140; i++) { const a = Math.random() * 6.283, r = 1 + Math.random() * 2.2, v = 1.5 + Math.random() * 3; G.spray.emit(b.X + Math.cos(a) * r, (b.y || 0) + 0.15, -b.Y + Math.sin(a) * r, Math.cos(a) * v, 2 + Math.random() * 3.5, Math.sin(a) * v, 0.3, 1); } audio.thump && audio.thump(0.5); } }
-  root.position.y += y; if (t > tf + 3) I.dropped = 1;
-  if (I.dropped) G.intro = null; }
 function loop(now) {
   requestAnimationFrame(loop);
   if (TOUCH) { const iv = now - rafPrev; rafPrev = now; if (iv > 2 && iv < 40) rafIv += (iv - rafIv) * 0.05;
@@ -645,7 +637,7 @@ function tick(dt) {
 
   // модели, след, брызги
   for (const e of boats) { e.model.update(e.b, dt, G.t); e.wake.update(e.b, dt, G.t, G.waves); }
-  if (G.intro) introDrop(b);
+
   const sp = b.speed, fx = Math.sin(b.th), fz = -Math.cos(b.th), rx = Math.cos(b.th), rz = Math.sin(b.th), HL = b.hl || 3.1;
   if (!b.capsized && sp > 2.1) { const k = (sp - 2.1) * 26 * dt + Math.max(0, -b.slopeF) * sp * 30 * dt, cnt = Math.floor(k + Math.random());
     const lee = b.phi > 0 ? 1 : -1; for (let i = 0; i < cnt; i++) { const s = Math.random() < 0.5 ? 1 : -1;
