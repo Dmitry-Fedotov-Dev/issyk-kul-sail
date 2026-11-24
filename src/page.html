@@ -203,6 +203,18 @@ body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168
   #menu{padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}}
 @media (max-width:640px) and (max-height:700px){#card p.lead{display:none}#gfx{margin-bottom:10px}.lbl{margin-bottom:4px;font-size:10px}.chips,#crafts{margin-bottom:8px}.chip{padding:7px 4px}#crafts .chip{padding:7px 4px}.namebox{margin-bottom:8px}#pname{padding:7px 10px}.btn{min-height:48px;padding:10px 16px}.modes{gap:6px}.links{margin-top:10px}}
 @media (max-height:460px){#card p.lead,#how,#gfx,#gfx-lbl{display:none}#card h1{font-size:30px}.chips{margin-bottom:10px}.modes{flex-direction:row}}
+/* телефон: лист управления компактнее, его верх ниже -- яхта целиком видна и стоит в центре открытой воды над листом
+   (композиционный центр меню). Снаряды -- одной лентой с прокруткой, два режима -- в одну строку, имя без подписи */
+@media (max-width:640px){
+  #mbot>.lbl:first-child{display:none}
+  #crafts{display:flex;flex-wrap:nowrap;overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:none;margin-inline:-20px;padding:2px 20px 4px;scroll-padding-inline:20px}
+  #crafts::-webkit-scrollbar{display:none}
+  #crafts .chip{flex:0 0 auto;min-width:92px;scroll-snap-align:start}
+  .modes{flex-direction:row;gap:8px}
+  .modes .btn{flex:1 1 0;min-width:0;padding:11px 12px;font-size:15px;min-height:0;line-height:1.2}
+  .modes .btn small{font-size:11px;line-height:1.25}
+}
+@media (max-width:640px) and (max-height:700px){.modes .btn small{display:none}.modes .btn{padding:12px}}
 @media (max-width:520px){#brief{width:150px;top:124px}#brief p{font-size:11px}#speed b{font-size:34px}#dial{width:92px;height:92px}#toast{font-size:18px;white-space:normal;width:86vw}#hint{font-size:13px}#race{top:86px}}
 </style>
 <canvas id="gl"></canvas>
