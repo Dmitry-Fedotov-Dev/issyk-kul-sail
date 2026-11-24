@@ -46,8 +46,9 @@ function* atlasJobs() {
   function lumps(parts, w, h, { x0, x1, r0, r1, ymin = 0, ymax = 1e9, dz = 0, gap = [1, 2], sink = [0.35, 0.7], crease = 0, skip = 0, down = false, rel = null, base = 0 }) {
     const M = maskOf(parts, w, h), t = down ? botProf(M, w, h) : topProf(M, w, h);
     for (let x = Math.max(2, x0); x < Math.min(w - 2, x1);) { const ty = t[Math.round(x)]; if (ty < 0 || ty < ymin || ty > ymax) { x += 3; continue; }
-      const rad = rel ? Math.max(r0, Math.min(r1, (ty - base) * rr(...rel))) : pr(r0, r1); if (r() >= skip) parts.push({ x, y: down ? ty + rad * rr(...sink) : ty - rad * rr(...sink), rx: rad * rr(1, 1.35), ry: rad, dz: dz < 0 ? rad * -dz : dz, crease: r() < crease });
-      x += rad * rr(gap[0], gap[1]); }
+      let rad = rel ? Math.max(r0, Math.min(r1, (ty - base) * rr(...rel))) : pr(r0, r1); const sk = rr(...sink); if (down) rad = Math.min(rad, (ty - 3) / Math.max(0.05, 1 - sk)); // доля снизу не уходит за край
+      if (r() >= skip && rad > 1.5) parts.push({ x, y: down ? ty + rad * sk : ty - rad * sk, rx: rad * rr(1, 1.35), ry: rad, dz: dz < 0 ? rad * -dz : dz, crease: r() < crease });
+      x += Math.max(2, rad * rr(gap[0], gap[1])); }
   }
   // выступы по боковому контуру (крутые бока башен): размер -- доля местной полуширины
   function lumpsSide(parts, w, h, { side, y0, y1, rel, r0, r1, gap = [1, 1.9], sink = [0.3, 0.6], crease = 0, skip = 0, dz = -0.3 }) {
@@ -62,7 +63,7 @@ function* atlasJobs() {
   const mound = ({ cx, base, wl, wr, hm, a = 2, b = 2, lean = 0, zk = 0.6, v0 = 0.3, rb = 0.3 }) => ({ fn: (x, y) => { const v1 = (y - base) / hm; if (v1 < 0 || v1 >= 1) return -1; const dx1 = x - cx - lean * v1 * hm, u1 = Math.min(1, Math.abs(dx1) / (dx1 < 0 ? wl : wr)), v = v1 - rb * u1 ** 2.5; if (v < 0) return -1; // подошва к краям приподнята -- углы круглые
     const dx = x - cx - lean * v * hm, u = Math.abs(dx) / (dx < 0 ? wl : wr), e = u ** a + (v0 + (1 - v0) * v) ** b;
     return e >= 1 ? -1 : Math.min(wl, wr, hm) * zk * Math.sqrt(1 - e); }, box: [cx - wl - Math.abs(lean) * hm - 1, cx + wr + Math.abs(lean) * hm + 1, base, base + hm] });
-  const clampParts = (P, w, h) => { for (const l of P) if (!l.fn) { l.rx = Math.min(l.rx, l.x - 3, w - 3 - l.x); l.ry = Math.min(l.ry, h - 3 - l.y); } return P.filter((l) => l.fn || (l.rx > 1.5 && l.ry > 1.5)); };
+  const clampParts = (P, w, h) => { for (const l of P) if (!l.fn) { l.rx = Math.min(l.rx, l.x - 3, w - 3 - l.x); l.ry = Math.min(l.ry, h - 3 - l.y, l.y - 3); } return P.filter((l) => l.fn || (l.rx > 1.5 && l.ry > 1.5)); }; // в пределах заготовки -- иначе край срежет прямой
 
   // одна масса: поле -> тон в T, маска в C. sep -- тёмная линия там, где масса легла поверх уже нарисованной
   function paint(T, C, w, h, parts, { k = 6, grad = 0.42, band = 4, line = 1.4, lift = 0.06, base = 0, cut = null, sep = true } = {}) {
@@ -127,13 +128,14 @@ function* atlasJobs() {
     sprite('ci' + k, W, H, (T, C) => { const bundles = 2 + Math.floor(r() * 3);
       for (let b = 0; b < bundles; b++) { const bx = rr(20, 260), by = rr(25, 70), Lb = rr(140, 300), ang = rr(-0.12, 0.18), hook = rr(-1, 1) * (k % 2 ? 1 : 0.3), nf = 4 + Math.floor(r() * 8);
         for (let f = 0; f < nf; f++) { const off = rr(-9, 9), s0 = rr(0, 0.35), s1 = rr(0.55, 1), th = rr(0.7, 2.4), div = rr(-0.08, 0.08);
-          for (let t = s0; t < s1; t += 0.5 / Lb) { const x = bx + t * Lb, py = by + off + t * Lb * (ang + div * t) + hook * 22 * Math.pow(Math.max(0, t - 0.7) / 0.3, 2), hw = th * Math.sin(Math.PI * (t - s0) / (s1 - s0));
+          for (let t = s0; t < s1; t += 0.5 / Lb) { const x = bx + t * Lb, py = by + off + t * Lb * (ang + div * t) + hook * 22 * Math.pow(Math.max(0, t - 0.7) / 0.3, 2), ed = Math.min(py - 4, H - 5 - py, x - 4, W - 5 - x), hw = th * Math.sin(Math.PI * (t - s0) / (s1 - s0)) * Math.max(0, Math.min(1, ed / 8)); // у края заготовки волокно сходит на нет
+            if (hw <= 0.05) continue;
             for (let y = Math.floor(py - hw - 1); y <= py + hw + 1; y++) { if (y < 1 || y >= H - 1 || x < 1 || x >= W - 1) continue; if (1 - Math.abs(y - py) / Math.max(hw, 0.3) <= 0) continue; const kk = y * W + Math.round(x); C[kk] = 1; T[kk] = Math.max(T[kk], y > py - 0.3 ? 0.9 : 0.45); } } } } }, 2); }
 
   // ================= Lenticularis: гладкие линзы, иногда стопкой «тарелок», верхние уже =================
   for (let k = 0; k < 4; k++) { const w = 384, h = 112;
     sprite('len' + k, w, h, (T, C) => { const nL = [1, 2, 3, 2][k]; let yb = 5, a = w * rr(0.34, 0.44); const cx0 = w * rr(0.46, 0.54);
-      for (let i = 0; i < nL; i++) { const t = rr(20, 30) * (1 - i * 0.15), b = rr(5, 9), yc = yb + b, ai = a, cxi = cx0 + w * rr(-0.05, 0.05), wav = rr(0, 1.6), ph = rr(0, 6);
+      for (let i = 0; i < nL; i++) { const t = rr(20, 30) * (1 - i * 0.15), b = rr(5, 9), yc = yb + b, cxi = cx0 + w * rr(-0.05, 0.05), ai = Math.min(a, cxi - 6, w - 6 - cxi), wav = rr(0, 1.6), ph = rr(0, 6);
         const fn = (x, y) => { const u = (x - cxi) / ai; if (Math.abs(u) >= 1) return -1; const q = 1 - u * u, tp = yc + t * Math.pow(q, 0.6) + wav * Math.sin(x * 0.05 + ph) * q, bt = yc - b * Math.pow(q, 0.9);
           return y > tp || y < bt ? -1 : Math.sqrt((tp - y) * (y - bt)) * 1.3; };
         paint(T, C, w, h, [{ fn, box: [cxi - ai, cxi + ai, yc - b - 1, yc + t + 3] }], { grad: 0.5, band: 2, k: 4 });
@@ -263,8 +265,8 @@ function* atlasJobs() {
   for (const it of items) if (it.fill) { it.T = new Float32Array(it.w * it.h); it.C = new Uint8Array(it.w * it.h); it.fill(it.T, it.C); yield; }
   // ---------- упаковка полками (по убыванию высоты) и запись: тон, кайма, расстояние до края ----------
   items.sort((a, b) => b.h - a.h); let sx = 0, sy = 0, sh = 0;
-  for (const it of items) { yield; if (sx + it.w > AW) { sx = 0; sy += sh + 2; sh = 0; } if (sy + it.h > AH) throw new Error('атлас облаков переполнен');
-    const x0 = sx, y0 = sy; sx += it.w + 2; sh = Math.max(sh, it.h); const { w, h } = it;
+  for (const it of items) { yield; if (sx + it.w > AW) { sx = 0; sy += sh + 4; sh = 0; } if (sy + it.h > AH) throw new Error('атлас облаков переполнен');
+    const x0 = sx, y0 = sy; sx += it.w + 4; sh = Math.max(sh, it.h); const { w, h } = it; // зазор 4 px: на мелких мипах соседние заготовки не просвечивают обрывками
     rects[it.name] = [x0 / AW, y0 / AH, w / AW, h / AH]; px[it.name] = [x0, y0, w, h];
     if (it.raw) { for (let y = 0; y < h; y++) data.set(it.raw.subarray(y * w * 4, (y + 1) * w * 4), ((y0 + y) * AW + x0) * 4); continue; }
     const { T, C } = it, D = new Float32Array(w * h); for (let k = 0; k < w * h; k++) D[k] = C[k] ? 1e9 : 0;
