@@ -269,7 +269,13 @@ function* atlasJobs() {
     const x0 = sx, y0 = sy; sx += it.w + 4; sh = Math.max(sh, it.h); const { w, h } = it; // зазор 4 px: на мелких мипах соседние заготовки не просвечивают обрывками
     rects[it.name] = [x0 / AW, y0 / AH, w / AW, h / AH]; px[it.name] = [x0, y0, w, h];
     if (it.raw) { for (let y = 0; y < h; y++) data.set(it.raw.subarray(y * w * 4, (y + 1) * w * 4), ((y0 + y) * AW + x0) * 4); continue; }
-    const { T, C } = it, D = new Float32Array(w * h); for (let k = 0; k < w * h; k++) D[k] = C[k] ? 1e9 : 0;
+    const { T, C } = it;
+    // оторванные мелкие кусочки (меньше 6% главной массы) убираем: вдали они читаются «пузырьками» над облаком
+    if (!it.name.startsWith('ci')) { const lab = new Int32Array(w * h).fill(-1), sz = [];
+      for (let k0 = 0; k0 < w * h; k0++) { if (!C[k0] || lab[k0] >= 0) continue; const id = sz.length, st = [k0]; let c = 0; lab[k0] = id;
+        while (st.length) { const k = st.pop(); c++; const i = k % w; for (const n of [i > 0 ? k - 1 : -1, i < w - 1 ? k + 1 : -1, k - w, k + w]) if (n >= 0 && n < w * h && C[n] && lab[n] < 0) { lab[n] = id; st.push(n); } } sz.push(c); }
+      const big = Math.max(0, ...sz); for (let k = 0; k < w * h; k++) if (C[k] && sz[lab[k]] < big * 0.06) C[k] = 0; }
+    const D = new Float32Array(w * h); for (let k = 0; k < w * h; k++) D[k] = C[k] ? 1e9 : 0;
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const k = y * w + x; if (!D[k]) continue;
       D[k] = Math.min(D[k], x > 0 ? D[k - 1] + 1 : 1, y > 0 ? D[k - w] + 1 : 1, x > 0 && y > 0 ? D[k - w - 1] + 1.414 : 1.414, x < w - 1 && y > 0 ? D[k - w + 1] + 1.414 : 1.414); }
     for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) { const k = y * w + x; if (!D[k]) continue;

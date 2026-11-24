@@ -29,22 +29,26 @@ import { makeCloudAtlasAsync, AW, AH, PHI, IPHI } from './cloudart.js';
 import { PEAKS } from './peaks.js';
 
 const V = CURVE + `attribute vec4 aC; attribute vec4 aS; attribute vec4 aR; attribute vec4 aL;
-uniform vec3 uSun; varying vec2 vUv; varying vec3 vP; varying float vThr; varying float vBack; varying float vY; varying vec4 vL; varying float vKind;
+uniform vec3 uSun; varying vec2 vUv; varying vec3 vP; varying float vThr; varying float vBack; varying float vY; varying vec4 vL; varying float vKind; varying float vMoon;
 void main(){ vec3 c=aC.xyz; vec3 dir=c-cameraPosition; vec3 rt=normalize(vec3(-dir.z,0.,dir.x)+1e-4);
   vec3 up=normalize(mix(vec3(0.,1.,0.), normalize(cross(rt,normalize(dir))), aS.z*smoothstep(0.,600.,cameraPosition.y-c.y))); // сверху облако наклоняется к камере (не «картонка»), снизу стоит, как на референсе
   vec3 p=c+rt*position.x*aS.x+up*(position.y+0.5)*aS.y; vP=p;
-  float sr=dot(uSun,rt); float u=position.x+0.5; if(aL.w<0.5){ if(sr>0. && aS.w<1.5) u=1.-u; } else if(aL.w>1.5) u=1.-u; // светлая сторона -- к солнцу; флаг, шапка, наковальня -- по ветру (решает CPU)
+  // свет: днём -- солнце, ночью -- луна (в игре она на противоположной стороне неба, высоко); светлая сторона облака -- к ней
+  float dayK=smoothstep(-0.05,0.05,uSun.y); vec3 Lt=normalize(mix(normalize(vec3(-uSun.x,0.55,-uSun.z)),uSun,dayK));
+  float sr=dot(Lt,rt); float u=position.x+0.5; if(aL.w<0.5){ if(sr>0. && aS.w<1.5) u=1.-u; } else if(aL.w>1.5) u=1.-u; // светлая сторона -- к солнцу; флаг, шапка, наковальня -- по ветру (решает CPU)
   vUv=vec2(aR.x+u*aR.z, aR.y+(position.y+0.5)*aR.w); vY=position.y+0.5;
-  vBack=clamp(dot(uSun,normalize(vec3(dir.x,0.,dir.z)))*1.2,0.,1.)*clamp(1.-uSun.y*1.5,0.,1.); // солнце за облаком
+  vBack=clamp(dot(uSun,normalize(vec3(dir.x,0.,dir.z)))*1.2,0.,1.)*clamp(1.-uSun.y*1.5,0.,1.)*smoothstep(-0.03,0.05,uSun.y); // солнце за облаком (после заката каймы нет -- иначе ночью светлая обводка)
+  // лунная кромка: только край, обращённый к луне и вверх (не весь контур -- иначе снова «белая обводка»)
+  float side=sr>0.?position.x+0.5:0.5-position.x; vMoon=(1.-dayK)*smoothstep(0.35,1.,0.55*side+0.45*(position.y+0.5))*(0.45+0.55*clamp(dot(Lt,normalize(vec3(dir.x,0.,dir.z)))*0.5+0.5,0.,1.));
   vThr=aC.w; vL=aL; vKind=aS.w; p.y-=curve(p);
   gl_Position=projectionMatrix*viewMatrix*vec4(p,1.); if(aC.w>0.97) gl_Position=vec4(2.,2.,2.,1.); }`;
-const F = GLSL_COMMON + `uniform sampler2D uMap; varying vec2 vUv; varying vec3 vP; varying float vThr; varying float vBack; varying float vY; varying vec4 vL; varying float vKind;
+const F = GLSL_COMMON + `uniform sampler2D uMap; varying vec2 vUv; varying vec3 vP; varying float vThr; varying float vBack; varying float vY; varying vec4 vL; varying float vKind; varying float vMoon;
 // палитры (линейные): свет, средний, тень, контур
 void pal(out vec3 L, out vec3 M, out vec3 S, out vec3 D, out vec3 I, float storm){
   float day=clamp(uDay,0.,1.), dusk=clamp(uDusk*1.15,0.,1.), night=1.-day;
   L=vec3(1.); M=vec3(0.40,0.60,0.88); S=vec3(0.11,0.27,0.70); D=vec3(0.05,0.14,0.50); I=vec3(0.006,0.014,0.075);  // день; контур -- тёмно-синий
   L=mix(L,vec3(1.0,0.66,0.30),dusk); M=mix(M,vec3(0.92,0.32,0.26),dusk); S=mix(S,vec3(0.24,0.10,0.42),dusk); D=mix(D,vec3(0.08,0.03,0.22),dusk); I=mix(I,vec3(0.04,0.01,0.07),dusk); // закат
-  L=mix(L,vec3(0.14,0.25,0.52),night); M=mix(M,vec3(0.04,0.09,0.25),night); S=mix(S,vec3(0.012,0.025,0.075),night); D=mix(D,vec3(0.004,0.008,0.03),night); I=mix(I,vec3(0.30,0.48,0.85),night); // ночь: кайма -- от луны
+  L=mix(L,vec3(0.075,0.10,0.17),night); M=mix(M,vec3(0.045,0.06,0.115),night); S=mix(S,vec3(0.024,0.033,0.07),night); D=mix(D,vec3(0.012,0.018,0.042),night); // ночь: тёмные холодные массы, без яркого верха -- светит только лунная кромка I=mix(I,vec3(0.002,0.004,0.016),night); // ночь: контур тёмный, как тушь у гор (светлая кайма читалась белой обводкой)
   L=mix(L,vec3(0.32,0.37,0.50),storm); M=mix(M,vec3(0.09,0.12,0.24),storm); S=mix(S,vec3(0.025,0.04,0.10),storm); D=mix(D,vec3(0.01,0.016,0.04),storm); I=mix(I,vec3(0.004,0.008,0.02),storm); }
 void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(vL.y,0.,1.); // непогода -- у каждого облака своя: туча на одном берегу, на другом солнце
   // глубина пространства, как в живописи: dl -- даль по логарифму (4 км -> 0, 120 км -> 1). Ближние облака -- полный контраст,
@@ -65,6 +69,7 @@ void main(){ vec4 t=texture2D(uMap,vUv); float storm=clamp(vL.y,0.,1.); // не�
     c=mix(vec3(dot(c,vec3(0.3,0.59,0.11))), c, 1.+0.18*nk*(1.-storm)); c+=vec3(0.05,0.03,-0.02)*hi*nk*clamp(uDay,0.,1.)*(1.-storm);
     c=mix(c, mix(M,L,0.55), dl*0.6); c=mix(c, uHor*mix(1.,0.35,storm)*mix(0.15,1.,clamp(uDay,0.,1.)), 0.38*dl*dl);
     float rim=t.g*smoothstep(0.,0.4,f-thr+0.4); c=mix(c,L*1.05,rim*vBack*0.9); // серебряная кайма против солнца
+    c=mix(c, vec3(0.36,0.42,0.56)*(1.-0.6*storm), rim*vMoon*0.85*(1.-dl*0.7)); // ночью -- холодная лунная кромка с одной стороны
     float edge=1.-smoothstep(thr+aa*mix(0.55,0.2,fk),thr+aa*mix(1.5,0.8,fk),f);       // контур как у гор: вблизи ~1 px, вдали -- волосок
     c=mix(c,mix(mix(I,D,0.5),S,fk*0.8),edge*(vKind<0.5?0.8*pow(1.-dl,1.3):0.)); if(vKind>0.5 && vKind<1.5) al*=0.45*(0.35+0.65*clamp(uDay,0.,1.)); if(vKind>2.5) al*=0.85; }
   c*=0.78+0.22*uSunI;
@@ -84,7 +89,7 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
   const MAX = 2400; let rects = null, meta = null; // атлас рисуется по кусочкам между кадрами; до готовности неба нет
   const tex = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat);
   makeCloudAtlasAsync().then((A) => { const t = new THREE.DataTexture(A.data, AW, AH, THREE.RGBAFormat); t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = true; t.needsUpdate = true;
-    mat.uniforms.uMap.value = t; tex.dispose(); rects = A.rects; meta = A.meta; });
+    mat.uniforms.uMap.value = t; tex.dispose(); rects = A.rects; meta = A.meta; api.atlasAt = performance.now(); });
   tex.needsUpdate = true;
   const base = new THREE.PlaneGeometry(1, 1), geo = new THREE.InstancedBufferGeometry(); geo.index = base.index; geo.attributes.position = base.attributes.position;
   const at = {}; for (const k of ['aC', 'aS', 'aR', 'aL']) { at[k] = new THREE.InstancedBufferAttribute(new Float32Array(MAX * 4), 4); at[k].setUsage(THREE.DynamicDrawUsage); geo.setAttribute(k, at[k]); } geo.instanceCount = 0;
@@ -184,9 +189,9 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
         if (W < d * 0.018) return; // вдали мелочь не видна -- без «крошек» у горизонта
         const Hc = hOf(rc, W) * (1 + 0.5 * mf * conv * Math.min(1, I)); push(X, Y, lift(X, Y, Zg, W, Hc), W, Hc, rc, life, 0, 0, hv, d, 0.6, fz); // над хребтом днём растут ввысь (congestus) -- макушки встают из-за гребня
         // спутники по «подсолнуху»: k-й -- под золотым углом 137.5° к предыдущему, на расстоянии W·φ^(k/2), размером W/φ^(k+1)
-        const n = W > d * 0.05 ? Math.floor(rg(6) * 4 * Math.min(1, m)) : 0, a0 = rg(10) * 6.28; for (let k = 1; k <= n; k++) { const a = a0 + k * 2.39996, rr = W * (0.75 + 0.35 * PHI ** (k * 0.5)), Ws = W * IPHI ** (k + 1), px = X + Math.cos(a) * rr, py = Y + Math.sin(a) * rr * 0.7, rc2 = pick('hum', 5, rg(50 + k));
+        const n = W > d * 0.09 ? Math.floor(rg(6) * 4 * Math.min(1, m)) : 0, a0 = rg(10) * 6.28; for (let k = 1; k <= n; k++) { const a = a0 + k * 2.39996, rr = W * (0.75 + 0.35 * PHI ** (k * 0.5)), Ws = W * IPHI ** (k + 1), px = X + Math.cos(a) * rr, py = Y + Math.sin(a) * rr * 0.7, rc2 = pick('hum', 5, rg(50 + k));
           if (B && B.lakeD(px, py) < 1500) continue;
-          push(px, py, lift(px, py, Zg + (rg(40 + k) - 0.5) * 300, Ws, hOf(rc2, Ws)), Ws, hOf(rc2, Ws), rc2, Math.min(0.97, life + 0.08), 0, 0, hv, Math.hypot(px - cx, py - cy), 0.6, fz); } };
+          if (Ws < d * 0.04) continue; push(px, py, lift(px, py, Zg - rg(40 + k) * 150, Ws, hOf(rc2, Ws)), Ws, hOf(rc2, Ws), rc2, Math.min(0.97, life + 0.08), 0, 0, hv, Math.hypot(px - cx, py - cy), 0.6, fz); } };
       layer(cx, cy, 4000, 0, 60000, 1, cumulus(0, 0, 60000)); layer(cx, cy, 6000, 52000, 110000, 1, cumulus(1, 52000, 110000));
       // ---- облака ущелий: в ущельях облако рождается первым (утром -- после ночной прохлады, днём -- от прогретых бортов)
       //      и выходит длинным клубящимся валом: голова глубже в ущелье, тело идёт вниз по руслу почти на одной высоте --

@@ -7,7 +7,9 @@
 //  * gorges -- устья и русла ущелий на склонах: в ущельях облака рождаются первыми и вытекают из них
 //    длинными клубами; склоны по бокам закрывают их низ, и облако «выходит» из-за гор.
 // grid: { hs (высоты над озером, шаг STEP), W, H, X0, Y1 }, lake: Uint8Array (255 -- вода).
-export function analyzeBasin(grid, lake) {
+// Счёт (basinData) -- самодостаточная функция без внешних ссылок: её текст уходит в отдельный поток (Web Worker),
+// чтобы разбор не останавливал кадры меню. Функции lakeD/side/along собираются уже по готовым данным (basinFrom).
+export function basinData(grid, lake) {
   const { hs, W, H, X0, Y1, STEP } = grid, N = W * H;
   // расстояние до воды: волна по клеткам (8 соседей)
   const dist = new Float32Array(N).fill(1e9), q = [];
@@ -47,8 +49,24 @@ export function analyzeBasin(grid, lake) {
       X += ex * 300; Y += ey * 300; const px = -ey, py = ex, hc = sm(X, Y), hl = sm(X - px * 300, Y - py * 300), hr = sm(X + px * 300, Y + py * 300);
       if (hl < hc && hl <= hr) { X -= px * 150; Y -= py * 150; } else if (hr < hc) { X += px * 150; Y += py * 150; }
       acc += 300; if (bil(dist, X, Y, 0) < 1800) break; if (acc >= 1500) { acc = 0; q.path.push({ X, Y, g: sm(X, Y) }); if (q.path.length >= 14) break; } } }
+  return { dist, gorges, cx, cy, th, W, H, X0, Y1, STEP };
+}
+export function basinFrom(d) {
+  const { dist, gorges, cx, cy, th, W, H, X0, Y1, STEP } = d, nx = -Math.sin(th), ny = Math.cos(th);
+  const bil = (A, X, Y, out) => { const fx = (X - X0) / STEP, fy = (Y1 - Y) / STEP; if (fx < 0 || fy < 0 || fx > W - 1.001 || fy > H - 1.001) return out;
+    const i = fx | 0, j = fy | 0, u = fx - i, v = fy - j, k = j * W + i; return (A[k] * (1 - u) + A[k + 1] * u) * (1 - v) + (A[k + W] * (1 - u) + A[k + W + 1] * u) * v; };
   return { gorges, cx, cy, th,
     lakeD: (X, Y) => bil(dist, X, Y, 30000),
     side: (X, Y) => (X - cx) * nx + (Y - cy) * ny,
     along: (X, Y) => (X - cx) * ny - (Y - cy) * nx };  // вдоль оси озера: <0 -- запад (Балыкчы), >0 -- восток (Каракол)
+}
+export const analyzeBasin = (grid, lake) => basinFrom(basinData(grid, lake));
+// в отдельном потоке; нет потоков -- считаем здесь же
+export function analyzeBasinAsync(grid, lake) {
+  try { const src = `const basinData = ${basinData.toString()};\nself.onmessage = (e) => { const r = basinData(e.data.grid, e.data.lake); self.postMessage(r, [r.dist.buffer]); };`;
+    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' })), w = new Worker(url);
+    return new Promise((res) => { const done = (r) => { w.terminate(); URL.revokeObjectURL(url); res(r); };
+      w.onmessage = (e) => done(basinFrom(e.data)); w.onerror = (e) => { e.preventDefault && e.preventDefault(); done(analyzeBasin(grid, lake)); };
+      w.postMessage({ grid: { hs: grid.hs, W: grid.W, H: grid.H, X0: grid.X0, Y1: grid.Y1, STEP: grid.STEP }, lake }); });
+  } catch (e) { return Promise.resolve(analyzeBasin(grid, lake)); }
 }

@@ -21,7 +21,7 @@ import { RIVER_HOLES } from './rivermode.js';
 import { makeJailoo } from './jailoo.js';
 import { FAR_PX } from './corridorart.js';
 import { makeSpriteClouds } from './clouds.js';
-import { analyzeBasin } from './cloudgeo.js';
+import { analyzeBasinAsync } from './cloudgeo.js';
 import { makeRidges, setRidgeRes } from './ridges.js';
 
 const $ = (id) => document.getElementById(id);
@@ -147,18 +147,19 @@ async function init() {
   const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
   // каждая часть -- отдельно: если в каком-то браузере одна упадёт, остальные соберутся, а старт всё равно откроется
   // (раньше одна ошибка оставляла кнопку старта ждать вечно -- в Safari это выглядело как «нажал, и ничего»)
-  const late = async (name, fn) => { await frame(); try { fn(); } catch (e) { console.error('догрузка:', name, e); toast('Не удалось подготовить: ' + name); } };
+  G.lateLog = []; const late = async (name, fn) => { await frame(); const t = performance.now(); try { fn(); } catch (e) { console.error('догрузка:', name, e); toast('Не удалось подготовить: ' + name); } G.lateLog.push([name, Math.round(performance.now() - t)]); }; // lateLog -- сколько мс заняла каждая часть
+  const lateFrom = new Set(scene.children);
+  G.buildCorridor = () => { if (!G.corridor) G.corridor = makeCorridorArt(scene, dem, dem.h); if (!G.jailoo) G.jailoo = makeJailoo({ G, scene, camera, toast, ach: X.ach, store }); }; // река Кургак-Сая и джайлоо: в меню их не видно -- строим при выходе в игру
   try {
-    await late('реку Кургак-Сая', () => { G.corridor = makeCorridorArt(scene, dem, dem.h); });
     await late('подзорную трубу', () => { SPY = makeSpyglass({ G, camera, post, audio, store, ach: X.ach, $, extra: X }); SPY.renderAtlas(); });
     await late('пляж', () => { G.beach = makeBeach({ G, scene, camera, audio, toast }); G.finds = makeFinds({ G, scene, camera, beach: G.beach, audio, toast, store, ach: X.ach, onTake: (k) => FT && FT.found(k) }); });
     await late('пеший режим', () => { FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach, store, ach: X.ach, finds: G.finds }); $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey(); });
-    await late('джайлоо', () => { G.jailoo = makeJailoo({ G, scene, camera, toast, ach: X.ach, store }); });
     await late('Як-130', () => { JM = makeJetMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt }); });
     await late('параплан', () => { PG = makeParaMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, lens }); });
-    await late('облака', () => { G.clouds.setBasin(analyzeBasin(far.userData.grid, lake)); });
-    // шейдеры догруженного -- заранее (уже собранные пропускаются), иначе первый кадр на пляже или в небе подвис бы
-    try { if (renderer.compileAsync) await Promise.race([renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 8000))]); } catch (e) { /* соберутся при первом показе */ }
+    analyzeBasinAsync(far.userData.grid, lake).then((bs) => G.clouds.setBasin(bs)); // облака: разбор котловины -- в отдельном потоке, кадры меню не ждут
+    // шейдеры догруженного -- заранее, но по одному объекту за кадр: собрать всё разом -- это секундный стоп меню
+    // на телефонах без параллельной сборки шейдеров (уже собранные программы пропускаются мгновенно)
+    for (const o of scene.children) if (!lateFrom.has(o)) { await frame(); const t = performance.now(); try { renderer.compile(o, camera, scene); } catch (e) { /* соберётся при первом показе */ } const ms = Math.round(performance.now() - t); if (ms > 30) G.lateLog.push(['шейдеры ' + (o.name || o.type), ms]); }
   } finally {
   G.ready = true; document.body.classList.remove('loading2');
   for (const b of document.querySelectorAll('#menu .wait')) { b.classList.remove('wait'); if (b === waitBtn) setTimeout(() => b.click(), 0); }
@@ -265,7 +266,7 @@ function openWaterHeading(X, Y) {
   return wrapPi(best);
 }
 function placeBoat(e, X, Y, th, v = 1.6) { if (e.model.dispose) e.model.dispose(); e.b.reset(X, Y, th); e.b.vx = Math.sin(th) * v; e.b.vy = Math.cos(th) * v; e.b.trim = 0.6; e.wake.reset(); e.leg = 0; e.time = 0; e.ai = {}; e.prevA = -1; }
-function showGame(on) { $('game').hidden = !on; $('menu').hidden = on; $('result').hidden = true; if (!on) requestAnimationFrame(coastMask); }
+function showGame(on) { if (on && G && G.buildCorridor) G.buildCorridor(); $('game').hidden = !on; $('menu').hidden = on; $('result').hidden = true; if (!on) requestAnimationFrame(coastMask); }
 function setRivals(v) { for (const r of G.rivals) { const on = v && !r.out; r.model.root.visible = on; r.wake.mesh.visible = on; } for (const k in G.marks) G.marks[k].visible = v; }
 
 function toMenu() {
