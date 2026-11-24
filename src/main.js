@@ -22,6 +22,7 @@ import { makeJailoo } from './jailoo.js';
 import { FAR_PX } from './corridorart.js';
 import { makeSpriteClouds } from './clouds.js';
 import { analyzeBasinAsync } from './cloudgeo.js';
+import { makeStars } from './stars.js';
 import { makeRidges, setRidgeRes } from './ridges.js';
 
 const $ = (id) => document.getElementById(id);
@@ -83,6 +84,7 @@ async function init() {
   await loadStep(18, 'Читаем карту высот…');
   const { h, tex } = await loadHeight();
   const sky = makeSky(); scene.add(sky);
+  const stars = makeStars(); scene.add(stars.mesh); // настоящее звёздное небо (stars.js)
   const dem = await loadDem(DEM, h); // подробный коридор Кургак-Сай -- берег
   const nearT = makeTerrain(h, { x0: dem.X0, x1: dem.X1, y0: dem.Y0, y1: dem.Y1 }); scene.add(nearT);
   const demT = makeDemTerrain(dem, TOUCH); scene.add(demT);
@@ -114,7 +116,7 @@ async function init() {
   const rivals = [], ensureRivals = () => { if (!rivals.length) rivals.push(mk({ hull: 0xf4f3ee, accent: '#1f6fd0', text: 'KGZ 21' }, 'Ала-Тоо', 0.95), mk({ hull: 0xe9c33c, accent: '#20242b', text: 'KGZ 4' }, 'Манас', 0.9), mk({ hull: 0x2f8f5a, accent: '#f4f3ee', text: 'KGZ 33' }, 'Чайка', 0.86)); };
   const marks = { W: makeMark(0xff7a1a), L: makeMark(0xffd21f), pin: makeMark(0xff3b30), com: makeMark(0x2f7de2) };
   for (const k in marks) { marks[k].visible = false; scene.add(marks[k]); }
-  G = { shoreArt, corridor: null, lake, mapObjs: [nearT, demT, far, ...shoreObjs], ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
+  G = { stars, shoreArt, corridor: null, lake, mapObjs: [nearT, demT, far, ...shoreObjs], ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
     cam: 0, camYaw: 0, orbit: 0, orbitP: 0, zoom: 1, orbitV: 0, shake: 0, hintT: 0, free: null, toastT: 0, frame: 0, slow: 0 };
   if (!PRESETS[G.preset]) G.preset = 'santash';
   X = installExtra({ mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
@@ -576,6 +578,7 @@ function loop(now) {
   if (!G.freeze) tick(dt); // freeze -- только для тестов: мир стоит, картинка рисуется
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
+  G.stars.update(camera.position.x, -camera.position.z, G.clock ?? 13, renderer.getPixelRatio(), now / 1000); // звёзды -- для той точки карты, где камера
   lodTick(dt);   if (G.jailoo) G.jailoo.update(dt, G.t); G.clouds.update(dt, camera, { cover: Math.min(1, Math.max(0, (ENV.uCover.value + 0.62) / 1.48)), storm: ENV.uStorm.value, cirrus: ENV.uCirrus.value, wind: G.wind, clock: G.clock, preset: G.preset }); // облачность погоды (-0.62..0.86) -> 0..1; пресет -- какой ветер (улан, санташ, бриз)
   if (G.beach) G.beachHint = G.beach.update(dt, FT && FT.on ? FT.state : null);
   if (G.finds && G.mode !== 'menu') G.finds.update(dt, FT && FT.on && !FT.state.swim && FT.state.st !== 'dis' ? FT.state : null, G.beach.dayN, FT ? FT.magnet : 1.2);

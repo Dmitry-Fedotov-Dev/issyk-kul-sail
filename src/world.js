@@ -38,7 +38,7 @@ export async function loadHeight() {
 // Общее состояние неба и света: одни и те же объекты uniform'ов разделяют небо, рельеф и вода.
 export const ENV = {
   uSun: { value: SUN }, uHor: { value: new THREE.Vector3(0.56, 0.76, 0.97) }, uCover: { value: 0.4 }, uCirrus: { value: 0.3 },
-  uStorm: { value: 0 }, uCuK: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
+  uStorm: { value: 0 }, uEq: { value: new THREE.Matrix3() }, uCuK: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() },
   uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() }, uFarH: { value: null },
   uRiv: { value: null }, uRivT: { value: new THREE.Vector4() }, uRivOn: { value: 0 }, uRT: { value: 0 }, // реки коридора -- маской (corridorart)
   uLC: { value: null }, uLCOn: { value: 0 }, uPaint: { value: 1 }, uLCT: { value: new THREE.Vector4(-141000, 63000, 1 / 273600, 1 / 180600) }, // маска зон OSM (по требованию) // съёмка карты сверху: дно плавно уходит в цвет озера на карте
@@ -82,9 +82,15 @@ export function makeSky() {
     side: THREE.BackSide, depthWrite: false, depthTest: false,
     vertexShader: `varying vec3 vDir; void main(){ vDir=position; vec4 p=modelViewMatrix*vec4(position,0.); gl_Position=projectionMatrix*vec4(p.xyz,1.); gl_Position.z=gl_Position.w; }`,
     fragmentShader: GLSL_COMMON + /* glsl */`
-uniform float uEnvW; varying vec3 vDir;
+uniform float uEnvW; uniform mat3 uEq; varying vec3 vDir;
 void main(){ vec3 d=normalize(vDir); vec3 c=skyBase(d); float dk=mix(0.05,1.,uDay); vec3 dt3=mix(vec3(1.),vec3(1.2,0.72,0.5),uDusk)*dk;
-  if(uDay<0.7 && d.y>0.){ vec2 sp=d.xz/(d.y+0.3)*110.; float hs=hash(floor(sp)); c+=vec3(0.9,0.95,1.)*step(0.982,hs)*smoothstep(0.4,0.05,length(fract(sp)-0.5))*smoothstep(0.42,0.04,uDay)*(1.-uStorm)*(0.6+2.*fract(hs*57.)); } // звёзды
+  // Млечный Путь -- на настоящем месте: направление переводим в галактические координаты (экватор J2000 -> галактика)
+  // и рисуем полосу вдоль галактического экватора с пылевыми прожилками; ярче к центру Галактики (Стрелец, летом -- на юге)
+  if(uDay<0.6 && d.y>0.){ vec3 q=transpose(uEq)*d; vec3 g=mat3(-0.0548756,0.4941094,-0.8676661, -0.8734371,-0.4448296,-0.1980764, -0.4838350,0.7469822,0.4559838)*q;
+    float b=asin(clamp(g.z,-1.,1.)), l=atan(g.y,g.x), w=0.13+0.05*cos(l);
+    float band=exp(-b*b/(w*w))*(0.35+0.65*exp(-l*l/0.9)), dust=smoothstep(0.4,0.7,fbm(vec2(l*4.,b*8.)+7.))*exp(-pow((b-0.03)/0.035,2.))*(0.4+0.6*exp(-l*l/1.6));
+    float mw=band*(0.6+0.4*fbm(vec2(l*3.,b*6.)+3.))*(1.-0.7*dust); // облачная, а не полосатая: шум крупный, одинаковый вдоль и поперёк
+    c+=vec3(0.62,0.68,0.86)*mw*0.11*smoothstep(0.6,0.02,uDay)*(1.-uStorm)*smoothstep(0.,0.3,d.y); }
   c+=vec3(1.,.95,.8)*smoothstep(0.99955,0.9998,dot(d,uSun))*6.*uSunI;
   // старые процедурные слои неба (перистые, пелена, «барашки») убраны: облака рисуют спрайты clouds.js
   // кучевые: плотность -> покрытие, освещённость -- по перепаду плотности в сторону солнца
