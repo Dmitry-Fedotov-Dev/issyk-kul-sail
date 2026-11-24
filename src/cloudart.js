@@ -74,17 +74,19 @@ export function makeCloudAtlas() {
   for (let k = 0; k < 2; k++) { const lo = []; let x = rr(70, 110);
     while (x < 512 - 70) { const part = cumulus(160, 140, rr(0.6, 1)); for (const l of part) lo.push({ ...l, x: l.x + x - 80 }); x += rr(100, 150); }
     blob('cuL' + k, 1024 + k * 512, 112, 512, 144, lo.filter((l) => l.x - l.rx > 2 && l.x + l.rx < 510)); }
-  // ---- кучево-дождевое 384x400: широкое основание, мощный массив, наковальня, вытянутая по ветру ----
-  for (let k = 0; k < 2; k++) { const W = 384, H = 400, base = 5, lo = [], cx = W * rr(0.4, 0.48);
-    lo.push({ x: cx, y: base + 40, rx: W * 0.45, ry: 80 });                                                       // тяжёлое основание
-    lo.push({ x: cx - 36, y: base + 120, rx: W * 0.36, ry: 100, crease: true }); lo.push({ x: cx + 44, y: base + 150, rx: W * 0.3, ry: 95, crease: true });
-    lo.push({ x: cx + 8, y: base + 220, rx: W * 0.3, ry: 90 }); lo.push({ x: cx - 20, y: base + 270, rx: W * 0.26, ry: 70, crease: true });
-    // наковальня: плоская, верх ровный, нависает по ветру (вправо)
-    lo.push({ x: cx + 30, y: H - 55, rx: W * 0.36, ry: 40 }); lo.push({ x: cx + 100, y: H - 48, rx: W * 0.3, ry: 26 }); lo.push({ x: cx - 50, y: H - 52, rx: W * 0.22, ry: 30 });
-    lo.push({ x: cx + 10, y: H - 95, rx: W * 0.24, ry: 50 });                                                      // переход в наковальню
-    { const col = lo.slice(0, 5); scallop(col, W, H, 5, 20, W - 20, 0.5, 0.8); for (const l of col.slice(5)) lo.push(l); }
+  // ---- грозовая туча 384x256: широкая плоская тёмная подошва далеко в стороны, над ней мощный клубящийся массив
+  //      с неровным округлым верхом (без «гриба» и наковальни) ----
+  for (let k = 0; k < 2; k++) { const W = 384, H = 256, base = 5, lo = [], cx = W * rr(0.42, 0.55);
+    lo.push({ x: W * 0.5, y: base + 4, rx: W * 0.49, ry: 16 });                                                  // подошва
+    lo.push({ x: cx, y: base + 20, rx: W * 0.33, ry: 50 });                                                      // нижний массив
+    lo.push({ x: cx - W * 0.2, y: base + 40, rx: W * 0.13, ry: 46, crease: true });                              // левое плечо
+    lo.push({ x: cx + W * 0.19, y: base + 52, rx: W * 0.14, ry: 52, crease: true });                             // правое плечо
+    lo.push({ x: cx - W * 0.03, y: base + 100, rx: W * 0.15, ry: 68, crease: true });                            // башня
+    lo.push({ x: cx + W * 0.04, y: base + 150, rx: W * 0.1, ry: 46, crease: true });                             // купол
+    lo.push({ x: cx + W * (k ? -0.33 : 0.33), y: base + 18, rx: W * 0.1, ry: 26 });                              // низкий край
+    scallop(lo, W, H, base, 20, W - 20, 0.4, 0.9);
     for (const l of lo) { l.rx = Math.min(l.rx, l.x - 3, W - 3 - l.x); l.ry = Math.min(l.ry, H - 3 - l.y); }
-    blob('cb' + k, k * 384, 256, W, H, lo, { band: 8, grad: 0.5, k: 10 }); }
+    blob('cb' + k, k * 384, 256, W, H, lo.filter((l) => l.rx > 2 && l.ry > 2), { band: 8, grad: 0.5, k: 10 }); }
   // ---- слоисто-кучевые гряды 512x72: волнистые массы с разрывами, не сплошная стена ----
   for (let k = 0; k < 4; k++) { const W = 512, H = 72, lo = []; let x = rr(20, 60);
     while (x < W - 30) { const seg = rr(70, 190), th = rr(14, 30); // кусок гряды

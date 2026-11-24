@@ -122,8 +122,8 @@ export function makeSpriteClouds(scene, h = () => 1000) {
       if (storm > 0.35) layer(cx, cy, 36000, 25000, 130000, 1, (i, j, x0, y0, C) => { const rh = (k) => hash(i * 53 + k, j * 37 + k * 11); if (rh(1) > storm * 0.55) return;
         const X = x0 + (0.2 + 0.6 * rh(2)) * C, Y = y0 + (0.2 + 0.6 * rh(3)) * C, d = Math.hypot(X - cx, Y - cy); if (d < 25000 || d > 130000) return;
         const Wt = 10000 + rh(4) * 6000, Zc = Zb + Math.max(0, h(X, Y)) * 0.15, life = Math.max(1 - sm(25000, 32000, d), sm(115000, 130000, d)), fg = 0.05 + sm(40000, 130000, d) * 0.35;
-        push(X, Y, Zc, Wt, Wt * 400 / 384, pick('cb', 2, rh(5)), life, 0, fg, 0.15, d, 0.25, 0.3);
-        push(X + Wt * 0.05, Y, Zc - Wt * 0.35, Wt * 0.45, Wt * 0.4, rects.rain, Math.max(life, 1 - storm), 2, fg, 0, d - 1, 0, 0.3); });
+        const rcb = pick('cb', 2, rh(5)); push(X, Y, Zc, Wt, Wt * rcb[3] / rcb[2] * AH / AW, rcb, life, 0, fg, 0.15, d, 0.25, 0.3);
+        push(X + Wt * 0.05, Y, Zc - Wt * 0.3, Wt * 0.45, Wt * 0.35, rects.rain, Math.max(life, 1 - storm), 2, fg, 0, d - 1, 0, 0.3); });
       // ---- вдали: гряды слоисто-кучевых с разрывами, ниже и в дымке ----
       layer(cx, cy, 9000, 60000, 150000, 1, (i, j, x0, y0, C) => { const rh = (k) => hash(i * 19 + k, j * 23 + k * 3); if (rh(8) > 0.35 + A * 0.3) return;
         const X = x0 + (0.1 + 0.8 * rh(1)) * C, Y = y0 + (0.1 + 0.8 * rh(2)) * C, d = Math.hypot(X - cx, Y - cy); if (d < 60000 || d > 150000) return;
