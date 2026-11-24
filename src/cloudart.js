@@ -103,8 +103,8 @@ function* atlasJobs() {
     faceBumps(P, P[0], o.face, { x0: cx - wl * 0.6, x1: cx + wr * 0.6, y0: base + hm * 0.3, y1: base + hm * 0.75, r0: hm * IPHI ** 4, r1: hm * IPHI ** 3, crease: 0.7 });
     for (const sd of [-1, 1]) lumpsSide(P, w, h, { side: sd, y0: base + hm * 0.18, y1: base + hm * 0.55, rel: [IPHI ** 5, IPHI ** 4], r0: 3, r1: 20, sink: [IPHI * IPHI, IPHI], gap: [1, PHI] }); // бока -- тоже клубами
     lumps(P, w, h, { x0: w * 0.06, x1: w * 0.94, r0: 4, r1: 12, ymin: 0, dz: -0.3, down: true, sink: [0.5, 0.72], gap: [1, 1.7], skip: 0.15 }); // подошва -- мягкими долями, не линейкой
-    for (let k = 1; k <= 3; k++) { const q = IPHI ** (k + 1); // фрактал выступов
-      lumps(P, w, h, { x0: w * 0.03, x1: w * 0.97, r0: k === 1 ? 4 : 2.5, r1: 60, rel: [q * 0.85, q * 1.15], base, ymin: base + 3, dz: -0.4, gap: [1, PHI], sink: [IPHI * IPHI, IPHI], crease: k === 1 ? 0.35 : 0.1, skip: [0, 0.25, 0.5][k - 1] }); }
+    for (let k = 1; k <= 2; k++) { const q = IPHI ** (k + 1); // фрактал выступов: два яруса; второй утоплен глубже -- без «пипок» клуб на клубе
+      lumps(P, w, h, { x0: w * 0.03, x1: w * 0.97, r0: k === 1 ? 5 : 4, r1: 60, rel: [q * 0.85, q * 1.15], base, ymin: base + 3, dz: -0.4, gap: [1, PHI], sink: k === 1 ? [IPHI * IPHI, IPHI] : [IPHI, 0.78], crease: k === 1 ? 0.35 : 0.1, skip: [0, 0.3][k - 1] }); }
     return clampParts(P, w, h);
   }
   // humilis: плоские, ширина к высоте -- φ²
@@ -178,8 +178,8 @@ function* atlasJobs() {
   for (let k = 0; k < 4; k++) { const w = 512, h = 88;
     sprite('st' + k, w, h, (T, C) => { let x = rr(10, 50);
       while (x < w - 40) { const seg = rr(90, 220), th = rr(16, 34), base = 4 + Math.floor(rr(0, 6)), P = [];
-        for (let s = 0; s < seg; s += rr(14, 28)) { const rx = rr(14, 34), ry = th * rr(0.5, 1) * Math.sin(Math.PI * (s + 8) / (seg + 16)) + 5; P.push({ x: x + s, y: base + ry * 0.45, rx, ry }); }
-        lumps(P, w, h, { x0: x, x1: x + seg, r0: 3, r1: 7, ymin: base + 6, dz: 1.5, gap: [1.4, 3], skip: 0.4 });
+        for (let s = 0; s < seg; s += rr(12, 22)) { const rx = rr(18, 36), ry = th * rr(0.7, 1) * Math.sin(Math.PI * (s + 8) / (seg + 16)) + 6; P.push({ x: x + s, y: base + ry * 0.45, rx, ry }); }
+        // без мелких клубов сверху: на тонкой гряде они торчали «пипками»; верх -- плавные волны самих частей
         paint(T, C, w, h, clampParts(P, w, h), { base, grad: 0.38, band: 4, k: 5 }); x += seg + rr(-20, 70); } }); }
 
   // ================= Туман / низкая облачность в долинах: тонкий плоский слой с мягкими буграми =================
@@ -258,7 +258,7 @@ function* atlasJobs() {
         P.push(mound({ cx: x + ww * 0.45, base, wl: ww * 0.62, wr: ww * 0.72, hm: hh, a: rr(1.8, 2.3), b: rr(1.4, 2), v0: rr(0.45, 0.6) })); x += ww * rr(0.5, 0.72); }
       for (const sd of [-1, 1]) lumpsSide(P, w, h, { side: sd, y0: base + 3, y1: base + hm * 0.6, rel: [IPHI ** 4, IPHI ** 3], r0: 3, r1: 14, sink: [IPHI * IPHI, IPHI], gap: [1, PHI] });
       lumps(P, w, h, { x0: 8, x1: w - 8, r0: 4, r1: 10, ymin: 0, dz: -0.3, down: true, sink: [0.5, 0.72], gap: [1, 1.7], skip: 0.15 });
-      for (let q = 1; q <= 3; q++) { const f = IPHI ** (q + 1); lumps(P, w, h, { x0: 6, x1: w - 6, r0: q === 1 ? 4 : 2.5, r1: 40, rel: [f * 0.85, f * 1.15], base, ymin: base + 3, dz: -0.4, gap: [1, PHI], sink: [IPHI * IPHI, IPHI], crease: q === 1 ? 0.35 : 0.1, skip: [0, 0.25, 0.5][q - 1] }); }
+      for (let q = 1; q <= 2; q++) { const f = IPHI ** (q + 1); lumps(P, w, h, { x0: 6, x1: w - 6, r0: q === 1 ? 5 : 4, r1: 40, rel: [f * 0.85, f * 1.15], base, ymin: base + 3, dz: -0.4, gap: [1, PHI], sink: q === 1 ? [IPHI * IPHI, IPHI] : [IPHI, 0.78], crease: q === 1 ? 0.35 : 0.1, skip: [0, 0.3][q - 1] }); }
       paint(T, C, w, h, clampParts(P, w, h), { grad: 0.42, band: 6, k: 5 });
       let x = x1 + rr(4, 14); for (let f = 0; f < 3 && x < w - 16; f++) { const rad = rr(5, 10) * IPHI ** (f * 0.5), y = base + rad * rr(0.6, 1.2) + rr(0, 8), Q = [{ x, y, rx: rad * rr(1.3, 1.8), ry: rad }, { x: x + rad * rr(-0.5, 0.6), y: y + rad * 0.55, rx: rad * 0.8, ry: rad * 0.7 }];
         paint(T, C, w, h, clampParts(Q, w, h), { grad: 0.4, band: 2, k: 3 }); x += rad * rr(2.6, 4.2); } }); }
@@ -271,6 +271,12 @@ function* atlasJobs() {
     if (it.raw) { for (let y = 0; y < h; y++) data.set(it.raw.subarray(y * w * 4, (y + 1) * w * 4), ((y0 + y) * AW + x0) * 4); continue; }
     const { T, C } = it;
     // оторванные мелкие кусочки (меньше 6% главной массы) убираем: вдали они читаются «пузырьками» над облаком
+    // «пипки»: кругляш на тонкой шейке. Морфологическое открытие (сжать на 2 px и расширить обратно) режет шейки
+    // уже 5 px; отрезанный кругляш дальше уходит как оторванный кусочек. Тон под срезом не трогаем -- только маску
+    if (!it.name.startsWith('ci')) { const R = 2, er = new Uint8Array(w * h), op = new Uint8Array(w * h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let ok = C[y * w + x]; for (let dy = -R; dy <= R && ok; dy++) for (let dx = -R; dx <= R && ok; dx++) { if (dx * dx + dy * dy > R * R + 1) continue; const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= w || Y >= h || !C[Y * w + X]) ok = 0; } er[y * w + x] = ok; }
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { if (!er[y * w + x]) continue; for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) { if (dx * dx + dy * dy > R * R + 1) continue; const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < w && Y < h) op[Y * w + X] = 1; } }
+      for (let k = 0; k < w * h; k++) if (C[k] && !op[k]) C[k] = 0; }
     if (!it.name.startsWith('ci')) { const lab = new Int32Array(w * h).fill(-1), sz = [];
       for (let k0 = 0; k0 < w * h; k0++) { if (!C[k0] || lab[k0] >= 0) continue; const id = sz.length, st = [k0]; let c = 0; lab[k0] = id;
         while (st.length) { const k = st.pop(); c++; const i = k % w; for (const n of [i > 0 ? k - 1 : -1, i < w - 1 ? k + 1 : -1, k - w, k + w]) if (n >= 0 && n < w * h && C[n] && lab[n] < 0) { lab[n] = id; st.push(n); } } sz.push(c); }
