@@ -19,7 +19,8 @@ body.jet #speed>b,body.jet #speed>small,body.jet #pos,body.jet #wear,body.jet #d
 #jhud .r{font-size:14px;margin-top:3px}#jhud .r b{font-weight:600}#jhud .g{display:inline-block;min-width:54px}#jhud .thr{display:inline-block;padding:0 6px;border-radius:5px;background:rgba(255,255,255,.15);font-size:12px;font-weight:700;margin-left:6px}#jhud .thr.max{background:#ff8a2a;color:#2a1300}
 #jwarn{left:50%;top:28%;transform:translateX(-50%);font:800 clamp(20px,4.6vmin,34px) var(--ui);color:#ff5a3a;text-shadow:0 2px 12px rgba(0,0,0,.7);letter-spacing:.06em;animation:jblink .5s steps(2) infinite}
 @keyframes jblink{50%{opacity:.35}}#jring{left:50%;top:14px;transform:translateX(-50%);text-align:center;font-size:13px}#jring b{font-size:26px;font-weight:700}
-#jhorizon{position:fixed;inset:0;pointer-events:none}body.touchdev.jet #joy{display:block;left:calc(28px + 66px)}body.touchdev.jet #ts{display:block;left:auto;right:28px;transform:none}
+#jhorizon{position:fixed;inset:0;pointer-events:none}body.touchdev.jet #joy{display:block;left:50%;transform:translateX(-50%);width:168px;height:168px;bottom:calc(26px + env(safe-area-inset-bottom,0px))}body.touchdev.jet #joy i{width:64px;height:64px;margin:-32px 0 0 -32px}body.touchdev.jet #ts{display:none!important}body.touchdev.jet #hint{bottom:calc(206px + env(safe-area-inset-bottom,0px))}
+#jboost{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 50% 55%,transparent 45%,rgba(255,170,90,.22) 80%,rgba(255,120,40,.4))} /* максимал: тёплая волна по краям кадра */
 `;
 
 export function makeJetMode(A) {
@@ -73,7 +74,7 @@ export function makeJetMode(A) {
 
   function build() { if (built) return; built = true;
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    const w = document.createElement('div'); w.id = 'jwrap'; w.hidden = true; w.innerHTML = '<canvas id="jhorizon"></canvas><div id="jhud" class="hud"></div><div id="jwarn" class="hud" hidden></div><div id="jring" class="hud" hidden></div>'; $('game').appendChild(w);
+    const w = document.createElement('div'); w.id = 'jwrap'; w.hidden = true; w.innerHTML = '<div id="jboost"></div><canvas id="jhorizon"></canvas><div id="jhud" class="hud"></div><div id="jwarn" class="hud" hidden></div><div id="jring" class="hud" hidden></div>'; $('game').appendChild(w);
     hzc = $('jhorizon'); hz = hzc.getContext('2d');
     J = new Jet(); M = makeJet(); scene.add(M.root); M.root.visible = false;
     rwy = findRunway(); rwy.mesh = runwayMesh(rwy); scene.add(rwy.mesh); rwy.mesh.visible = false;
@@ -88,7 +89,7 @@ export function makeJetMode(A) {
     document.body.classList.add('jet'); document.body.classList.remove('motor', 'para'); $('jwrap').hidden = false; $('ts').textContent = 'максимал'; $('mark').hidden = true; $('result').hidden = true; $('brief').hidden = true;
     F = { t: 0, loop: { s: 0, t: 0 }, roll: { a: 0, t: 0 }, lowT: 0, ended: false, ejT: -1, landT: 0, msg: {}, gearK: 1, apprMsg: false }; R = null; showGame(true); resetView(); G.cam = G.cam === 2 ? 0 : G.cam; trails.n = 0; }
   function startFree() { begin(); const s = -rwy.L / 2 + 80, X = rwy.X + Math.sin(rwy.th) * s, Y = rwy.Y + Math.cos(rwy.th) * s; J.reset(X, Y, Math.max(0, HG(X, Y)), rwy.th, 'ground'); J.gear = true;
-    toast('Як-130 на полосе. Пробел — максимал, на 210 км/ч — ↓ на себя'); F.free = true; }
+    toast(TOUCH ? 'Як-130 на полосе. Потяните джойстик на себя — взлёт' : 'Як-130 на полосе. Пробел — максимал, на 210 км/ч — ↓ на себя'); F.free = true; }
   function startRace() { begin(); const r0 = rings[0], r1 = rings[1], th = Math.atan2(r1.X - r0.X, r1.Y - r0.Y), X = r0.X - Math.sin(th) * 4500, Y = r0.Y - Math.cos(th) * 4500;
     J.reset(X, Y, 450, th, 'air', 185); J.gear = false; F.gearK = 0; R = { next: 0, t: 0, miss: 0, best: store.get('jetBest') };
     for (const r of rings) { r.m.visible = true; r.prev = undefined; r.m.material.color.setHex(0xff8a2a); r.m.material.opacity = 0.9; } toast('Пилотажная зона: пройдите 10 колец. Шестое — высоко, за ним — пике к воде'); }
@@ -97,19 +98,26 @@ export function makeJetMode(A) {
 
   // ---- управление ----
   function ctl() { let roll = (input.right ? 1 : 0) - (input.left ? 1 : 0), pitch = (input.flare ? 1 : 0) - (input.sin ? 1 : 0);
-    if (input.joy) { const j = input.joy; roll = Math.abs(j.x) > 0.08 ? j.x : 0; pitch = Math.abs(j.y) > 0.08 ? j.y : 0; } // джойстик: вниз -- на себя
+    // джойстик: вниз -- на себя; экспонента -- у центра точно, у края резко; ручка до упора -- автомат даёт максимал
+    let hard = false; if (input.joy) { const j = input.joy, ex = (v) => (Math.abs(v) < 0.06 ? 0 : Math.sign(v) * Math.pow((Math.abs(v) - 0.06) / 0.94, 1.5)); roll = ex(j.x); pitch = ex(j.y); hard = Math.hypot(j.x, j.y) > 0.9; }
+    if (input.joyTap && input.joyTap !== F.tap) { F.tap = input.joyTap; F.boostT = 3.2; } // двойной тап -- максимал
+    if (input.bar && !F.barWas) F.boostT = Math.max(F.boostT || 0, 0.01); F.barWas = !!input.bar;
     // граница зоны полётов: автоматика уводит в разворот к озеру
     const m = 4000, out = J.X < FAR.X0 + m || J.X > FAR.X0 + (FAR.W - 1) * FAR.STEP - m || J.Y > FAR.Y1 - m || J.Y < FAR.Y1 - (FAR.H - 1) * FAR.STEP + m;
     if (out && J.mode === 'air') { const want = Math.atan2(-J.X, -12000 - J.Y), d = wrapPi(want - J.th); roll = clamp(d * 2 - J.phi, -1, 1); if (!F.msg.out) { F.msg.out = 1; toast('Граница зоны полётов — разворот к озеру'); } } else F.msg.out = 0;
     // заход: снижаемся к полосе, курс вдоль неё и на неё, после взлёта прошло время -- автоматика выпускает шасси
     const dR = Math.hypot(J.X - rwy.X, J.Y - rwy.Y), da = Math.abs(wrapPi(J.th - rwy.th)), al = Math.min(da, Math.PI - da), to = Math.abs(wrapPi(Math.atan2(rwy.X - J.X, rwy.Y - J.Y) - J.th));
     const appr = J.mode === 'air' && F.airT > 25 && dR < 9000 && (J.agl || 0) < 500 && J.vz < -1 && al < 0.5 && (to < 0.5 || dR < 1200);
-    return { roll, pitch, max: !!input.bar, brake: !!input.shift || (J.mode === 'ground' && F.landed), Vset: J.gear && J.mode === 'air' ? 74 : YAK.cruise, appr }; }
+    const boost = !!input.bar || (F.boostT || 0) > 0 || (hard && J.mode === 'air') || (J.mode === 'ground' && !F.landed && pitch > 0.3); // разбег -- сразу на максимале
+    return { roll, pitch, max: boost, go: !!input.joy || !!input.bar, wind: G.wind ? { sx: G.wind.sx, sy: G.wind.sy } : null, brake: !!input.shift || (J.mode === 'ground' && F.landed), Vset: J.gear && J.mode === 'air' ? 74 : YAK.cruise, appr }; }
 
   function tick(dt) { if (!on) return; F.t += dt;
     if (J.mode === 'crash') { crashTick(dt); return; }
     if (J.mode === 'air') F.airT = (F.airT || 0) + dt; else F.airT = 0;
-    const c = ctl(); const steps = Math.max(1, Math.ceil(dt / (1 / 120))); for (let i = 0; i < steps; i++) J.step(dt / steps, c, HG, onRunway);
+    F.boostT = Math.max(0, (F.boostT || 0) - dt);
+    const c = ctl(); if (c.max && !F.wasMax && J.mode !== 'crash') { F.punch = 1; G.shake = Math.max(G.shake, 0.55); audio.thump && audio.thump(0.7); if (J.mode === 'air') toast('МАКСИМАЛ!'); } F.wasMax = c.max;
+    F.punch = Math.max(0, (F.punch || 0) - dt * 1.6); { const el = $('jboost'); if (el) el.style.opacity = (Math.max(F.punch, J.max ? 0.35 : 0) * (J.mode === 'air' ? 1 : 0.5)).toFixed(2); }
+    const steps = Math.max(1, Math.ceil(dt / (1 / 120))); for (let i = 0; i < steps; i++) J.step(dt / steps, c, HG, onRunway);
     // шасси: автоматика -- выпущено на земле и на заходе у полосы, убрано после отрыва
     const gearWant = J.mode === 'ground' || (c.appr && J.V < 125) || (J.agl < 60 && J.vz < 2 && J.V < 100);
     if (gearWant !== J.gear) { J.gear = gearWant; if (J.mode === 'air') toast(J.gear ? 'Шасси выпущено · автомат тяги 270 км/ч — заход' : 'Шасси убрано'); }
@@ -166,16 +174,17 @@ export function makeJetMode(A) {
     M.fp(G.cam === 1);
     if (G.cam === 1) { camera.position.copy(pos).addScaledVector(f, 2.3).addScaledVector(u, 1.12); camera.up.copy(u); m4.makeBasis(r, u, f.clone().negate()); camera.quaternion.setFromRotationMatrix(m4); camera.rotateY(-G.orbit); camera.rotateX(-0.06 - G.orbitP * 0.8);
       camera.fov += (clamp(70 * G.zoom, 35, 95) + J.V * 0.03 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); return; }
-    const far = G.cam === 2, d = (far ? 70 : 19 + J.V * 0.035) * G.zoom, upB = far ? 0.15 : 0.5;
+    const far = G.cam === 2, d = (far ? 70 : 22 + J.V * 0.04 + (F ? F.punch * 6 : 0)) * G.zoom, upB = far ? 0.15 : 0.5; // при максимале камера на миг отстаёт -- рывок вперёд
     const UP = new THREE.Vector3(0, 1, 0), cu = UP.clone().lerp(u, upB).normalize(); // «верх» камеры -- между небом и кабиной: крен чувствуется, а горизонт не кувыркается
     // позиция -- жёстко от самолёта (на 250 м/с любое запаздывание уносит его из кадра), сглаживается только направление
     if (!camInit) { clook.copy(f); cup.copy(cu); camInit = true; } else { clook.lerp(f, Math.min(1, dt * 5)).normalize(); cup.lerp(cu, Math.min(1, dt * 4)).normalize(); }
     const back = clook.clone().applyAxisAngle(cup, G.orbit).negate();
-    v3.copy(pos).addScaledVector(back, d).addScaledVector(cup, d * (far ? 0.35 : 0.18) + G.orbitP * d);
+    F.lean = (F.lean || 0) + ((J.mode === 'air' ? clamp((J.n - 1) / 7, -0.4, 1) : 0) - (F.lean || 0)) * Math.min(1, dt * 3); // перегрузка: самолёт «уходит» вверх по кадру
+    v3.copy(pos).addScaledVector(back, d).addScaledVector(cup, d * ((far ? 0.35 : 0.24) - 0.12 * F.lean) + G.orbitP * d);
     const gy = Math.max(0, H(v3.x, -v3.z)) + 3; if (v3.y < gy) v3.y = gy;
-    G.shake = Math.max(0, G.shake - dt * 1.4); const sh = G.shake * G.shake + Math.max(0, J.n - 5) * 0.004 + (J.V > 260 ? 0.002 : 0), jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh;
-    camera.position.copy(v3); camera.position.x += jx; camera.position.y += jy; camera.up.copy(cup); camera.lookAt(cpos.copy(pos).addScaledVector(clook, 14).addScaledVector(cup, 1.5));
-    camera.fov += (58 + Math.max(0, J.V - 120) * 0.05 - camera.fov) * Math.min(1, dt * 2); camera.updateProjectionMatrix(); }
+    G.shake = Math.max(0, G.shake - dt * 1.4); const sh = G.shake * G.shake * 1.6 + Math.max(0, J.n - 4) * 0.012 + (J.V > 240 ? 0.004 : 0) + (J.bump || 0) * 0.5, jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh;
+    camera.position.copy(v3); camera.position.x += jx; camera.position.y += jy; camera.up.copy(cup); const tall = window.innerHeight > window.innerWidth; camera.lookAt(cpos.copy(pos).addScaledVector(clook, 30).addScaledVector(cup, tall ? -1.2 : 3.5)); // на телефоне стоймя самолёт выше -- над джойстиком // самолёт -- в нижней трети, впереди виден горизонт
+    camera.fov += (60 + Math.max(0, J.V - 120) * 0.07 + (F ? F.punch * 9 : 0) - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); }
   function resetCam() { camInit = false; camera.up.set(0, 1, 0); }
 
   // ---- приборы ----
@@ -189,8 +198,8 @@ export function makeJetMode(A) {
     const w = J.mode === 'crash' ? '' : J.stall ? 'СВАЛИВАНИЕ — ОТДАЙ РУЧКУ' : J.gpws && !J.gear ? 'ВЫВОД! ЗЕМЛЯ' : J.n > 7.6 ? 'ПРЕДЕЛ ПЕРЕГРУЗКИ' : '';
     const wl = $('jwarn'); if (wl.textContent !== w) wl.textContent = w; wl.hidden = !w; if (w && audio.beep && G.frame % 18 === 0) audio.beep(true);
     const rr = $('jring'); if (R) { rr.hidden = false; rr.innerHTML = `<b>${fmt(R.t)}</b><br>кольцо ${Math.min(R.next + 1, rings.length)} из ${rings.length}${R.best ? ` · рекорд ${fmt(R.best)}` : ''}`; } else rr.hidden = true;
-    const hint = J.mode === 'ground' && !F.landed ? (J.V < 3 ? (TOUCH ? 'Кнопка «максимал» — разбег' : 'Пробел — максимал: разбег') : J.V < YAK.Vr ? `Разбег… отрыв на ${Math.round(YAK.Vr * 3.6)} км/ч` : (TOUCH ? 'Джойстик вниз — на себя!' : '↓ — на себя: отрыв!'))
-      : J.mode === 'air' && F.t < 40 && F.free ? (TOUCH ? 'Джойстик — ручка (вниз — на себя) · отпустил — автоматика держит' : '← → крен · ↓ на себя, ↑ от себя · отпустил — автомат держит · Пробел — максимал · Shift — щитки') : '';
+    const hint = J.mode === 'ground' && !F.landed ? (J.V < 3 ? (TOUCH ? 'Потяните джойстик на себя — разбег и взлёт' : 'Пробел — максимал: разбег') : J.V < YAK.Vr ? `Разбег… отрыв на ${Math.round(YAK.Vr * 3.6)} км/ч` : (TOUCH ? 'Джойстик вниз — на себя!' : '↓ — на себя: отрыв!'))
+      : J.mode === 'air' && F.t < 40 && F.free ? (TOUCH ? 'Джойстик — ручка · до упора — максимал · двойной тап — рывок' : '← → крен · ↓ на себя, ↑ от себя · отпустил — автомат держит · Пробел — максимал · Shift — щитки') : '';
     const he = $('hint'); if (he.textContent !== hint) he.textContent = hint; he.hidden = !hint; he.className = 'hud'; }
   // ИЛС из кабины: линия горизонта и «птичка» вектора скорости, лестница тангажа -- зелёным, как на настоящем
   function drawHorizon() { const W = window.innerWidth, Hh = window.innerHeight; if (hzc.width !== W || hzc.height !== Hh) { hzc.width = W; hzc.height = Hh; } hz.clearRect(0, 0, W, Hh);

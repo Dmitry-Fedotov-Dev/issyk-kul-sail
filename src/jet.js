@@ -4,6 +4,8 @@
 //
 // Философия управления та же, что у яхты («паруса подбирает экипаж»): лётчик задаёт намерение, рутину делает
 // автоматика, как у настоящей СДУ Як-130:
+//  * Телефон: один джойстик. Отклонил -- ручка; рванул ручку до упора -- автомат даёт максимал (энергия на манёвр);
+//    двойной тап по джойстику -- максимал на 3 с. На полосе: потянул на себя -- разбег и отрыв.
 //  * ← → -- крен. Отпустил -- самолёт сам выводит в горизонт крыла (кроме случая, когда тянешь ручку -- петля
 //    не должна разваливаться на вершине).
 //  * ↓ -- ручку на себя (перегрузка, нос вверх), ↑ -- от себя. Отпустил -- автомат держит угол наклона траектории,
@@ -14,7 +16,7 @@ export const YAK = {
   m: 7250, Vs: 52, Vr: 58, Vmax: 295, nMax: 8, nMin: -3, // сваливание ~190 км/ч, отрыв ~210, максимум ~1060
   T: 6.9,          // тяга на максимале, м/с^2 (две АИ-222-25 по 2500 кгс)
   cd: 6.9 / (295 * 295), ki: 8000, // сопротивление: вредное ~V^2, индуктивное ~n^2/V^2 -- в глубоком вираже скорость тает
-  roll: 3.2,       // предельная угловая скорость крена, рад/с
+  roll: 4.4,       // предельная угловая скорость крена, рад/с (Як-130 крутит бочку меньше чем за 1.5 с)
   cruise: 180,     // автомат тяги: 650 км/ч
 };
 const g = 9.81, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -43,8 +45,8 @@ export class Jet {
     // тяга: максимал -- кнопкой, иначе автомат держит скорость; на земле без газа стоим
     const Vset = ctl.Vset || P.cruise, auto = clamp(0.35 + (Vset - this.V) * 0.03, 0.05, 1);
     const thrW = this.brake ? 0.02 : this.max ? 1 : this.mode === 'ground' ? (this.V > 3 || ctl.go ? 1 : 0) : auto;
-    this.thr += (thrW - this.thr) * Math.min(1, dt * (thrW > this.thr ? 0.9 : 1.6)); // двигатель раскручивается не мгновенно
-    if (this.mode === 'ground') return this.ground(dt, roll, pitch, h, rwy);
+    this.thr += (thrW - this.thr) * Math.min(1, dt * (thrW > this.thr ? 2.4 : 1.8)); // двигатель раскручивается быстро -- газ чувствуется сразу
+    if (this.mode === 'ground') return this.ground(dt, roll, pitch, h, rwy, ctl.wind);
     if (this.mode !== 'air') return;
     // ---- в воздухе ----
     const sig = Math.exp(-(this.Z + 1601) / 9500); this.sig = sig; // плотность воздуха: Иссык-Куль -- 1601 м над морем, на 12 км её меньше трети
@@ -64,13 +66,22 @@ export class Jet {
     this.u = rot(this.u, this.f, p * dt); this.p = p;
     // силы: тяга и сопротивление -- по скорости, подъёмная -- по u, вес -- вниз
     const ind = P.ki * n * n / Math.max(this.V * this.V * sig / 0.84, 400), drag = P.cd * sig / 0.84 * this.V * this.V * (this.brake ? 2.6 : 1) + ind + (this.gear ? 0.0012 * this.V * this.V * 0.06 : 0);
-    const al = P.T * Math.pow(sig / 0.84, 0.7) * this.thr - drag, v = [this.f[0] * this.V, this.f[1] * this.V, this.f[2] * this.V];
+    const al = P.T * Math.pow(sig / 0.84, 0.7) * this.thr * (this.max ? 1.25 : 1) - drag, v = [this.f[0] * this.V, this.f[1] * this.V, this.f[2] * this.V];
     for (let k = 0; k < 3; k++) v[k] += (this.f[k] * al + this.u[k] * n * g - W[k] * g) * dt;
     this.V = Math.hypot(v[0], v[1], v[2]); this.f = norm(v);
     // сваливание: нос опускается сам (флюгер), крылья покачивает
     if (this.stall) { this.f = norm([this.f[0], this.f[1], this.f[2] - dt * 0.6]); }
     this.u = norm(this.u.map((x, k) => x - this.f[k] * dot(this.u, this.f))); this.r = cross(this.f, this.u);
-    this.X += v[0] * dt; this.Y += v[1] * dt; this.Z += v[2] * dt;
+    // ветер: самолёт летит в движущемся воздухе -- его сносит, а с высотой ветер сильнее (у гребней -- вдвое);
+    // у земли и над хребтами в сильный ветер -- болтанка (короткие толчки по перегрузке и крену)
+    const wd = ctl.wind || null; let wx = 0, wy = 0;
+    if (wd) { const k = 1 + Math.min(1.6, Math.max(0, this.Z) / 1800); wx = wd.sx * k; wy = wd.sy * k;
+      const ws = Math.hypot(wd.sx, wd.sy), low = Math.max(0, 1 - (this.agl ?? 999) / 900), mtn = Math.min(1, Math.max(0, h(this.X, this.Y)) / 1500);
+      const tb = ws * 0.018 * (0.25 + low + 0.8 * mtn); this.tb = tb;
+      if (tb > 0.01) { this.tbT = (this.tbT || 0) - dt; if (this.tbT <= 0) { this.tbT = 0.12 + Math.random() * 0.35; this.tbA = (Math.random() - 0.5) * 2; this.tbR = (Math.random() - 0.5) * 2; }
+        for (let k2 = 0; k2 < 3; k2++) v[k2] += this.u[k2] * this.tbA * tb * g * dt * 3; this.u = rot(this.u, this.f, this.tbR * tb * 0.6 * dt); this.bump = Math.abs(this.tbA) * tb; } }
+    this.gx = v[0] + wx; this.gy = v[1] + wy; // путевая скорость
+    this.X += (v[0] + wx) * dt; this.Y += (v[1] + wy) * dt; this.Z += v[2] * dt;
     // земля: шасси выпущено, снижение мягкое, крылья ровно -- касание; иначе -- столкновение
     const gz = Math.max(h(this.X, this.Y), 0), agl = this.Z - gz; this.agl = agl;
     // СРПБЗ: земля близко по курсу -- «Вывод!»
@@ -81,8 +92,8 @@ export class Jet {
       else { this.mode = 'crash'; this.Z = gz; this.crash = { water: h(this.X, this.Y) < 0, V: this.V }; }
     }
   }
-  ground(dt, roll, pitch, h, rwy) {
-    const P = YAK, f = this.f, onR = rwy(this.X, this.Y); this.onRwy = onR;
+  ground(dt, roll, pitch, h, rwy, wind) {
+    const P = YAK, f = this.f, onR = rwy(this.X, this.Y); this.onRwy = onR; this.tb = 0; this.bump = 0;
     // разбег: тяга против трения; на малой скорости ← → -- поворот передней стойкой
     const fr = (this.brake || this.thr < 0.1 ? 2.2 : 0.25) + (onR ? 0 : 1.2) + P.cd * this.V * this.V * 2;
     this.V = Math.max(0, this.V + (P.T * this.thr - fr) * dt);
@@ -90,6 +101,7 @@ export class Jet {
     this.X += this.f[0] * this.V * dt; this.Y += this.f[1] * this.V * dt; this.Z = Math.max(h(this.X, this.Y), 0); this.agl = 0; this.n = 1; this.stall = false; this.gpws = false;
     if (h(this.X, this.Y) < -0.3) { this.mode = 'crash'; this.crash = { water: true, V: this.V }; return; } // укатились в воду
     // отрыв: на скорости отрыва ручку на себя
-    if (this.V > P.Vr && pitch > 0.2) { this.mode = 'air'; this.f = norm([this.f[0], this.f[1], 0.14]); this.Z += 0.5; this.liftoff = true; }
+    const head = wind ? -(wind.sx * this.f[0] + wind.sy * this.f[1]) : 0; this.Vair = this.V + head; // встречный ветер -- короче разбег
+    if (this.Vair > P.Vr && pitch > 0.2) { this.mode = 'air'; this.f = norm([this.f[0], this.f[1], 0.14]); this.Z += 0.5; this.liftoff = true; }
   }
 }

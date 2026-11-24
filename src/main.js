@@ -251,7 +251,7 @@ function buildMenu() {
   for (const id in GFX) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'g_' + id; b.innerHTML = `<b>${GFX[id]}</b>`; b.onclick = () => setGfx(id); $('gfx').appendChild(b); }
   setGfx(store.get('gfx') || 'auto');
   // время суток старта: утро -- пусто и тихо, день -- толпа и торговцы, закат -- мягкий свет, ночь -- костры
-  const TOD = { morning: ['Утро', 7.5], day: ['День', 13], sunset: ['Закат', 19.3], night: ['Ночь', 22.3] }, setTod = (id) => { G.tod = TOD[id] ? id : 'day'; store.set('tod', G.tod); for (const c of $('tod').children) c.setAttribute('aria-pressed', c.dataset.id === G.tod);
+  const TOD = { morning: ['Утро', 5.83], day: ['День', 13], sunset: ['Закат', 19.3], night: ['Ночь', 22.3] }, setTod = (id) => { G.tod = TOD[id] ? id : 'day'; store.set('tod', G.tod); for (const c of $('tod').children) c.setAttribute('aria-pressed', c.dataset.id === G.tod);
     if (G.mode === 'menu') { G.clock = TOD[G.tod][1]; dayCycle(0); updateEnv(G.sky); } }; // меню сразу показывает выбранное время суток -- как выбор погоды
   for (const id in TOD) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${TOD[id][0]}</b>`; b.onclick = () => setTod(id); $('tod').appendChild(b); }
   setTod(store.get('tod') || 'day'); G.todHour = () => TOD[G.tod][1];
@@ -442,8 +442,9 @@ canvas.addEventListener('wheel', (e) => { if (!G || G.mode === 'menu') return; e
 { const el = $('joy'), dot = el.firstElementChild; let id = null;
   const move = (e) => { const r = el.getBoundingClientRect(), R = r.width / 2; let x = (e.clientX - r.left - R) / R, y = (e.clientY - r.top - R) / R; const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
     input.joy = { x, y }; dot.style.transform = `translate(${x * R * 0.62}px,${y * R * 0.62}px)`; };
-  const end = (e) => { if (e.pointerId !== id) return; id = null; input.joy = null; dot.style.transform = ''; el.classList.remove('on'); };
-  el.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); audio.start(); id = e.pointerId; try { el.setPointerCapture(id); } catch (err) { /* без захвата -- джойстик отпустится, когда палец уйдёт */ } el.classList.add('on'); move(e); });
+  const end = (e) => { if (e.pointerId !== id) return; if (performance.now() - downT < 250) lastUp = performance.now(); id = null; input.joy = null; dot.style.transform = ''; el.classList.remove('on'); };
+  let lastUp = 0, downT = 0; // двойной тап по джойстику -- input.joyTap (самолёт: максимал)
+  el.addEventListener('pointerdown', (e) => { const t = performance.now(); if (t - lastUp < 320) input.joyTap = t; downT = t; e.preventDefault(); e.stopPropagation(); audio.start(); id = e.pointerId; try { el.setPointerCapture(id); } catch (err) { /* без захвата -- джойстик отпустится, когда палец уйдёт */ } el.classList.add('on'); move(e); });
   el.addEventListener('pointermove', (e) => { if (e.pointerId === id) { e.preventDefault(); move(e); } });
   for (const n of ['pointerup', 'pointercancel']) el.addEventListener(n, end); }
 $('bmenu').onclick = () => toMenu();
