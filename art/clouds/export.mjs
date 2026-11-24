@@ -5,14 +5,15 @@ import zlib from 'node:zlib'; import fs from 'node:fs'; import path from 'node:p
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const { data, px, used } = makeCloudAtlas();
-const PAL = { L: [255, 255, 255], M: [172, 206, 244], S: [78, 128, 216], D: [40, 74, 165], I: [16, 28, 78] }; // sRGB: свет, основной, тень, глубокая тень, контур
+const PAL = { L: [255, 255, 255], M: [172, 206, 244], S: [96, 145, 220], D: [62, 104, 188], I: [16, 28, 78], R: [128, 196, 210] }; // R -- рефлекс // sRGB: свет, основной, тень, глубокая тень, контур
 
 function render(name) { const [x0, y0, w, h] = px[name], out = Buffer.alloc(w * h * 4), A = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : data[((y0 + y) * AW + x0 + x) * 4 + 3]);
   const ci = name.startsWith('ci'), rain = name === 'rain';
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const o = ((y0 + y) * AW + x0 + x) * 4, t = data[o] / 255, a = data[o + 3], p = ((h - 1 - y) * w + x) * 4;
     if (rain) { if (a) { out.set(PAL.S, p); out[p + 3] = a * 0.6; } continue; }
     if (a < 8) continue;
-    let c = t > 0.56 ? PAL.L : t > 0.32 ? PAL.M : t > 0.17 ? PAL.S : PAL.D;
+    let c = t > 0.56 ? PAL.L : t > 0.32 ? PAL.M : t > 0.17 ? PAL.S : PAL.D; const rf = data[o + 2] / 255 * 0.85;
+    if (rf > 0 && t <= 0.4) c = c.map((v, i) => Math.round(v + (PAL.R[i] - v) * rf));
     if (!ci) { let e = false; for (let dy = -2; dy <= 2 && !e; dy++) for (let dx = -2; dx <= 2 && !e; dx++) if (dx * dx + dy * dy <= 5 && A(x + dx, y + dy) < 8) e = true; if (e) c = PAL.I; }
     out.set(c, p); out[p + 3] = ci ? 215 : 255; }
   return { w, h, rgba: out }; }

@@ -59,7 +59,8 @@ function* atlasJobs() {
   }
   // «горка» -- общая масса облака: суперэллипс |u|^a + v^b < 1 с плоским дном; b < 1.5 -- холм-пирамида, b > 2.5 -- колонна с плоским верхом
   // v0 -- срез купола выше «экватора»: бока подходят к плоскому дну наклонно, без отвесной стенки
-  const mound = ({ cx, base, wl, wr, hm, a = 2, b = 2, lean = 0, zk = 0.6, v0 = 0.3 }) => ({ fn: (x, y) => { const v = (y - base) / hm; if (v < 0 || v >= 1) return -1; const dx = x - cx - lean * v * hm, u = Math.abs(dx) / (dx < 0 ? wl : wr), e = u ** a + (v0 + (1 - v0) * v) ** b;
+  const mound = ({ cx, base, wl, wr, hm, a = 2, b = 2, lean = 0, zk = 0.6, v0 = 0.3, rb = 0.3 }) => ({ fn: (x, y) => { const v1 = (y - base) / hm; if (v1 < 0 || v1 >= 1) return -1; const dx1 = x - cx - lean * v1 * hm, u1 = Math.min(1, Math.abs(dx1) / (dx1 < 0 ? wl : wr)), v = v1 - rb * u1 ** 2.5; if (v < 0) return -1; // подошва к краям приподнята -- углы круглые
+    const dx = x - cx - lean * v * hm, u = Math.abs(dx) / (dx < 0 ? wl : wr), e = u ** a + (v0 + (1 - v0) * v) ** b;
     return e >= 1 ? -1 : Math.min(wl, wr, hm) * zk * Math.sqrt(1 - e); }, box: [cx - wl - Math.abs(lean) * hm - 1, cx + wr + Math.abs(lean) * hm + 1, base, base + hm] });
   const clampParts = (P, w, h) => { for (const l of P) if (!l.fn) { l.rx = Math.min(l.rx, l.x - 3, w - 3 - l.x); l.ry = Math.min(l.ry, h - 3 - l.y); } return P.filter((l) => l.fn || (l.rx > 1.5 && l.ry > 1.5)); };
 
@@ -78,7 +79,7 @@ function* atlasJobs() {
     for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) { const kk = y * w + x; run[x] = M[kk] ? run[x] + 1 : 0; if (!M[kk]) continue;
       const gx = (zc(kk + 1) - zc(kk - 1)) * 0.5, gy = (zc(kk + w) - zc(kk - w)) * 0.5, nl = Math.hypot(gx, gy, 1), s = (-gx * L[0] - gy * L[1] + L[2]) / nl, g = (y - y0) / (y1 - y0);
       let t = (0.5 + 0.5 * s) * (1 - grad) + g * (grad + 0.15) + lift - 0.12;       // низ облака -- в голубой тени
-      if (band && run[x] <= band) t = Math.min(t, run[x] <= band * 0.45 ? 0.12 : 0.3); // полоса глубокой тени по нижнему краю (и под нависающими частями)
+      if (band && run[x] <= band) t = Math.min(t, 0.2 + 0.1 * run[x] / band); // собственная тень низа -- мягкая, тоном тени, а не глубокой тени; у самого края её подсветит рефлекс
       if (sep && C[kk]) { let e = false; for (let d = 1; d <= 2 && !e; d++) e = !on(x - d, y) || !on(x + d, y) || !on(x, y - d) || !on(x, y + d); if (e) t = 0.06; }
       T[kk] = t; C[kk] = 1; }
     // складки: дуга купола, лёгшего поверх массы, -- только верх-право (по свету)
@@ -99,15 +100,16 @@ function* atlasJobs() {
     P.push(mound({ cx: cx + s * wlong * IPHI, base, wl: wlong * IPHI * IPHI * 1.3, wr: wlong * IPHI * IPHI * 1.3, hm: hm * IPHI * rr(0.9, 1.05), b: rr(1.4, 2), v0: 0.5 }));   // плечо -- hm/φ
     if (r() < 0.6) P.push(mound({ cx: cx - s * wsh * IPHI, base, wl: wsh * IPHI, wr: wsh * IPHI, hm: hm * IPHI * IPHI * rr(0.9, 1.1), b: rr(1.4, 2), v0: 0.5 }));       // и hm/φ² с короткой стороны
     faceBumps(P, P[0], o.face, { x0: cx - wl * 0.6, x1: cx + wr * 0.6, y0: base + hm * 0.3, y1: base + hm * 0.75, r0: hm * IPHI ** 4, r1: hm * IPHI ** 3, crease: 0.7 });
-    for (const sd of [-1, 1]) lumpsSide(P, w, h, { side: sd, y0: base + 3, y1: base + hm * 0.55, rel: [IPHI ** 5, IPHI ** 4], r0: 3, r1: 20, sink: [IPHI * IPHI, IPHI], gap: [1, PHI] }); // бока -- тоже клубами
+    for (const sd of [-1, 1]) lumpsSide(P, w, h, { side: sd, y0: base + hm * 0.18, y1: base + hm * 0.55, rel: [IPHI ** 5, IPHI ** 4], r0: 3, r1: 20, sink: [IPHI * IPHI, IPHI], gap: [1, PHI] }); // бока -- тоже клубами
+    lumps(P, w, h, { x0: w * 0.06, x1: w * 0.94, r0: 4, r1: 12, ymin: 0, dz: -0.3, down: true, sink: [0.5, 0.72], gap: [1, 1.7], skip: 0.15 }); // подошва -- мягкими долями, не линейкой
     for (let k = 1; k <= 3; k++) { const q = IPHI ** (k + 1); // фрактал выступов
       lumps(P, w, h, { x0: w * 0.03, x1: w * 0.97, r0: k === 1 ? 4 : 2.5, r1: 60, rel: [q * 0.85, q * 1.15], base, ymin: base + 3, dz: -0.4, gap: [1, PHI], sink: [IPHI * IPHI, IPHI], crease: k === 1 ? 0.35 : 0.1, skip: [0, 0.25, 0.5][k - 1] }); }
     return clampParts(P, w, h);
   }
   // humilis: плоские, ширина к высоте -- φ²
-  for (let k = 0; k < 5; k++) sprite('hum' + k, 192, 72, (T, C) => paint(T, C, 192, 72, cumulus(192, 72, { hm: [0.62, 0.8], asp: PHI * PHI, b: [1.6, 2.4], face: 1 }), { grad: 0.4, band: 3, k: 3 }));
+  for (let k = 0; k < 5; k++) sprite('hum' + k, 192, 72, (T, C) => paint(T, C, 192, 72, cumulus(192, 72, { hm: [0.62, 0.8], asp: PHI * PHI, b: [1.6, 2.4], face: 1 }), { grad: 0.4, band: 5, k: 3 }));
   // mediocris: пышные, ширина к высоте -- φ
-  for (let k = 0; k < 6; k++) sprite('cu' + k, 256, 128, (T, C) => paint(T, C, 256, 128, cumulus(256, 128, { hm: [0.8, 0.92], asp: PHI * rr(1, 1.15), b: [1.3, 2], face: 3 }), { grad: 0.45, band: 4, k: 4 }));
+  for (let k = 0; k < 6; k++) sprite('cu' + k, 256, 128, (T, C) => paint(T, C, 256, 128, cumulus(256, 128, { hm: [0.8, 0.92], asp: PHI * rr(1, 1.15), b: [1.3, 2], face: 3 }), { grad: 0.45, band: 7, k: 4 }));
 
   // ================= Altocumulus: поле мелких хлопьев рядами, по диагонали, с разрывами =================
   for (let k = 0; k < 4; k++) { const w = 512, h = 128;
@@ -253,8 +255,9 @@ function* atlasJobs() {
       for (let x = x0; x < x1;) { const t = (x - x0) / (x1 - x0), hh = Math.max(9, hm * env(t) * rr(0.82, 1.04)), ww = hh * PHI * rr(0.85, 1.1);
         P.push(mound({ cx: x + ww * 0.45, base, wl: ww * 0.62, wr: ww * 0.72, hm: hh, a: rr(1.8, 2.3), b: rr(1.4, 2), v0: rr(0.45, 0.6) })); x += ww * rr(0.5, 0.72); }
       for (const sd of [-1, 1]) lumpsSide(P, w, h, { side: sd, y0: base + 3, y1: base + hm * 0.6, rel: [IPHI ** 4, IPHI ** 3], r0: 3, r1: 14, sink: [IPHI * IPHI, IPHI], gap: [1, PHI] });
+      lumps(P, w, h, { x0: 8, x1: w - 8, r0: 4, r1: 10, ymin: 0, dz: -0.3, down: true, sink: [0.5, 0.72], gap: [1, 1.7], skip: 0.15 });
       for (let q = 1; q <= 3; q++) { const f = IPHI ** (q + 1); lumps(P, w, h, { x0: 6, x1: w - 6, r0: q === 1 ? 4 : 2.5, r1: 40, rel: [f * 0.85, f * 1.15], base, ymin: base + 3, dz: -0.4, gap: [1, PHI], sink: [IPHI * IPHI, IPHI], crease: q === 1 ? 0.35 : 0.1, skip: [0, 0.25, 0.5][q - 1] }); }
-      paint(T, C, w, h, clampParts(P, w, h), { grad: 0.42, band: 4, k: 5 });
+      paint(T, C, w, h, clampParts(P, w, h), { grad: 0.42, band: 6, k: 5 });
       let x = x1 + rr(4, 14); for (let f = 0; f < 3 && x < w - 16; f++) { const rad = rr(5, 10) * IPHI ** (f * 0.5), y = base + rad * rr(0.6, 1.2) + rr(0, 8), Q = [{ x, y, rx: rad * rr(1.3, 1.8), ry: rad }, { x: x + rad * rr(-0.5, 0.6), y: y + rad * 0.55, rx: rad * 0.8, ry: rad * 0.7 }];
         paint(T, C, w, h, clampParts(Q, w, h), { grad: 0.4, band: 2, k: 3 }); x += rad * rr(2.6, 4.2); } }); }
   for (const it of items) if (it.fill) { it.T = new Float32Array(it.w * it.h); it.C = new Uint8Array(it.w * it.h); it.fill(it.T, it.C); yield; }
@@ -270,7 +273,9 @@ function* atlasJobs() {
     for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) { const k = y * w + x; if (!D[k]) continue;
       D[k] = Math.min(D[k], x < w - 1 ? D[k + 1] + 1 : 1, y < h - 1 ? D[k + w] + 1 : 1, x < w - 1 && y < h - 1 ? D[k + w + 1] + 1.414 : 1.414, x > 0 && y < h - 1 ? D[k + w - 1] + 1.414 : 1.414); }
     let mx = 1; for (let k = 0; k < w * h; k++) mx = Math.max(mx, D[k]); const Rn = it.Rn || Math.max(6, mx * 0.8);
+    // рефлекс: низ облака подсвечен снизу светом, отражённым от воды и земли -- самая светлая полоса тени у нижнего края
+    const RF = new Float32Array(w * h); for (let x = 0; x < w; x++) { let run = 0; for (let y = 0; y < h; y++) { const k = y * w + x; run = C[k] ? run + 1 : 0; if (C[k]) RF[k] = Math.max(0, 1 - (run - 1) / 3.2) ** 1.2; } }
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const k = y * w + x, o = ((y0 + y) * AW + x0 + x) * 4;
-      data[o] = Math.max(0, Math.min(1, T[k])) * 255; data[o + 1] = Math.max(0, 1 - D[k] / 5) * 255; data[o + 2] = 0; data[o + 3] = Math.min(1, D[k] / Rn) * 255; } }
+      data[o] = Math.max(0, Math.min(1, T[k])) * 255; data[o + 1] = Math.max(0, 1 - D[k] / 5) * 255; data[o + 2] = RF[k] * 255; data[o + 3] = Math.min(1, D[k] / Rn) * 255; } }
   return { data, rects, px, meta, used: sy + sh };
 }
