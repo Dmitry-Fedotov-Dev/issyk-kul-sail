@@ -567,6 +567,8 @@ function loop(now) {
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
   G.stars.update(camera.position.x, -camera.position.z, G.clock ?? 13, renderer.getPixelRatio(), now / 1000); // звёзды -- для той точки карты, где камера
+  { const k = PG && PG.on ? 0 : Math.min(0.94, G.clouds.inside * 1.05), el = $('cfog'); if (Math.abs(k - (G.cfogK || 0)) > 0.01) { G.cfogK = k; el.style.opacity = k.toFixed(2); // внутри облака -- мгла (у параплана своя)
+    el.style.background = ENV.uDay.value > 0.3 ? 'rgba(236,241,248,1)' : 'rgba(40,46,70,1)'; } }
   lodTick(dt);   if (G.jailoo) G.jailoo.update(dt, G.t); G.clouds.update(dt, camera, { cover: Math.min(1, Math.max(0, (ENV.uCover.value + 0.62) / 1.48)), storm: ENV.uStorm.value, cirrus: ENV.uCirrus.value, wind: G.wind, clock: G.clock, preset: G.preset }); // облачность погоды (-0.62..0.86) -> 0..1; пресет -- какой ветер (улан, санташ, бриз)
   if (G.beach) G.beachHint = G.beach.update(dt, FT && FT.on ? FT.state : null);
   if (G.finds && G.mode !== 'menu') G.finds.update(dt, FT && FT.on && !FT.state.swim && FT.state.st !== 'dis' ? FT.state : null, G.beach.dayN, FT ? FT.magnet : 1.2);
