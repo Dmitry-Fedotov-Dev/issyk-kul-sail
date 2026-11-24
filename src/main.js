@@ -31,8 +31,11 @@ const store = { get(k) { try { return JSON.parse(localStorage.getItem('issyk.' +
 const canvas = $('gl');
 // Если устройство умеет комикс-обработку, штатное сглаживание не включаем: контуры сглаживает сама обработка,
 // а четыре копии кадра под MSAA -- самая большая статья расхода видеопамяти.
-const POST_OK = postSupported();
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: !POST_OK, powerPreference: 'high-performance' });
+// Проверяем на том же контексте, на котором будет игра: пробный второй контекст стоил полсекунды-секунду на телефоне,
+// а при лимите контекстов браузер мог отказать уже основному -- и загрузка навсегда вставала на «Поднимаем паруса».
+const GL2 = (() => { try { return canvas.getContext('webgl2', { antialias: false, alpha: false, depth: true, stencil: false, powerPreference: 'high-performance' }); } catch (e) { return null; } })();
+const POST_OK = postSupported(GL2);
+const renderer = GL2 ? new THREE.WebGLRenderer({ canvas, context: GL2, antialias: false }) : new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 const post = POST_OK ? makePost(renderer) : null;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -124,7 +127,7 @@ async function init() {
   G.hVis = (x, y) => { let v = demT.userData.meshH(x, y); if (v !== null) return v; if (x > NX0 && x < NX1 && y > NY0 && y < NY1) { v = nearT.userData.meshH(x, y); if (v !== null) return v; } v = far.userData.meshH(x, y); return v === null ? hA(x, y) : v; };
   G.holes = RIVER_HOLES;
   G.jailoo = makeJailoo({ G, scene, camera, toast, ach: X.ach, store }); // джайлоо: юрты, отары, табуны, яки (jailoo.js)
-  G.clouds = makeSpriteClouds(scene, hA, analyzeBasin(far.userData.grid, lake)); // рисованные кучевые облака (clouds.js)
+  G.clouds = makeSpriteClouds(scene, hA); // разбор котловины (озеро, берега, ущелья) -- уже после показа меню, см. ниже // рисованные кучевые облака (clouds.js)
   G.mini = makeMinimap(hA); G.mmZ = store.get('mmZ') ?? 1; // миникарта в компасе; масштаб -- тапом по компасу
   $('dialwrap').addEventListener('pointerdown', (e) => { e.stopPropagation(); }); $('dialwrap').onclick = (e) => { e.stopPropagation(); G.mmZ = (G.mmZ + 1) % 3; store.set('mmZ', G.mmZ); audio.tick && audio.tick(); };
   G.mmRange = (para) => (para ? [240, 1500, 6000] : [400, 1500, 5000])[G.mmZ];
@@ -142,6 +145,7 @@ async function init() {
   await loadStep(100, 'Отдать швартовы!');
   // снимок растворяется в живой сцене; меню появляется уже поверх неё
   clearInterval(window.__tipTimer); $('load').classList.add('done'); setTimeout(() => { $('load').hidden = true; }, 1500);
+  setTimeout(() => G.clouds.setBasin(analyzeBasin(far.userData.grid, lake)), 600); // облака всё равно ждут атлас -- полсекунды разбора не держат загрузку
   requestAnimationFrame(loop);
   X.openLink(); // открыли ссылку друга -- сразу на воду, к нему
 }

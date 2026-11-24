@@ -9,10 +9,8 @@
 // Вода, брызги и небо глубину не пишут, поэтому остаются чистыми: волны не обводятся.
 import * as THREE from 'three';
 
-// Проверочный контекст сразу освобождаем: браузер держит ограниченное число контекстов WebGL на все вкладки и при
-// превышении отбирает самый старый -- с несколькими открытыми вкладками игры это обрывало графику у соседней.
-export function postSupported() { try { const c = document.createElement('canvas'), gl = c.getContext('webgl2'); const ok = !!gl && !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float'));
-  const lose = gl && gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); return ok; } catch (e) { return false; } }
+// Комикс-обработке нужен WebGL2 и запись в буфер с плавающей точкой. Проверяем на контексте самой игры.
+export function postSupported(gl) { return !!gl && !!(gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float')); }
 
 export function makePost(renderer) {
   const depth = new THREE.DepthTexture(4, 4); depth.type = THREE.UnsignedIntType;

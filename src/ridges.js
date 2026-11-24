@@ -15,10 +15,11 @@ export function setRidgeRes(w, h) { U.uRes.value.set(w, h); U.uK.value = Math.ma
 // гребни на регулярной сетке высот hs (W x H, шаг step м); mask -- какие клетки рассматривать
 function extract(hs, W, H, step, mask, minHa, toXY, out) {
   const n = W * H, rec = new Int32Array(n).fill(-1), acc = new Float32Array(n), cells = [];
+  const mk = new Uint8Array(n); for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) mk[j * W + i] = mask(i, j, hs[j * W + i]) ? 1 : 0; // маска -- по разу на клетку
   const DI = [1, -1, 0, 0, 1, 1, -1, -1], DJ = [0, 0, 1, -1, 1, -1, 1, -1], DL = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
-  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (!mask(i, j, hs[k])) continue; cells.push(k); acc[k] = 1;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; if (!mk[k]) continue; cells.push(k); acc[k] = 1;
     let best = 0; for (let d = 0; d < 8; d++) { const a = i + DI[d], b = j + DJ[d]; if (a < 0 || b < 0 || a >= W || b >= H) continue; const q = b * W + a;
-      if (!mask(a, b, hs[q])) continue; const s = (hs[q] - hs[k]) / DL[d]; if (s > best) { best = s; rec[k] = q; } } }
+      if (!mk[q]) continue; const s = (hs[q] - hs[k]) / DL[d]; if (s > best) { best = s; rec[k] = q; } } }
   cells.sort((a, b) => hs[a] - hs[b]); // подъём всегда к более высокой клетке: снизу вверх накопление готово
   for (const k of cells) if (rec[k] >= 0) acc[rec[k]] += acc[k];
   const ha = (step * step) / 1e4, thr = minHa / ha, nd = new Uint8Array(n);
@@ -42,8 +43,10 @@ export function makeRidges(hNear, farGrid, holes = []) {
   // вся котловина: грубая карта (шаг 600 м) за пределами подробной и не там, где стоит рельеф ущелья
   { const { hs, W, H, X0, Y1, STEP } = farGrid, M = MAP.M, pad = 2 * STEP;
     const nx0 = -MAP.OX * M + pad, nx1 = (MAP.N - 1 - MAP.OX) * M - pad, ny0 = (MAP.OY - (MAP.N - 1)) * M + pad, ny1 = MAP.OY * M - pad;
-    const mask = (i, j, h) => { if (h < 40) return false; const X = X0 + i * STEP, Y = Y1 - j * STEP; if (X > nx0 && X < nx1 && Y > ny0 && Y < ny1) return false;
-      return !holes.some((o) => Math.hypot(X - o.X, Y - o.Y) < o.r + STEP); };
+    // где стоит рельеф ущелья -- круги «дыр» выжигаются в маске один раз (раньше каждая клетка перебирала все дыры -- секунды на телефоне)
+    const hole = new Uint8Array(W * H); for (const o of holes) { const R = o.r + STEP, i0 = Math.max(0, Math.floor((o.X - R - X0) / STEP)), i1 = Math.min(W - 1, Math.ceil((o.X + R - X0) / STEP)), j0 = Math.max(0, Math.floor((Y1 - o.Y - R) / STEP)), j1 = Math.min(H - 1, Math.ceil((Y1 - o.Y + R) / STEP));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (Math.hypot(X0 + i * STEP - o.X, Y1 - j * STEP - o.Y) < R) hole[j * W + i] = 1; }
+    const mask = (i, j, h) => { if (h < 40 || hole[j * W + i]) return false; const X = X0 + i * STEP, Y = Y1 - j * STEP; return !(X > nx0 && X < nx1 && Y > ny0 && Y < ny1); };
     const at = (X, Y) => { const fx = Math.min(Math.max((X - X0) / STEP, 0), W - 1.001), fy = Math.min(Math.max((Y1 - Y) / STEP, 0), H - 1.001), i = fx | 0, j = fy | 0, u = fx - i, v = fy - j;
       return (hs[j * W + i] * (1 - u) + hs[j * W + i + 1] * u) * (1 - v) + (hs[(j + 1) * W + i] * (1 - u) + hs[(j + 1) * W + i + 1] * u) * v - 12; }; // дальняя сетка лежит на 12 м ниже
     const far = []; extract(hs, W, H, STEP, mask, 400, (i, j) => [X0 + i * STEP, Y1 - j * STEP], far);

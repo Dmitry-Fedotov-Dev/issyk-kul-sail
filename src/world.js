@@ -186,17 +186,21 @@ export async function loadDem(D, hNear) {
 }
 export function makeDemTerrain(dem, touch) {
   const S = touch ? 3 : 2, { X0, Y1, STEP } = dem, W = Math.floor((dem.W - 1) / S) + 1, Hn = Math.floor((dem.H - 1) / S) + 1, M = STEP * S;
+  // смешанная высота на всей сетке полного разрешения -- один раз (раньше каждая вершина и каждый пиксель карты нормалей
+  // спрашивали высоту ещё у четырёх соседей: впятеро больше работы, секунда-две на телефоне)
+  const DW = dem.W, DH = dem.H, FH = new Float32Array(DW * DH); for (let j = 0; j < DH; j++) for (let i = 0; i < DW; i++) FH[j * DW + i] = dem.h(X0 + i * STEP, Y1 - j * STEP);
+  const fh = (i, j) => FH[Math.min(DH - 1, Math.max(0, j)) * DW + Math.min(DW - 1, Math.max(0, i))];
   const pos = new Float32Array(W * Hn * 3), nor = new Float32Array(W * Hn * 3), hs = new Float32Array(W * Hn);
-  for (let j = 0; j < Hn; j++) for (let i = 0; i < W; i++) { const X = X0 + i * M, Y = Y1 - j * M, k = j * W + i, y = dem.h(X, Y), e = M;
+  for (let j = 0; j < Hn; j++) for (let i = 0; i < W; i++) { const X = X0 + i * M, Y = Y1 - j * M, k = j * W + i, a = i * S, b = j * S, y = fh(a, b), e = M;
     hs[k] = y; pos[k * 3] = X; pos[k * 3 + 1] = y; pos[k * 3 + 2] = -Y;
-    const nx = dem.h(X - e, Y) - dem.h(X + e, Y), nz = dem.h(X, Y + e) - dem.h(X, Y - e), l = Math.hypot(nx, 2 * e, nz); nor[k * 3] = nx / l; nor[k * 3 + 1] = (2 * e) / l; nor[k * 3 + 2] = nz / l; }
+    const nx = fh(a - S, b) - fh(a + S, b), nz = fh(a, b - S) - fh(a, b + S), l = Math.hypot(nx, 2 * e, nz); nor[k * 3] = nx / l; nor[k * 3 + 1] = (2 * e) / l; nor[k * 3 + 2] = nz / l; }
   const lists = new Map(), CH = 48;
   for (let j = 0; j < Hn - 1; j++) for (let i = 0; i < W - 1; i++) { const a = j * W + i, b = a + 1, c = a + W, d = c + 1; if (Math.max(hs[a], hs[b], hs[c], hs[d]) < -9) continue;
     chunkList(lists, ((j / CH) | 0) * 1000 + ((i / CH) | 0) + (Math.min(hs[a], hs[b], hs[c], hs[d]) < 0 ? SHORE : 0)).push(a, d, b, a, c, d); } // строки идут с севера -- обход обратный, чтобы лицо было вверх
   // карта нормалей полного разрешения (по смешанной высоте -- чтобы края совпадали)
   const nm = new Uint8Array(dem.W * dem.H * 4);
-  for (let j = 0; j < dem.H; j++) for (let i = 0; i < dem.W; i++) { const X = X0 + i * STEP, Y = Y1 - j * STEP, e = STEP, o = (j * dem.W + i) * 4;
-    const nx = dem.h(X - e, Y) - dem.h(X + e, Y), nz = dem.h(X, Y + e) - dem.h(X, Y - e), l = Math.hypot(nx, 2 * e, nz); nm[o] = (nx / l * 0.5 + 0.5) * 255; nm[o + 1] = (2 * e / l) * 255; nm[o + 2] = (nz / l * 0.5 + 0.5) * 255; nm[o + 3] = 255; }
+  for (let j = 0; j < dem.H; j++) for (let i = 0; i < dem.W; i++) { const e = STEP, o = (j * dem.W + i) * 4;
+    const nx = fh(i - 1, j) - fh(i + 1, j), nz = fh(i, j - 1) - fh(i, j + 1), l = Math.hypot(nx, 2 * e, nz); nm[o] = (nx / l * 0.5 + 0.5) * 255; nm[o + 1] = (2 * e / l) * 255; nm[o + 2] = (nz / l * 0.5 + 0.5) * 255; nm[o + 3] = 255; }
   const tex = new THREE.DataTexture(nm, dem.W, dem.H, THREE.RGBAFormat); tex.minFilter = THREE.LinearMipmapLinearFilter; tex.magFilter = THREE.LinearFilter; tex.generateMipmaps = true; tex.flipY = false; tex.needsUpdate = true;
   const T = new THREE.Vector4(X0, Y1, 1 / ((dem.W - 1) * STEP), 1 / ((dem.H - 1) * STEP));
   const mk = (shore) => { const m = terrainMaterial(shore); m.userData.defs = { ...m.userData.defs, DEMN: 1 }; m.defines = { ...m.defines, DEMN: 1 }; m.uniforms = { ...m.uniforms, uDemN: { value: tex }, uDemT: { value: T } };
@@ -373,10 +377,13 @@ export async function makeFarTerrain(holes = []) {
   const M = MAP.M, pad = 2 * STEP, nx0 = -MAP.OX * M + pad, nx1 = (MAP.N - 1 - MAP.OX) * M - pad, ny0 = (MAP.OY - (MAP.N - 1)) * M + pad, ny1 = MAP.OY * M - pad;
   const inside = (i, j) => { const X = X0 + i * STEP, Y = Y1 - j * STEP; return X > nx0 && X < nx1 && Y > ny0 && Y < ny1; };
   const lists = new Map(), CW = Math.ceil((W - 1) / 8), CHh = Math.ceil((H - 1) / 6);
+  // клетки под подробным рельефом ущелья -- выжигаем кругами один раз, а не перебираем все круги в каждой клетке
+  const holeC = new Uint8Array(W * H); for (const o of holes) { const i0 = Math.max(0, Math.floor((o.X - o.r - X0) / STEP) - 1), i1 = Math.min(W - 2, Math.ceil((o.X + o.r - X0) / STEP)), j0 = Math.max(0, Math.floor((Y1 - o.Y - o.r) / STEP) - 1), j1 = Math.min(H - 2, Math.ceil((Y1 - o.Y + o.r) / STEP));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (Math.hypot(X0 + (i + 0.5) * STEP - o.X, Y1 - (j + 0.5) * STEP - o.Y) < o.r) holeC[j * W + i] = 1; }
   for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) { const a = j * W + i, b = a + 1, e = a + W, f = e + 1;
     if (Math.max(hs[a], hs[b], hs[e], hs[f]) < -1) continue;
     if (inside(i, j) && inside(i + 1, j) && inside(i, j + 1) && inside(i + 1, j + 1)) continue;
-    const qx = X0 + (i + 0.5) * STEP, qy = Y1 - (j + 0.5) * STEP; if (holes.some((o) => Math.hypot(qx - o.X, qy - o.Y) < o.r)) continue; // здесь стоит подробный рельеф ущелья
+    if (holeC[a]) continue; // здесь стоит подробный рельеф ущелья
     chunkList(lists, ((j / CHh) | 0) * 64 + ((i / CW) | 0) + (Math.min(hs[a], hs[b], hs[e], hs[f]) < 0 ? SHORE : 0)).push(a, e, b, b, e, f); }
   const mat = terrainMaterial(false), matS = terrainMaterial(); mat.side = matS.side = THREE.DoubleSide;
   const m = chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, mat, matS);
