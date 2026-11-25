@@ -272,6 +272,7 @@ void main(){ vec3 N=normalize(vN); float h=vH;
 #ifdef DEMN
   RK=0.3; // настоящие гребни уже в карте нормалей -- выдуманных рёбер меньше
 #endif
+  float slS=1.-N.y; // крутизна без выдуманных рёбер -- для границы снега (рёбра гаснут с размером пикселя, снег бы «ездил»)
   N=normalize(N+vec3(r0-rx,0.,r0-rz)*(7.5*mt*kR*RK)); float sl=1.-N.y; r0=mix(0.45,r0,kR);
   float kN=1.-smoothstep(10.,45.,px), n=0.5, n2=0.5, n3=0.5;
   if(h>=0.){ n=mix(mix(0.5,vnoise(vP.xz*0.0035),1.-smoothstep(90.,260.,px)), fbm(vP.xz*0.0035), kN); n2=mix(0.5,fbm(vP.xz*0.045),kF); n3=mix(0.5,vnoise(vP.xz*0.6),kT); }
@@ -288,7 +289,9 @@ void main(){ vec3 N=normalize(vN); float h=vH;
   // тёмные скальные стены и осыпи: крутое -- почти чёрный камень с прожилками
   float crag=smoothstep(0.34,0.66,sl)*mt; c=mix(c, mix(vec3(0.34,0.34,0.37), vec3(0.52,0.49,0.46), n2)*(0.8+0.4*r0), crag*0.6);
   // снег держится на пологом и в кулуарах, с крутых стен осыпается -- граница рваная, языками
-  float snowM=smoothstep(1850.,2200.,h+n*380.+(r0-0.45)*520.)*(1.-smoothstep(0.50,0.80,sl)*0.85); c=mix(c, snow, snowM);
+  // узор границы -- только от места, не от камеры: шум крупный (не рябит вдали) и не зависит от размера пикселя -- граница не моргает
+  float nS=vnoise(vP.xz*0.0035)*0.7+vnoise(vP.xz*0.0013+7.)*0.3, nT=vnoise(vP.xz*0.009+3.)-0.5;
+  float snowM=smoothstep(1850.,2200.,h+nS*380.+nT*300.)*(1.-smoothstep(0.50,0.80,slS)*0.85); c=mix(c, snow, snowM);
   if(h<0.) c=mix(sand*vec3(0.62,0.93,0.88), vec3(0.03,0.30,0.42), smoothstep(0.,7.,-h));
   else c=mix(c*0.72, c, smoothstep(0.,0.9,h));
   // застройка и сады читаются издалека как фактура: тёмные кроны и светлые пятна крыш
@@ -315,7 +318,7 @@ void main(){ vec3 N=normalize(vN); float h=vH;
     vec3 a=mix(dry, meadow, smoothstep(1850.,2250.,Hm)); a=mix(a, scree, smoothstep(3150.,3600.,Hm));
     a=mix(a, rock, smoothstep(0.16,0.3,slope)); a=mix(a, cliff, smoothstep(0.36,0.55,slope));
     float fN=smoothstep(0.04,0.22,-N.z)*smoothstep(2050.,2250.,Hm)*(1.-smoothstep(2800.,2950.,Hm))*(1.-smoothstep(0.34,0.5,slope))*(0.55+0.45*vnoise(vP.xz*0.011)); if(uLCOn>0.) fN=texture2D(uLC, vec2((vP.x-uLCT.x)*uLCT.z, (uLCT.y+vP.z)*uLCT.w)).r*(0.75+0.25*vnoise(vP.xz*0.02)); a=mix(a, forest, smoothstep(0.3,0.55,fN)); // ельники: по маске OSM, пока она не загружена -- по северным склонам
-    float sn=smoothstep(3880.,4020.,Hm+220.*vnoise(vP.xz*0.004)-cav*160.+max(0.,-N.z)*260.)*(1.-smoothstep(0.30,0.5,slope)); // летом снег -- пятнами у вершин, в кулуарах и на северных склонах a=mix(a, snw, sn);
+    float sn=smoothstep(3880.,4020.,Hm+220.*vnoise(vP.xz*0.004)-cav*160.+max(0.,-N.z)*260.)*(1.-smoothstep(0.30,0.5,slS)); // летом снег -- пятнами у вершин, в кулуарах и на северных склонах a=mix(a, snw, sn);
     c=a*mix(0.5,0.9,sn); snowM=sn; // под яркий свет сцены: иначе склоны выгорают в белое
     float hsh=dot(N, normalize(vec3(-0.55,0.7,-0.45))); ao*=clamp((1.+cav*0.5)*mix(0.72,1.15,hsh),0.45,1.4); l*=clamp(1.+cav*0.25,0.7,1.25); }
 #endif

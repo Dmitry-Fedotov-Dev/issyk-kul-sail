@@ -133,7 +133,7 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
   const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.renderOrder = -1; scene.add(mesh);
   // замирание поворота: ключ облака -- его заготовка и размер (место плывёт с ветром, а это -- нет)
   const LOCK = new Map(), smo = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-  function face(q, cx, cy, cz) { const dX = q.X - cx, dY = q.Y - cy, dh = Math.hypot(dX, dY), R = 700 + 0.3 * q.W, k = q.rc[0].toFixed(4) + q.rc[1].toFixed(4) + '|' + Math.round(q.W) + '|' + Math.round(q.H);
+  function face(q, cx, cy, cz) { const dX = q.X - cx, dY = q.Y - cy, dh = Math.hypot(dX, dY), R = 700 + 0.3 * q.W, k = q.id || q.rc[0].toFixed(4) + q.rc[1].toFixed(4) + '|' + Math.round(q.W) + '|' + Math.round(q.H);
     let e = LOCK.get(k); if (dh > R * 1.7) { if (e) LOCK.delete(k); return null; }
     const lv = [dX, q.Z - cz, -dY], ll = Math.hypot(...lv) || 1; lv[0] /= ll; lv[1] /= ll; lv[2] /= ll;
     const tilt = smo(0, 600, cz - q.Z);
@@ -141,7 +141,8 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
     const r = smo(R, R * 1.7, dh), v = [0, 1, 2].map((i) => e.v[i] + (lv[i] - e.v[i]) * r), vl = Math.hypot(...v) || 1; // уходишь -- плавно снова поворачивается к тебе
     return [v[0] / vl, v[1] / vl, v[2] / vl, e.t + (tilt - e.t) * r]; }
   const out = []; let ox = 0, oy = 0, T = 0, fr = 0, reg = 1; // reg -- над каким хребтом гроза грозового дня: 1 -- Кунгей (север), -1 -- Терскей (юг)
-  const push = (X, Y, Z, W, H, rc, thr, kind, fog, heavy, d, tilt = 0.6, fd = 1, fl = 0) => out.push({ X, Y, Z, W, H, rc, thr, kind, fog, heavy, d, tilt, fd, fl });
+  let cid = ''; // кто это облако: клетка и поколение -- по нему замирание поворота узнаёт облако от кадра к кадру (размер плывёт)
+  const push = (X, Y, Z, W, H, rc, thr, kind, fog, heavy, d, tilt = 0.6, fd = 1, fl = 0) => out.push({ X, Y, Z, W, H, rc, thr, kind, fog, heavy, d, tilt, fd, fl, id: cid });
   const hOf = (rc, W) => W * rc[3] / rc[2] * AH / AW; // высота спрайта по пропорциям заготовки
   // слой клеток: в каждой клетке (сетка плывёт с ветром) -- не больше одного облака/кластера
   function layer(cx, cy, C, R0, R, wk, fn) { const sx = ox * wk, sy = oy * wk, i0 = Math.floor((cx - sx - R) / C), i1 = Math.floor((cx - sx + R) / C), j0 = Math.floor((cy - sy - R) / C), j1 = Math.floor((cy - sy + R) / C);
@@ -169,7 +170,7 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
       push(p2.X + dY / n * off, p2.Y - dX / n * off, p2.g - meta.ban1.ay * H + 60, W, H, rc, 0, 0, 0, 0, n - 200, 0.6, 0.25, sd > 0 ? 1 : 2); } }
   const api = { mesh, atlasReady, inside: 0, demo: false, out, B, setBasin(b) { B = b; api.B = b; }, // разбор котловины можно отдать позже (после показа меню); out, B -- для проверок; api.reg = 1 | -1 -- грозовой день над Кунгеем / Терскеем, 0 -- без грозы
     // w: { cover 0..1, storm 0..1, cirrus 0..1, wind {sx, sy}, clock -- часы }
-    update(dt, camera, w) { T += dt; ox += (w.wind ? w.wind.sx : 2) * dt; oy += (w.wind ? w.wind.sy : 1) * dt; if (!rects || (fr++ % 2 && geo.instanceCount)) return; // список -- через кадр: облака еле ползут
+    update(dt, camera, w) { T += dt; cid = ''; ox += (w.wind ? w.wind.sx : 2) * dt; oy += (w.wind ? w.wind.sy : 1) * dt; if (!rects || (fr++ % 2 && geo.instanceCount)) return; // список -- через кадр: облака еле ползут
       const cx = camera.position.x, cy = -camera.position.z, cz = camera.position.y; out.length = 0;
       const storm = w.storm || 0, hr = w.clock ?? 13; ENV.uCuK.value = 0; // старые процедурные облака неба выключены совсем
       const conv = sm(7.5, 12.5, hr) * (1 - sm(18, 21.5, hr)), eve = sm(16.5, 18.5, hr) * (1 - sm(21, 22.5, hr)), night = 1 - sm(6, 8, hr) * (1 - sm(20, 22, hr)); // конвекция днём; ночь
@@ -215,7 +216,7 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
         const fr = (x) => x - Math.floor(x), ci = i + j * PHI;
         if (fr(ci * PHI + ring * 0.5) < 0.18) return;                                      // окна чистого неба -- фибоначчиевым ритмом
         const per = 90 + rh(1) * 110, q = T / per + fr(ci * IPHI * IPHI), gen = Math.floor(q), ph = q - gen, rg = (k) => hash(i * 13 + gen * 7 + k + ring * 577, j * 29 + gen * 3 + k * 5);
-        const X = x0 + (0.1 + 0.8 * fr(rh(3) + gen * IPHI)) * C, Y = y0 + (0.1 + 0.8 * fr(rh(4) + gen * 0.7548777)) * C, /* по второй оси -- «пластическое» число, двумерный родственник φ: с φ по обеим осям точки легли бы на прямую */ d = Math.hypot(X - cx, Y - cy); if (d > R1 || d < R0) return;
+        cid = 'c' + ring + '|' + i + '|' + j + '|' + gen; const X = x0 + (0.1 + 0.8 * fr(rh(3) + gen * IPHI)) * C, Y = y0 + (0.1 + 0.8 * fr(rh(4) + gen * 0.7548777)) * C, /* по второй оси -- «пластическое» число, двумерный родственник φ: с φ по обеим осям точки легли бы на прямую */ d = Math.hypot(X - cx, Y - cy); if (d > R1 || d < R0) return;
         const g = h(X, Y), lk = lakeD(X, Y, g), sl = wetL(X, Y), water = 1 - sm(500, 2500, lk), pfx = pf(X, Y), cl = cool(X, Y), overcast = storm > 0.3 && sl > 0.5;
         if (water > 0.5 && !overcast) return;                                                // зеркало озера чистое: облачность -- на берегах
         // над склонами гуще (прогретые склоны, подъём воздуха), над прибрежной равниной -- редко, на берегу без непогоды -- ясно
@@ -229,17 +230,18 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
         const el = (Zg - cz) / Math.max(d, 1), lifeO = sm(0.35, 0.75, el) * sm(250, 700, Zg - cz); // «потолок» -- только когда смотришь снизу, из-под облака if (lifeO >= 0.97) return; life = Math.max(life, lifeO);
         const fz = 0.45 + 0.35 * sm(30000, 100000, d), hv = sl * 1.2;
         const sz = rg(4) ** 1.6; let W, rc;
-        if (water > 0.5) { if ((Zg - cz) / Math.max(d, 1) > 0.12) return; W = (3000 + sz * 4000) * (0.8 + 0.4 * Math.min(1, m)); rc = pick('val', 4, rg(5)); const fl = rg(12) < 0.5 ? 1 : 2; // над водой в сплошную непогоду -- валы слоисто-кучевых внахлёст
+        if (water > 0.5) { const ew = sm(0.07, 0.12, (Zg - cz) / Math.max(d, 1)); if (ew > 0.97) return; life = Math.max(life, ew); W = (3000 + sz * 4000) * (0.8 + 0.4 * Math.min(1, m)); rc = pick('val', 4, rg(5)); const fl = rg(12) < 0.5 ? 1 : 2; // над водой в сплошную непогоду -- валы слоисто-кучевых внахлёст
           push(X, Y, Zg - water * 300, W, hOf(rc, W) * (1.2 + 0.5 * rg(13)), rc, life, 0, 0, hv, d, 0.6, fz, fl); return; }
         if ((sl > 0.4 && storm > 0.3 || cl > 0.3) && rg(8) < Math.max(sl, cl) * 0.6) { W = 2500 + sz * 6000; rc = pick('st', 4, rg(5)); const Hs = hOf(rc, W) * 1.6; push(X, Y, lift(X, Y, Zg, W, Hs), W, Hs, rc, life, 0, 0, hv, d, 0.6, fz); return; } // в непогоду -- плоские тяжёлые массы
         if (water > 0.5) return;                                                              // над водой -- только сплошная пелена
         const lv = Math.min(4, Math.floor(fr(ci * PHI * PHI + gen * IPHI) ** 0.75 * 5)); W = 3600 * IPHI ** Math.max(0, lv - ring) * (0.6 + 0.6 * Math.min(1, I)) * (1 + 0.4 * mf * conv) * (0.92 + 0.16 * rg(9)); rc = W < 1100 || I < 0.45 ? pick('hum', 5, rg(5)) : pick('cu', 6, rg(5)); // размеры -- ряд золотого сечения: 3600, 2200, 1400, 850, 520 м // крупные и мелкие чередуются тем же фибоначчиевым ритмом
-        if (W < d * 0.018) return; // вдали мелочь не видна -- без «крошек» у горизонта
+        if (W < d * 0.012) return; life = Math.max(life, 1 - sm(0.012, 0.022, W / Math.max(d, 1))); // вдали мелочь не видна -- без «крошек» у горизонта; тает плавно, не мигает
         const Hc = hOf(rc, W) * (1 + 0.5 * mf * conv * Math.min(1, I)); push(X, Y, lift(X, Y, Zg, W, Hc), W, Hc, rc, life, 0, 0, hv, d, 0.6, fz); // над хребтом днём растут ввысь (congestus) -- макушки встают из-за гребня
         // спутники по «подсолнуху»: k-й -- под золотым углом 137.5° к предыдущему, на расстоянии W·φ^(k/2), размером W/φ^(k+1)
-        const n = W > d * 0.09 ? Math.floor(rg(6) * 4 * Math.min(1, m)) : 0, a0 = rg(10) * 6.28; for (let k = 1; k <= n; k++) { const a = a0 + k * 2.39996, rr = W * (0.75 + 0.35 * PHI ** (k * 0.5)), Ws = W * IPHI ** (k + 1), px = X + Math.cos(a) * rr, py = Y + Math.sin(a) * rr * 0.7, rc2 = pick('hum', 5, rg(50 + k));
+        const n = Math.floor(rg(6) * 4 * Math.min(1, m)), c0 = cid, a0 = rg(10) * 6.28; for (let k = 1; k <= n; k++) { const a = a0 + k * 2.39996, rr = W * (0.75 + 0.35 * PHI ** (k * 0.5)), Ws = W * IPHI ** (k + 1), px = X + Math.cos(a) * rr, py = Y + Math.sin(a) * rr * 0.7, rc2 = pick('hum', 5, rg(50 + k));
           if (B && B.lakeD(px, py) < 1500) continue;
-          if (Ws < d * 0.04) continue; push(px, py, lift(px, py, Zg - rg(40 + k) * 150, Ws, hOf(rc2, Ws)), Ws, hOf(rc2, Ws), rc2, Math.min(0.97, life + 0.08), 0, 0, hv, Math.hypot(px - cx, py - cy), 0.6, fz); } };
+          const ds = Math.hypot(px - cx, py - cy), fs = sm(0.025, 0.045, Ws / Math.max(ds, 1)); if (fs <= 0) continue; cid = c0 + 's' + k;
+          push(px, py, lift(px, py, Zg - rg(40 + k) * 150, Ws, hOf(rc2, Ws)), Ws, hOf(rc2, Ws), rc2, Math.min(0.97, Math.max(life + 0.08, 1 - fs)), 0, 0, hv, Math.hypot(px - cx, py - cy), 0.6, fz); } };
       layer(cx, cy, 4000, 0, 60000, 1, cumulus(0, 0, 60000)); layer(cx, cy, 6000, 52000, 110000, 1, cumulus(1, 52000, 110000));
       // ---- облака ущелий: в ущельях облако рождается первым (утром -- после ночной прохлады, днём -- от прогретых бортов)
       //      и выходит длинным клубящимся валом: голова глубже в ущелье, тело идёт вниз по руслу почти на одной высоте --
@@ -254,14 +256,15 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
         let lx = 1e9, ly = 1e9;
         if (rg(2) < 0.5) { const X = q.X - q.dx * 1700, Y = q.Y - q.dy * 1700; put1(X, Y, Math.max(h(X, Y), 0), -1); }         // голова глубже в ущелье
         for (let k = 0; k < n; k++) put1(P[k].X, P[k].Y, P[k].g, k);
-        function put1(X, Y, g, k) { const d = Math.hypot(X - cx, Y - cy), j = Math.max(0, k), tail = n > 1 ? k / (n - 1) : 0;
+        function put1(X, Y, g, k) { const d = Math.hypot(X - cx, Y - cy), j = Math.max(0, k), tail = n > 1 ? k / (n - 1) : 0; cid = 'g' + gi + '|' + gen + '|' + k;
           const W = W0 * IPHI ** (j * 0.3) * (k < 0 ? 1.1 : 1);
-          if (Math.abs(((X - cx) * (ly - cy) - (Y - cy) * (lx - cx)) / Math.max(1, Math.hypot(lx - cx, ly - cy))) < W * 0.3 && k < n - 1) return; // вдоль взгляда звенья встали бы стопкой -- лишние пропускаем
-          lx = X; ly = Y; const rc = pick('val', 4, rg(16 + k)), Hs = hOf(rc, W) * (1.5 + 0.4 * sl) * (1 - 0.35 * tail);
+          const off = Math.abs(((X - cx) * (ly - cy) - (Y - cy) * (lx - cx)) / Math.max(1, Math.hypot(lx - cx, ly - cy))), stk = k < n - 1 ? 1 - sm(W * 0.15, W * 0.3, off) : 0; // вдоль взгляда звенья встали бы стопкой -- лишние плавно тают (не мигают)
+          lx = X; ly = Y; if (stk > 0.97) return; const rc = pick('val', 4, rg(16 + k)), Hs = hOf(rc, W) * (1.5 + 0.4 * sl) * (1 - 0.35 * tail);
           const dX = X - cx, dY = Y - cy, rs = (q.dx * dY - q.dy * dX) / (Math.hypot(dX, dY) || 1);    // хвост спрайта -- вниз по ущелью
-          const life = Math.max(born, sm(105000, 120000, d), sm(0.55, 1, tail) * 0.6);
+          const life = Math.max(born, sm(105000, 120000, d), sm(0.55, 1, tail) * 0.6, stk);
           push(X, Y, lift(X, Y, Math.max(g + 150, Z0 - j * 1500 * 0.07) + rg(26 + k) * 100, W, Hs), W, Hs, rc, Math.min(0.96, life), 0, 0, sl * 1.2, d, 0.6, 0.45 + 0.35 * sm(30000, 100000, d), rs > 0 ? 1 : 2); } });
       // ---- кучево-дождевые: редкие крупные системы, 1-3 на всё небо, только вдали и только там, где непогода, -- над хребтами ----
+      cid = ''; // дальше -- дальние облака: замирание им не нужно, общий ключ не должен сбивать ближние
       const cbK = Math.max(storm > 0.35 ? storm : 0, thunder); if (cbK > 0.3) layer(cx, cy, 36000, 25000, 130000, 1, (i, j, x0, y0, C) => { const rh = (k) => hash(i * 53 + k, j * 37 + k * 11); if (rh(1) > cbK * 0.55) return;
         const X = x0 + (0.2 + 0.6 * rh(2)) * C, Y = y0 + (0.2 + 0.6 * rh(3)) * C, d = Math.hypot(X - cx, Y - cy); if (d < 25000 || d > 130000) return;
         const g = h(X, Y), sw = wetL(X, Y); if (sw < 0.45 || g < 1200) return;                // над хребтом, где непогода
