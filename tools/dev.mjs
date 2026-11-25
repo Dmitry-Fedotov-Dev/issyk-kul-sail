@@ -2,8 +2,11 @@
 // Открытая страница перезагружается сама. Телефон в той же Wi-Fi сети -- по адресу «в сети», который напечатается.
 //   PORT=3000 npm run dev -- другой порт
 import { spawn, spawnSync } from 'node:child_process';
-import fs from 'node:fs'; import os from 'node:os';
-const port = process.env.PORT || 8080;
+import fs from 'node:fs'; import os from 'node:os'; import net from 'node:net';
+// порт занят (например, уже запущен другой npm run dev) -- берём следующий свободный
+const free = (p) => new Promise((ok) => { const t = net.createServer().once('error', () => ok(false)).once('listening', () => t.close(() => ok(true))).listen(p); });
+let port = +(process.env.PORT || 8080); const want = port; while (!(await free(port))) port++;
+if (port !== want) console.log(`Порт ${want} занят (уже запущен другой сервер игры?) — беру ${port}`);
 const build = () => { const t = Date.now(), r = spawnSync(process.execPath, ['build.mjs'], { encoding: 'utf8' });
   if (r.status) { console.log('\x1b[31m✗ сборка упала:\x1b[0m\n' + (r.stderr || r.stdout).trim()); return false; } console.log(`\x1b[32m✓ собрано за ${Date.now() - t} мс\x1b[0m — страница перезагрузится`); return true; };
 let srv = null; const serve = () => { if (srv) srv.kill(); srv = spawn(process.execPath, ['server.js'], { env: { ...process.env, DEV: '1', PORT: String(port) }, stdio: ['ignore', 'ignore', 'inherit'] }); };
