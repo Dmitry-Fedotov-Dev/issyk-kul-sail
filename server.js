@@ -14,9 +14,12 @@ const VIEW = 1800, MAX_NEAR = 16, MAX_RACE = 64, MAX_CLIENTS = 400, MAX_MSG = 61
 
 // код игры: исходник, gzip и brotli -- один раз на файл; brotli считается в фоне, пока его нет -- отдаём gzip
 const zlib = require('zlib'), PACK = new Map();
-function packed(name, cb) { let e = PACK.get(name); if (e) return cb(e);
+function packed(name, cb) { let e = PACK.get(name);
+  // файл на диске сменился (пересборка с тем же именем, недочитанный раньше) -- кэш не годится
+  if (e) { try { const st = fs.statSync(path.join(__dirname, 'dist', name)); if (st.size === e.raw.length && st.mtimeMs === e.mt) return cb(e); } catch (er) { return cb(e); } PACK.delete(name); e = null; }
   fs.readFile(path.join(__dirname, 'dist', name), (err, raw) => { if (err) return cb(null); if (PACK.get(name)) return cb(PACK.get(name));
-    e = { raw, gz: zlib.gzipSync(raw, { level: 9 }), br: null }; PACK.set(name, e); for (const k of PACK.keys()) if (k !== name) PACK.delete(k); // старые сборки не держим
+    let mt = 0; try { mt = fs.statSync(path.join(__dirname, 'dist', name)).mtimeMs; } catch (er) { /* нет -- не страшно */ }
+    e = { raw, mt, gz: zlib.gzipSync(raw, { level: 9 }), br: null }; PACK.set(name, e); for (const k of PACK.keys()) if (k !== name) PACK.delete(k); // старые сборки не держим
     zlib.brotliCompress(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length } }, (er, br) => { if (!er) e.br = br; }); cb(e); }); }
 // при старте -- сразу сжимаем текущую сборку, чтобы первый игрок не ждал
 try { const m = /"(game\.[0-9a-f]+\.js)"/.exec(fs.readFileSync(file, 'utf8')); if (m) setTimeout(() => packed(m[1], () => {}), 100); } catch (e) { /* сборки ещё нет */ }

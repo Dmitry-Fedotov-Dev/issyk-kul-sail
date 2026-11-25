@@ -18,7 +18,10 @@ fs.writeFileSync('dist/artifact.html', `<meta name="claude:viewport-fit-sides" c
 // код игры -- отдельным файлом с хэшем; старые сборки убираем
 const hash = crypto.createHash('sha1').update(js).digest('hex').slice(0, 10), name = `game.${hash}.js`, size = Buffer.byteLength(js);
 for (const f of fs.readdirSync('dist')) if (/^game\.[0-9a-f]+\.js$/.test(f) && f !== name) fs.unlinkSync('dist/' + f);
-fs.writeFileSync('dist/' + name, js);
+// пишем атомарно (во временный файл и переименование): сервер не прочтёт недописанный файл посреди пересборки;
+// тот же хэш -- файл уже такой, не трогаем
+const put = (f, data) => { const tmp = f + '.tmp' + process.pid; fs.writeFileSync(tmp, data); fs.renameSync(tmp, f); };
+if (!fs.existsSync('dist/' + name) || fs.statSync('dist/' + name).size !== size) put('dist/' + name, js);
 // загрузчик: качает код с прогрессом и запускает; с диска (file://) или без потоков fetch -- обычным <script src>
 const loader = `<script>(function(){var src=${JSON.stringify(name)},size=${size},m=document.getElementById('loadmsg'),f=document.getElementById('loadfill'),mb=function(b){return (b/1048576).toFixed(1)};
 function tag(){var s=document.createElement('script');s.src=src;s.onerror=function(){m.textContent='Не удалось скачать игру. Проверьте интернет и нажмите, чтобы попробовать ещё раз';var L=document.getElementById('load');L.style.cursor='pointer';L.onclick=function(){location.reload()}};document.body.appendChild(s)}
@@ -28,5 +31,5 @@ fetch(src).then(function(r){if(!r.ok||!r.body)throw 0;var rd=r.body.getReader(),
  return (function pump(){return rd.read().then(function(x){if(x.done){parts.push(dec.decode());var s=document.createElement('script');s.text=parts.join('');document.body.appendChild(s);return}
   got+=x.value.length;parts.push(dec.decode(x.value,{stream:true}));m.textContent='Загружаем игру: '+mb(got)+' из '+mb(size)+' МБ';f.style.width=(Math.min(1,got/size)*16)+'%';return pump()})})()}).catch(tag)})();</script>`;
 const [head, ...rest] = page.split('</style>');
-fs.writeFileSync('dist/index.html', `<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n${head}</style>\n</head>\n<body>\n${rest.join('</style>')}\n${loader}\n</body>\n</html>\n`);
+put('dist/index.html', `<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n${head}</style>\n</head>\n<body>\n${rest.join('</style>')}\n${loader}\n</body>\n</html>\n`);
 console.log('dist/index.html', (fs.statSync('dist/index.html').size / 1e6).toFixed(2), 'MB +', name, (size / 1e6).toFixed(2), 'MB');
