@@ -68,7 +68,8 @@ export class Heli {
     // автомат безопасной высоты: на скорости смотрит на 4 с вперёд и не даёт опуститься ниже 35 м над рельефом (садиться -- ▼ на малой скорости)
     // пробы: по курсу на 150-800 м (склон впереди -- заранее) и кольцом в 60 м -- в повороте сносит боком к стене долины
     if ((up >= -0.05 && Vg > 10 || Vg > 12) && !this.ground) { const ux = this.vx / Vg, uy = this.vy / Vg; let la = gz; for (const r of [150, 300, 500, 800]) la = Math.max(la, h(this.X + ux * r, this.Y + uy * r) - r * 0.04); for (const [a, b] of [[60, 0], [-60, 0], [0, 60], [0, -60]]) la = Math.max(la, h(this.X + a, this.Y + b));this.floor = la + (up < -0.05 ? 10 : 35); if (this.hold < this.floor) this.hold = this.floor; } else this.floor = -1e9;
-    let vzT = Math.abs(up) > 0.05 ? (up > 0 ? up * 8 : up * Math.min(7, 1.3 + Math.max(0, this.agl) * 0.2)) : /* вниз: у земли автомат сам гасит снижение до ~1.5 м/с */ clamp((this.hold - this.Z) * 0.6, -3, this.hold > this.Z + 20 ? 12 : 3);
+    const climbMax = clamp((Tcap * cz / m - g) * 2.5, 0.6, 8); // вверх -- на сколько хватает мощности здесь (в горах медленнее, но без «ОБОРОТЫ!»)
+    let vzT = Math.abs(up) > 0.05 ? (up > 0 ? up * climbMax : up * Math.min(7, 1.3 + Math.max(0, this.agl) * 0.2)) : /* вниз: у земли автомат сам гасит снижение до ~1.5 м/с */ clamp((this.hold - this.Z) * 0.6, -3, this.hold > this.Z + 20 ? 12 : 3);
     if (this.Z < this.floor) vzT = Math.max(vzT, clamp((this.floor - this.Z) * 0.6, 0, 12)); // ниже «пола» не опускаемся, даже с ▼
     let Treq = m * (g + clamp((vzT - this.vz) * 1.4, -6, 6)) / Math.max(0.5, cz);
     if (this.ground && up <= 0.05) Treq = Math.min(Treq, m * g * 0.6);                                                    // на земле без шага -- стоим
