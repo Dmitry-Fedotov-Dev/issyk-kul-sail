@@ -240,7 +240,7 @@ export function installExtra(A) {
       box = document.createElement('div'); box.className = 'chips'; box.id = 'psites'; $('crafts').after(lbl, box); }
     const S = SITES[sel]; box.hidden = !S; $('psitesl').hidden = !S; if (!S) return;
     if (box.dataset.for !== sel) { box.dataset.for = sel; box.innerHTML = '';
-      for (const [id, n, sub] of S[2]) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${n}</b><small>${typeof sub === 'function' ? sub() : sub}</small>`; if (typeof sub === 'function') b.dataset.live = 1; b.onclick = () => { store.set(S[0], id); refreshMenu(); }; box.appendChild(b); } }
+      for (const [id, n, sub] of S[2]) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${n}</b><small>${typeof sub === 'function' ? sub() : sub}</small>`; if (typeof sub === 'function') b.dataset.live = 1; b.onclick = () => { store.set(S[0], id); startAt = null; refreshMenu(); }; box.appendChild(b); } } // явный выбор старта отменяет точку на карте
     for (const c of box.children) { c.setAttribute('aria-pressed', c.dataset.id === (store.get(S[0]) || S[1])); if (c.dataset.live) { const f = S[2].find((q) => q[0] === c.dataset.id)[2]; c.querySelector('small').textContent = f(); } } }
   function buildMenu() { yachtHow = $('how').innerHTML;
     for (const id of [...CRAFT_ORDER, 'para', 'jet', 'heli']) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); refreshMenu(); }; $('crafts').appendChild(b); }

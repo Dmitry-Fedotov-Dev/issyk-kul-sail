@@ -260,7 +260,7 @@ function buildMenu() {
     if (G.mode === 'menu') { G.clock = TOD[G.tod][1]; dayCycle(0); updateEnv(G.sky); } }; // меню сразу показывает выбранное время суток -- как выбор погоды
   for (const id in TOD) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${TOD[id][0]}</b>`; b.onclick = () => setTod(id); $('tod').appendChild(b); }
   setTod(store.get('tod') || 'day'); G.todHour = () => TOD[G.tod][1];
-  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if ((X.sel === 'para' && !PG) || (X.sel === 'jet' && !JM)) { toast('Этот снаряд не загрузился — выберите другой'); return; } if (X.sel === 'para') PG.startFree(X.startAt); else if (X.sel === 'heli') heliGo(); else if (X.sel === 'jet' && store.get('jetSite') === 'khan') startKhan('jet'); else if (X.sel === 'jet') JM.startFree(); else startFree(); };
+  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if ((X.sel === 'para' && !PG) || (X.sel === 'jet' && !JM)) { toast('Этот снаряд не загрузился — выберите другой'); return; } if (X.sel === 'para') PG.startFree(X.startAt); else if (X.sel === 'heli') heliGo(); else if (X.sel === 'jet' && store.get('jetSite') === 'khan' && !X.startAt) startKhan('jet'); else if (X.sel === 'jet') JM.startFree(X.startAt); else startFree(); };
   $('brace').onclick = () => { audio.start(); X.compete(); };
   $('ragain').onclick = () => { if (AIR()) AIR().again(); else if (PG && PG.on) PG.again(); else if (G.mode === 'river') { $('result').hidden = true; $('briver').click(); } else X.compete(); }; $('rmenu').onclick = () => toMenu();
 }
@@ -406,6 +406,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyF' && G.mode !== 'menu' && !(PG && PG.on) && !AIR()) X.hookPress();
   else if (e.code === 'KeyR' && PG && PG.on) PG.restart();
   else if (e.code === 'KeyR' && JM && JM.on) JM.restart();
+  else if (e.code === 'KeyE' && JM && JM.on) JM.eco();
   else if (e.code === 'KeyH' && PG && PG.on) PG.toggleHelp();
   else if (e.code === 'KeyI' && PG && PG.on) PG.toggleInst();
   else if (e.code === 'KeyR' && G.mode === 'race') startRace(); else if (e.code === 'KeyR' && G.mode === 'free') startFree();
@@ -448,8 +449,8 @@ canvas.addEventListener('wheel', (e) => { if (!G || G.mode === 'menu') return; e
   const move = (e) => { const r = el.getBoundingClientRect(), R = r.width / 2; let x = (e.clientX - r.left - R) / R, y = (e.clientY - r.top - R) / R; const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
     input.joy = { x, y }; dot.style.transform = `translate(${x * R * 0.62}px,${y * R * 0.62}px)`; };
   const end = (e) => { if (e.pointerId !== id) return; if (performance.now() - downT < 250) lastUp = performance.now(); id = null; input.joy = null; dot.style.transform = ''; el.classList.remove('on'); };
-  let lastUp = 0, downT = 0; // двойной тап по джойстику -- input.joyTap (самолёт: максимал)
-  el.addEventListener('pointerdown', (e) => { const t = performance.now(); if (t - lastUp < 320) input.joyTap = t; downT = t; e.preventDefault(); e.stopPropagation(); audio.start(); id = e.pointerId; try { el.setPointerCapture(id); } catch (err) { /* без захвата -- джойстик отпустится, когда палец уйдёт */ } el.classList.add('on'); move(e); });
+  let lastUp = 0, downT = 0, taps = 0; // двойной тап по джойстику -- input.joyTap (самолёт: максимал), тройной -- input.joyTap3 (самолёт: эконом)
+  el.addEventListener('pointerdown', (e) => { const t = performance.now(); taps = t - lastUp < 320 ? taps + 1 : 1; if (taps === 2) input.joyTap = t; if (taps === 3) input.joyTap3 = t; downT = t; e.preventDefault(); e.stopPropagation(); audio.start(); id = e.pointerId; try { el.setPointerCapture(id); } catch (err) { /* без захвата -- джойстик отпустится, когда палец уйдёт */ } el.classList.add('on'); move(e); });
   el.addEventListener('pointermove', (e) => { if (e.pointerId === id) { e.preventDefault(); move(e); } });
   for (const n of ['pointerup', 'pointercancel']) el.addEventListener(n, end); }
 $('bmenu').onclick = () => toMenu();
