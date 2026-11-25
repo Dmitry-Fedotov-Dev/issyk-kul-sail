@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { KHAN, KHAN_POI } from './khandata.js';
 import { gridTerrain } from './world.js';
+import { lakeBowl } from './merz.js';
 
 export const KHAN_NAMES = { khan: 'Хан-Тенгри', pobeda: 'пик Победы', merz: 'озеро Мерцбахера', bcS: 'базовый лагерь Южный Иныльчек', bcN: 'базовый лагерь Северный Иныльчек', tongue: 'язык ледника Иныльчек' };
 const { W, H, X0, Y1, STEP } = KHAN;
@@ -33,10 +34,11 @@ export function loadKhan(scene, url = 'khan.png') {
   loading = new Promise((res, rej) => { const img = new Image(); img.onload = () => {
     const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
     const d = g.getImageData(0, 0, W, H).data, hs = new Float32Array(W * H); for (let i = 0; i < W * H; i++) hs[i] = (d[i * 4] * 256 + d[i * 4 + 1]) / 4 - 64;
+    const m0 = KHAN_POI.merz, merzTop = lakeBowl({ hs, W, H, X0, Y1, STEP }, m0[0], m0[1], true).top; // дно озера Мерцбахера -- чашей
     const aG = glaciers(hs), mesh = gridTerrain(hs, W, H, X0, Y1, STEP, { aG }); scene.add(mesh);
     const h = mesh.userData.heightAt;
     const poi = {}; for (const [k, [X, Y]] of Object.entries(KHAN_POI)) poi[k] = { X, Y, h: h(X, Y), name: KHAN_NAMES[k] };
-    res({ mesh, h, hs, grid: { hs, W, H, X0, Y1, STEP }, inside: khanInside, poi }); };
+    res({ mesh, h, hs, aG, grid: { hs, W, H, X0, Y1, STEP }, inside: khanInside, poi, merzTop }); };
     img.onerror = () => { loading = null; rej(new Error('не загрузился рельеф района Хан-Тенгри')); }; img.src = url; });
   return loading;
 }

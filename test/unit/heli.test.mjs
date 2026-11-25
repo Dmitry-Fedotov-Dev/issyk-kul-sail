@@ -28,7 +28,7 @@ test('вихревое кольцо: быстрое снижение на мес
   assert.ok(hl.vrs > 0.3, 'vrs ' + hl.vrs.toFixed(2));
 });
 test('посадка: плавно вниз -- на земле, без аварии', () => {
-  const hl = new Heli().reset(0, 0, 30, 0, false); run(hl, 30, (q) => ({ up: q.agl > 8 ? -0.5 : -0.15 }), flat(0));
+  const hl = new Heli().reset(0, 0, 30, 0, false); run(hl, 30, (q) => ({ up: q.agl > 8 ? -0.5 : -1 }), flat(0));
   assert.ok(hl.ground && !hl.crash, JSON.stringify(hl.touch));
 });
 test('взлёт с земли: шаг вверх -- отрыв', () => {

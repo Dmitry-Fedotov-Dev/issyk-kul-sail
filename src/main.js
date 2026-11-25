@@ -585,6 +585,7 @@ function loop(now) {
   if (!G.freeze) tick(dt); // freeze -- только для тестов: мир стоит, картинка рисуется
   const b = G.player.b, sp = b.speed;
   updateCamera(dt, b, sp);
+  { const nr = G.inKhan && G.cam !== 1 ? 2.5 : 0.5; if (camera.near !== nr) { camera.near = nr; camera.updateProjectionMatrix(); } } // в горах камера далеко от земли: ближняя плоскость дальше -- точнее глубина, нет мерцания
   G.stars.update(camera.position.x, -camera.position.z, G.clock ?? 13, renderer.getPixelRatio(), now / 1000, G.day || 0); G.stars.showLines(G.cLines || (SPY && SPY.on)); // звёзды -- для той точки карты, где камера
   { const k = PG && PG.on ? 0 : Math.min(0.88, G.clouds.inside * 1.05), el = $('cfog'); if (Math.abs(k - (G.cfogK || 0)) > 0.01) { G.cfogK = k; el.style.opacity = k.toFixed(2); // внутри облака -- мгла (у параплана своя)
     el.style.background = ENV.uDay.value > 0.3 ? 'rgba(236,241,248,1)' : 'rgba(40,46,70,1)'; } }

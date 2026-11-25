@@ -10,12 +10,21 @@ import { ENV, GLSL_COMMON, END } from './world.js';
 const PERIOD = 7200; // с: час прорыва + час покоя
 export function merzPhase(now = Date.now(), force0 = 0) { const t = force0 ? (now - force0) / 1000 : (now / 1000) % PERIOD; return { active: t < 3600, k: (t % 3600) / 3600 }; }
 
-export function makeMerz(scene, zone) {
-  const { hs, W, H, X0, Y1, STEP } = zone.grid, p = zone.poi.merz, i0 = Math.round((p.X - X0) / STEP), j0 = Math.round((Y1 - p.Y) / STEP);
-  // чаша: заливка от точки озера всем, что ниже уровня полного озера (+45 м), в радиусе 4.5 км
-  const top = hs[j0 * W + i0] + 45, bed = top - 50, R = 45, cells = new Uint8Array(W * H), q = [j0 * W + i0]; cells[q[0]] = 1;
+// Чаша озера по карте высот: заливка от точки озера всем, что ниже уровня полного озера (+45 м над нынешней гладью
+// в данных), в радиусе 4.5 км. carve -- прорезать дно: в данных рельефа на месте озера -- плоская гладь, и вода с ней
+// совпадала бы (мерцание); дно делаем чашей до 60 м глубиной к середине.
+export function lakeBowl(grid, X, Y, carve = false, top0 = null) { const { hs, W, H, X0, Y1, STEP } = grid, i0 = Math.round((X - X0) / STEP), j0 = Math.round((Y1 - Y) / STEP);
+  const top = top0 ?? hs[j0 * W + i0] + 45, R = 45, cells = new Uint8Array(W * H), q = [j0 * W + i0]; cells[q[0]] = 1;
   for (let h = 0; h < q.length; h++) { const k = q[h], i = k % W, j = (k / W) | 0; for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const ii = i + a, jj = j + b, kk = jj * W + ii;
     if (ii < 0 || jj < 0 || ii >= W || jj >= H || cells[kk] || Math.hypot(ii - i0, jj - j0) > R || hs[kk] > top) continue; cells[kk] = 1; q.push(kk); } }
+  if (carve) { const dist = new Float32Array(W * H).fill(1e9), b = []; // расстояние до берега (в клетках)
+    for (const k of q) { const i = k % W, j = (k / W) | 0; for (const [a, c] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!cells[(j + c) * W + i + a]) { dist[k] = 1; b.push(k); break; } }
+    for (let h = 0; h < b.length; h++) { const k = b[h], i = k % W, j = (k / W) | 0; for (const [a, c] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const kk = (j + c) * W + i + a; if (cells[kk] && dist[kk] > dist[k] + 1) { dist[kk] = dist[k] + 1; b.push(kk); } } }
+    for (const k of q) hs[k] = Math.min(hs[k], top - 4 - 58 * Math.pow(Math.min(1, (dist[k] - 1) / 6), 0.7)); }
+  return { top, cells, q, W }; }
+
+export function makeMerz(scene, zone) {
+  const { hs, W, H, X0, Y1, STEP } = zone.grid, p = zone.poi.merz, B = lakeBowl(zone.grid, p.X, p.Y, false, zone.merzTop), top = B.top, bed = top - 50, cells = B.cells, q = B.q;
   let mi = W, ma = 0, mj = H, mb = 0, deep = q[0]; for (const k of q) { const i = k % W, j = (k / W) | 0; mi = Math.min(mi, i); ma = Math.max(ma, i); mj = Math.min(mj, j); mb = Math.max(mb, j); if (hs[k] < hs[deep]) deep = k; }
   mi = Math.max(0, mi - 1); mj = Math.max(0, mj - 1); ma = Math.min(W - 1, ma + 1); mb = Math.min(H - 1, mb + 1);
   // сток -- край чаши, ближайший к Южному Иныльчеку (самая низкая клетка на краю): там воронка
@@ -26,10 +35,10 @@ export function makeMerz(scene, zone) {
   for (let j = 0; j < th; j++) for (let i = 0; i < tw; i++) bedT[j * tw + i] = THREE.DataUtils.toHalfFloat(cells[(mj + j) * W + mi + i] ? hs[(mj + j) * W + mi + i] : 60000);
   const tex = new THREE.DataTexture(bedT, tw, th, THREE.RedFormat, THREE.HalfFloatType); tex.minFilter = tex.magFilter = THREE.LinearFilter; tex.needsUpdate = true;
   const bx0 = X0 + mi * STEP, by1 = Y1 - mj * STEP, bw = (tw - 1) * STEP, bh = (th - 1) * STEP;
-  const geo = new THREE.PlaneGeometry(bw, bh, Math.min(160, tw * 2), Math.min(160, th * 2)); geo.rotateX(-Math.PI / 2); geo.translate(bx0 + bw / 2, 0, -(by1 - bh / 2));
-  const U = { ...ENV, uLevel: { value: top }, uBed: { value: tex }, uB: { value: new THREE.Vector4(bx0, by1, 1 / bw, 1 / bh) }, uT: { value: 0 }, uBoil: { value: 0 }, uOut: { value: new THREE.Vector2(oX, oY) } };
+  const geo = new THREE.PlaneGeometry(bw, bh, Math.min(160, tw * 2), Math.min(160, th * 2)); geo.rotateX(-Math.PI / 2); const org = new THREE.Vector3(bx0 + bw / 2, 0, -(by1 - bh / 2)); // вершины -- от середины озера (точность)
+  const U = { ...ENV, uLevel: { value: top }, uBed: { value: tex }, uB: { value: new THREE.Vector4(bx0, by1, 1 / bw, 1 / bh) }, uT: { value: 0 }, uBoil: { value: 0 }, uOut: { value: new THREE.Vector2(oX, oY) }, uOrg: { value: org } };
   const mat = new THREE.ShaderMaterial({ uniforms: U, defines: { FBM_OCT: 2, RIP_OCT: 2, SHN: 4 }, transparent: true, depthWrite: true, extensions: { derivatives: true },
-    vertexShader: `uniform float uLevel; varying vec3 vP; void main(){ vec3 p=position; p.y=uLevel; vP=p; gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.); }`,
+    vertexShader: `uniform float uLevel; uniform vec3 uOrg; varying vec3 vP; void main(){ vec3 p=position; p.y=uLevel; vP=p+uOrg; gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.); }`,
     fragmentShader: GLSL_COMMON + `uniform sampler2D uBed; uniform vec4 uB; uniform float uLevel, uT, uBoil; uniform vec2 uOut; varying vec3 vP;
 void main(){ vec2 w=vec2(vP.x,-vP.z), uv=vec2((w.x-uB.x)*uB.z, (uB.y-w.y)*uB.w); float bed=texture2D(uBed, uv).r, dep=uLevel-bed; if(dep<0.3) discard;
   // ледниковая вода: мутно-бирюзовая, у берега светлее; айсберговая шуга
@@ -42,7 +51,7 @@ void main(){ vec2 w=vec2(vP.x,-vP.z), uv=vec2((w.x-uB.x)*uB.z, (uB.y-w.y)*uB.w);
   float l=max(uSun.y,0.)*uSunI; c*=0.55+0.6*l; c=mix(c, uHor, 0.18);
   c=applyFog(c, length(vP-cameraPosition), vP.y);
   gl_FragColor=vec4(c, smoothstep(0.3,2.,dep)*0.95); ${END} }` });
-  const water = new THREE.Mesh(geo, mat); water.renderOrder = 1; scene.add(water);
+  const water = new THREE.Mesh(geo, mat); water.position.copy(org); water.renderOrder = 1; scene.add(water);
   // айсберги: глыбы с тушью, плавают; при спуске садятся на дно
   const bergs = [], tex2 = (() => { const c = document.createElement('canvas'); c.width = 128; c.height = 96; const x = c.getContext('2d');
     x.fillStyle = '#e9f4f8'; x.strokeStyle = '#1b2430'; x.lineWidth = 4; x.beginPath(); x.moveTo(6, 90); x.lineTo(18, 40); x.lineTo(44, 22); x.lineTo(60, 6); x.lineTo(84, 30); x.lineTo(110, 36); x.lineTo(122, 90); x.closePath(); x.fill(); x.stroke();

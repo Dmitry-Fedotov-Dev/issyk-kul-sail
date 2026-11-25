@@ -236,13 +236,13 @@ function chunked(attrs, lists, matLand, matShore = matLand) {
 export function gridTerrain(hs, W, H, X0, Y1, STEP, extra = null) { // extra: { aG } -- атрибуты высокогорья (ледник, течение)
   const pos = new Float32Array(W * H * 3), nor = new Float32Array(W * H * 3), at = (i, j) => hs[Math.min(H - 1, Math.max(0, j)) * W + Math.min(W - 1, Math.max(0, i))];
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, edge = i === 0 || j === 0 || i === W - 1 || j === H - 1;
-    pos[k * 3] = X0 + i * STEP; pos[k * 3 + 1] = hs[k] - (edge ? 600 : 0); pos[k * 3 + 2] = -(Y1 - j * STEP); // край -- «юбка» вниз: за районом не видно щели
+    pos[k * 3] = i * STEP; pos[k * 3 + 1] = hs[k] - (edge ? 600 : 0); pos[k * 3 + 2] = j * STEP; // от угла района (X0, -Y1); край -- «юбка» вниз: за районом не видно щели
     const nx = at(i - 1, j) - at(i + 1, j), nz = at(i, j - 1) - at(i, j + 1), l = Math.hypot(nx, 2 * STEP, nz); nor[k * 3] = nx / l; nor[k * 3 + 1] = (2 * STEP) / l; nor[k * 3 + 2] = nz / l; }
   const lists = new Map(), CW = Math.ceil((W - 1) / 16), CHh = Math.ceil((H - 1) / 10);
   for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) { const a = j * W + i, b = a + 1, e = a + W, f = e + 1; chunkList(lists, ((j / CHh) | 0) * 64 + ((i / CW) | 0)).push(a, e, b, b, e, f); }
-  const mat = terrainMaterial(false, !!extra); mat.side = THREE.DoubleSide;
+  const mat = terrainMaterial(false, !!extra); mat.side = THREE.DoubleSide; mat.uniforms.uOrg = { value: new THREE.Vector3(X0, 0, -Y1) };
   const attrs = { position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }; if (extra) for (const k in extra) attrs[k] = new THREE.BufferAttribute(extra[k], 3);
-  const m = chunked(attrs, lists, mat);
+  const m = chunked(attrs, lists, mat); m.position.set(X0, 0, -Y1);
   m.userData.heightAt = (X, Y) => { const fx = clamp((X - X0) / STEP, 0, W - 1.001), fy = clamp((Y1 - Y) / STEP, 0, H - 1.001), i = fx | 0, j = fy | 0, u = fx - i, v = fy - j;
     return (hs[j * W + i] * (1 - u) + hs[j * W + i + 1] * u) * (1 - v) + (hs[(j + 1) * W + i] * (1 - u) + hs[(j + 1) * W + i + 1] * u) * v; };
   return m;
@@ -303,11 +303,12 @@ export function terrainMaterial(shore = true, zone = false) {
     uniforms: { ...ENV }, extensions: { derivatives: true },
     vertexShader: CURVE + `attribute float aH; varying vec3 vP; varying vec3 vN; varying float vH;
 #ifdef ZONE
-attribute vec3 aG; varying vec3 vG;
+attribute vec3 aG; varying vec3 vG; uniform vec3 uOrg;
 #endif
 void main(){ vP=position; vN=normal; vH=aH;
 #ifdef ZONE
-  vG=aG;
+  // район вдали от начала мира: вершины -- от его угла (точность float на 250 км -- сантиметры, отсюда дрожь и мерцание)
+  vG=aG; vP=position+uOrg; gl_Position=projectionMatrix*modelViewMatrix*vec4(position.x, position.y-curve(vP), position.z, 1.); return;
 #endif
   vec3 q=position; q.y-=curve(q); gl_Position=projectionMatrix*modelViewMatrix*vec4(q,1.); }`,
     fragmentShader: GLSL_COMMON + /* glsl */`
