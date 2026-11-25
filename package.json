@@ -5,7 +5,8 @@
   "scripts": {
     "build": "node build.mjs",
     "start": "node server.js",
-    "test": "node test/polar.mjs"
+    "test": "node test/polar.mjs",
+    "dev": "node tools/dev.mjs"
   },
   "keywords": [],
   "author": "",

@@ -9,6 +9,7 @@
 // ветер, волны и физика у каждого свои, сервер только пересылает положения.
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 const port = process.env.PORT || 8080, file = path.join(__dirname, 'dist', 'index.html');
+const DEV = !!process.env.DEV, DEVJS = '<script>(function(){var v=null;setInterval(function(){fetch("/__dev").then(function(r){return r.text()}).then(function(t){if(v&&t!==v)location.reload();v=t}).catch(function(){})},800)})()</script>';
 const VIEW = 1800, MAX_NEAR = 16, MAX_RACE = 64, MAX_CLIENTS = 400, MAX_MSG = 6144, GRACE = 60000;
 
 // код игры: исходник, gzip и brotli -- один раз на файл; brotli считается в фоне, пока его нет -- отдаём gzip
@@ -35,7 +36,9 @@ const server = http.createServer((req, res) => {
     const hd = { 'Content-Type': 'text/javascript; charset=utf-8', 'Content-Length': body.length, 'Cache-Control': 'public, max-age=31536000, immutable', Vary: 'Accept-Encoding' }; if (enc) hd['Content-Encoding'] = enc;
     res.writeHead(200, hd); res.end(body); }); return; }
   // страница: с меткой версии -- повторный заход получает «не изменилось» (304) вместо всей страницы
-  fs.readFile(file, (err, data) => {
+  // режим разработки (npm run dev): страница сама перезагружается после пересборки
+  if (DEV && req.url === '/__dev') { fs.stat(file, (err, st) => { res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' }); res.end(err ? '0' : String(st.mtimeMs)); }); return; }
+  fs.readFile(file, (err, data) => { if (!err && DEV) data = Buffer.from(String(data).replace('</body>', DEVJS + '</body>'));
     if (err) { res.writeHead(500); res.end('dist/index.html не найден: сначала npm run build'); return; }
     const tag = '"' + crypto.createHash('sha1').update(data).digest('hex').slice(0, 16) + '"';
     if (req.headers['if-none-match'] === tag) { res.writeHead(304, { ETag: tag, 'Cache-Control': 'no-cache' }); res.end(); return; }
