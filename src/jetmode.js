@@ -99,7 +99,7 @@ export function makeJetMode(A) {
   // ---- управление ----
   function ctl() { let roll = (input.right ? 1 : 0) - (input.left ? 1 : 0), pitch = (input.flare ? 1 : 0) - (input.sin ? 1 : 0);
     // джойстик: вниз -- на себя; экспонента -- у центра точно, у края резко; ручка до упора -- автомат даёт максимал
-    let hard = false; if (input.joy) { const j = input.joy, ex = (v) => (Math.abs(v) < 0.06 ? 0 : Math.sign(v) * Math.pow((Math.abs(v) - 0.06) / 0.94, 1.5)); roll = ex(j.x); pitch = ex(j.y); hard = Math.hypot(j.x, j.y) > 0.9; }
+    if (input.joy) { const j = input.joy, ex = (v) => (Math.abs(v) < 0.06 ? 0 : Math.sign(v) * Math.pow((Math.abs(v) - 0.06) / 0.94, 1.5)); roll = ex(j.x); pitch = ex(j.y); }
     if (input.joyTap && input.joyTap !== F.tap) { F.tap = input.joyTap; F.boostT = 3.2; } // двойной тап -- максимал
     if (input.bar && !F.barWas) F.boostT = Math.max(F.boostT || 0, 0.01); F.barWas = !!input.bar;
     // граница зоны полётов: автоматика уводит в разворот к озеру
@@ -108,7 +108,7 @@ export function makeJetMode(A) {
     // заход: снижаемся к полосе, курс вдоль неё и на неё, после взлёта прошло время -- автоматика выпускает шасси
     const dR = Math.hypot(J.X - rwy.X, J.Y - rwy.Y), da = Math.abs(wrapPi(J.th - rwy.th)), al = Math.min(da, Math.PI - da), to = Math.abs(wrapPi(Math.atan2(rwy.X - J.X, rwy.Y - J.Y) - J.th));
     const appr = J.mode === 'air' && F.airT > 25 && dR < 9000 && (J.agl || 0) < 500 && J.vz < -1 && al < 0.5 && (to < 0.5 || dR < 1200);
-    const boost = !!input.bar || (F.boostT || 0) > 0 || (hard && J.mode === 'air') || (J.mode === 'ground' && !F.landed && pitch > 0.3); // разбег -- сразу на максимале
+    const boost = !!input.bar || (F.boostT || 0) > 0 || (J.mode === 'ground' && !F.landed && pitch > 0.3); // разбег -- сразу на максимале
     return { roll, pitch, max: boost, go: !!input.joy || !!input.bar, wind: G.wind ? { sx: G.wind.sx, sy: G.wind.sy } : null, brake: !!input.shift || (J.mode === 'ground' && F.landed), Vset: J.gear && J.mode === 'air' ? 74 : YAK.cruise, appr }; }
 
   function tick(dt) { if (!on) return; F.t += dt;
