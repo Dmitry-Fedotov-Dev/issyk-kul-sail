@@ -39,3 +39,6 @@ test('очки: живой -- имба, быстрее -- лучше, потер
   const base = { saved: 1, alive: 1, aliveFound: 0, dead: 0, clues: 5, minutes: 200, rescuerLost: 0, droneLost: 0, comm: { k: 1 } };
   const a = scoreOf(base), slow = scoreOf({ ...base, minutes: 600 }), lost = scoreOf({ ...base, rescuerLost: 1 }), deadOnly = scoreOf({ ...base, saved: 0, dead: 1 }), hard = scoreOf({ ...base, comm: { k: 2.2 } });
   assert.ok(a.total > slow.total && a.total > lost.total && a.total > deadOnly.total * 2 && hard.total > a.total * 2); assert.equal(a.stars, 3); assert.equal(lost.stars, 2); });
+test('зацепка первой минуты: у каждого дела есть известная метка группы и текст свидетеля', () => {
+  for (let s = 0; s < 120; s++) { const c = makeCase(codeOf(s * 131 + 5), h); assert.ok(c.hook && c.clues[c.hook.id], c.code + ' ' + c.scen); assert.ok(/видели группу/.test(c.hook.txt)); }
+});

@@ -53,11 +53,11 @@ export function makeSar(K) {
   function build() { if (built) return; built = true; const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     const w = document.createElement('div'); w.id = 'sarw'; w.hidden = true;
     w.innerHTML = `<div id="sclock" class="hud"></div><canvas id="smini" title="Дело: карта"></canvas><div id="sframe" hidden><b></b><i></i><div id="sgim"><button id="sgu">▲</button><span></span><button id="sgd">▼</button></div></div><div id="sflash"></div><div id="sshoot" class="hud" hidden>📷 В КАДРЕ ЧТО-ТО ЕСТЬ — СНИМАЙ!</div>
-      <div id="sbtns"><button id="sphoto">📷<small>снимок</small></button><button id="sdrone">🛸<small>дрон</small></button><button id="sjb">🗺<small>дело</small></button><button id="sact" hidden></button></div>
+      <div id="sbtns"><button id="sphoto">📷<small>снимок</small></button><button id="sdrone">🛸<small>дрон</small></button><button id="sjb">🗺<small>дело</small></button><button id="sfast" hidden>⏩<small>к цели</small></button><button id="sact" hidden></button></div>
       <div id="sbrief" class="spanel" hidden></div><div id="sjour" class="spanel" hidden></div>`;
     document.body.appendChild(w);
     const tap = (id, f) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); f(); });
-    tap('sphoto', photo); tap('smini', () => journal(true)); tap('sdrone', () => (S && S.dr ? recall() : launch())); tap('sjb', () => journal(!$('sjour').hidden ? false : true)); tap('sact', act);
+    tap('sphoto', photo); tap('smini', () => journal(true)); tap('sdrone', () => (S && S.dr ? recall() : launch())); tap('sjb', () => journal(!$('sjour').hidden ? false : true)); tap('sact', act); tap('sfast', fast);
     // подвес камеры дрона: тянуть пальцем/мышью по картинке вверх-вниз, колесо мыши, Q (к горизонту) / E (вниз), кнопки ▴▾
     let gp = null; const gim = (dg) => { if (!S || !S.dr) return; S.dr.gim = S.gim = Math.max(0, Math.min(90, (S.dr.gim ?? 35) + dg)); };
     window.addEventListener('pointerdown', (e) => { if (S && S.dr && e.target.tagName === 'CANVAS' && !e.target.closest('#sjour')) { gp = { id: e.pointerId, y: e.clientY }; } }, true);
@@ -66,7 +66,7 @@ export function makeSar(K) {
     window.addEventListener('wheel', (e) => { if (S && S.dr && e.target.tagName === 'CANVAS') { e.preventDefault(); e.stopImmediatePropagation(); gim(e.deltaY * 0.03); } }, { capture: true, passive: false });
     tap('sgu', () => gim(-10)); tap('sgd', () => gim(10));
     window.addEventListener('keydown', (e) => { if (!S || !S.on || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
-      if (e.code === 'KeyQ' && S.dr) gim(-10); else if (e.code === 'KeyE' && S.dr) gim(10); else if (e.code === 'KeyF') photo(); else if (e.code === 'KeyG') (S.dr ? recall() : launch()); else if (e.code === 'KeyJ') journal($('sjour').hidden); else if (e.code === 'KeyB') act(); });
+      if (e.code === 'KeyT') fast(); else if (e.code === 'KeyQ' && S.dr) gim(-10); else if (e.code === 'KeyE' && S.dr) gim(10); else if (e.code === 'KeyF') photo(); else if (e.code === 'KeyG') (S.dr ? recall() : launch()); else if (e.code === 'KeyJ') journal($('sjour').hidden); else if (e.code === 'KeyB') act(); });
     // дрон: корпус, лучи, винты (маленький -- в 3 раза крупнее, чтобы был виден в кадре), мигалка
     const g = new THREE.Group(), m = new THREE.MeshStandardMaterial({ color: 0x2a2f38, roughness: 0.6 }), o = new THREE.MeshBasicMaterial({ color: 0xff7a1a });
     g.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.5), m)); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4, arm = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.06), m); arm.position.set(Math.cos(a) * 0.35, 0.05, Math.sin(a) * 0.35); arm.rotation.y = -a; g.add(arm);
@@ -81,9 +81,9 @@ export function makeSar(K) {
       for (let i = 0; i < 80; i++) { c = makeCase(newCode(), H); if (first ? c.diff === 0 && SCEN.find((q) => q.id === c.scen).rank <= 2 && c.victims.some((v) => v.alive0) : !rc.includes(c.scen)) break; } }
     S = { on: true, c, t: 0, run: false, res: { men: 4, drone: 1 }, teams: [], dr: null, bats: 0, droneLost: 0, rescuerLost: 0, found: new Set(), notes: [], log: [], peers: new Map(), onboard: null, kit: 0, selTeam: -1, posT: 0, saved: 0, aliveFound: 0, deadFound: 0, ended: false, sprites: [], nightOn: false };
     // тревога ночью -- Ми-8 в горах ночью не летает: вылет на рассвете, а у пострадавших тают эти часы
-    const alarm = (c.clock0 + c.since / 60) % 24, wait = NIGHT(alarm) ? Math.round((((6 - alarm) + 24) % 24) * 60) : 0; c.alarm = alarm; c.wait = wait;
+    const alarm = (c.clock0 + c.since / 60) % 24, wait = NIGHT(alarm) || alarm > 14 ? Math.round((((6.5 - alarm) + 24) % 24) * 60) : 0; // поиск начинают с утра: на светлое время -- весь день c.alarm = alarm; c.wait = wait;
     if (wait) { c.since += wait; for (const v of c.victims) { v.left = Math.max(0, v.left - wait); v.alive0 = v.left > 0; } }
-    G.clock = wait ? 6 : alarm;
+    G.clock = wait ? 6.5 : alarm;
     for (const v of c.victims) { v.foundT = undefined; v.saved = false; v.kit = 0; v.dead = false; v.inEvac = false; }
     worldObjects(); mapImg = null; $('sarw').hidden = false; $('sbtns').hidden = false; $('smini').hidden = true; S.view = null; brief(); syncJoin();
     if (!store.get('sarToon')) { store.set('sarToon', 1); film(); } }
@@ -98,7 +98,7 @@ export function makeSar(K) {
       1) Летите туда, куда ведёт <b>курс дела</b> (надпись наверху, оранжевый столб дыма, стрелка).<br>2) Снижайтесь и снимайте 📷 — вешки, палатки, следы. Улики сужают круг поиска.<br>3) Нашли живого — эвакуируйте (посадка или лебёдка) и везите на базу.</p>
       <p><small>Совместная операция: друзья вводят код <b>${c.code}</b> — то же дело, общие находки и заметки</small></p>
       <h3>Пропали</h3><p>${ppl}</p><p>Маршрут: <b>${c.routeName}</b></p><ol class="plan">${plan}</ol>
-      <h3>Связь: ${c.comm.name}</h3><p>${c.last.txt}</p><p><small>Погода: ${{ breeze: 'ясно, ветер слабый', santash: 'ветрено — на гребнях до 20 м/с', ulan: 'буран: ветер до 40 м/с, видимость плохая' }[G.preset] || 'переменная'}. Тревога — в ${hm(c.alarm)}${c.wait ? `, ночью: Ми-8 в горах ночью не летает — вылет на рассвете, в 06:00` : ''}. Темнеет в 20:30</small></p>
+      <h3>Связь: ${c.comm.name}</h3><p>${c.last.txt}</p>${c.hook ? `<p style="background:rgba(255,210,74,.16);border-left:4px solid #ffd24a;padding:6px 10px">🔎 <b>Зацепка:</b> ${c.hook.txt}</p>` : ''}<p><small>Погода: ${{ breeze: 'ясно, ветер слабый', santash: 'ветрено — на гребнях до 20 м/с', ulan: 'буран: ветер до 40 м/с, видимость плохая' }[G.preset] || 'переменная'}. Тревога — в ${hm(c.alarm)}${c.wait ? `${NIGHT(c.alarm) ? ', ночью' : ', под вечер'}: Ми-8 в горах ночью не летает — вылет утром, в 06:30` : ''}. Темнеет в 20:30</small></p>
       <h3>Силы</h3><div class="row">${chip('men', 0, 'Без пеших', 'только с воздуха')}${chip('men', 4, '1 отряд', '4 спасателя')}${chip('men', 8, '2 отряда', '8 — быстрее, но риск')}</div>
       <div class="row" style="margin-top:6px">${chip('drone', 0, 'Без дрона', '')}${chip('drone', 1, 'Дрон', '3 батареи · тепловизор')}</div>
       <p><small>Ми-8 не висит выше ~5900 м. Дрон запускается с земли — с базы или из лагеря, куда его закинет вертолёт. Пешие отряды проходят везде, но медленно и рискуют: каждый потерянный спасатель — минус к итогу.</small></p>
@@ -107,10 +107,21 @@ export function makeSar(K) {
     for (const b of el.querySelectorAll('.ch[data-k]')) b.onclick = () => { S.res[b.dataset.k] = +b.dataset.v; brief(); };
     $('sgo').onclick = start; $('stoon').onclick = () => film(); $('sjoinb').onclick = () => { const v = $('sjoin').value.trim().toUpperCase(); if (seedOf(v) === null) { toast('Код — 5 знаков, например K7QZA'); return; } stopWorld(); begin(v); }; }
   function start() { $('sbrief').hidden = true; S.run = true; $('smini').hidden = false; S.bats = S.res.drone ? 3 : 0; const b = K.base();
-    for (let i = 0; i < S.res.men / 4; i++) S.teams.push({ id: i + 1, n: 4, X: b.X + 20 + i * 12, Y: b.Y - 25, tgt: null, carry: null, risk: 0, spr: teamSprite() });
-    say(`Операция «${S.c.code}» началась. ${S.teams.length ? `Отряды на базе: укажите им цель на карте (🗺) или возьмите на борт.` : 'Ищем с воздуха.'}`);
+    const lc = S.c.pts[Math.max(0, S.c.legIdx)]; // отряды уже заброшены в последний лагерь группы
+    for (let i = 0; i < S.res.men / 4; i++) S.teams.push({ id: i + 1, n: 4, X: lc.X + 20 + i * 12, Y: lc.Y - 25, tgt: null, carry: null, risk: 0, spr: teamSprite() });
+    const hk = S.c.hook && S.c.clues[S.c.hook.id]; if (hk) { S.found.add(hk.id); const tx = S.c.last.kind === 'ping' ? S.c.last.X : hk.X, ty = S.c.last.kind === 'ping' ? S.c.last.Y : hk.Y; hop(tx, ty, 700, 140, false, true); }
+    say(`Операция «${S.c.code}» началась. ${S.teams.length ? `Отряды уже в лагере «${S.c.pts[Math.max(0, S.c.legIdx)].n}» — цель им можно дать на карте (🗺).` : 'Ищем с воздуха.'}`, false);
     if (S.c.last.kind === 'ping') { ping.visible = true; ping.position.set(S.c.last.X, H(S.c.last.X, S.c.last.Y) + 10, -S.c.last.Y); }
-    K.pop('ОПЕРАЦИЯ', S.c.diff === 2 ? 'связи нет — ищите следы' : S.c.diff === 1 ? 'начните с последнего лагеря' : 'есть точка трекера'); journal(false); }
+    K.pop('ЗАЦЕПКА', S.c.hook ? 'последняя вешка группы — прямо по курсу' : 'ищите следы'); if (S.c.hook) say(`🔎 ${S.c.hook.txt}`, false); journal(false); objective(); }
+  // перелёт: вертолёт -- в воздухе в D м от точки, носом к ней, на высоте A над рельефом (по пути -- не ниже гребней); время операции идёт
+  function hop(X, Y, D = 400, A = 120, land = false, free = false) { const h = K.heli(), a0 = Math.atan2(X - h.X, Y - h.Y), dist = Math.hypot(X - h.X, Y - h.Y), sx = X - Math.sin(a0) * D, sy = Y - Math.cos(a0) * D;
+    let top = H(sx, sy); for (let k = 1; k <= 8; k++) top = Math.max(top, H(sx + (X - sx) * k / 8, sy + (Y - sy) * k / 8) - 40);
+    if (land) h.reset(X + 8, Y - 6, H(X + 8, Y - 6), a0, true); else h.reset(sx, sy, top + A, a0, false); h.load = h.load || 0; K.resetCam();
+    if (S.run && !free && dist > 300) { const mins = Math.round(dist / 3300 + 2); S.t += mins; G.clock = (G.clock + mins / 60) % 24; return mins; } return 0; }
+  // кнопка «⏩ к цели»: цель далеко -- перелёт за пару минут операции, без полёта над пустым ледником
+  function fastTarget() { const m = K.mission(), g = K.goal(); if (m) return { X: m.to.X, Y: m.to.Y, base: !!m.base, t: m.t }; if (g) return { X: g.X, Y: g.Y, t: S.goalTxt ? S.goalTxt.t : 'цель' }; return null; }
+  function fast() { if (!S || !S.run || S.dr) return; const q = fastTarget(), h = K.heli(); if (!q) return; const d = Math.hypot(q.X - h.X, q.Y - h.Y); if (d < 1500) { toast('Цель рядом — долетите сами'); return; }
+    const m = hop(q.X, q.Y, q.base ? 350 : 450, q.base ? 80 : 130); K.pop('⏩ ПЕРЕЛЁТ', `${(d / 1000).toFixed(1)} км · ${m} мин операции`); }
 
   // ---- мир: улики, люди (спрайты), следы ----
   const iconTex = new Map();
@@ -277,6 +288,7 @@ export function makeSar(K) {
     if (S.dr) { const d = S.dr, L = Math.hypot(d.X - d.L.X, d.Y - d.L.Y), tx = `ДРОН · батарея ${Math.max(0, Math.round(d.bat * 100))}% · ${Math.round(d.Z - H(d.X, d.Y))} м над землёй · ${(L / 1000).toFixed(1)} км${NIGHT(hr) ? ' · ТЕПЛОВИЗОР' : ''}`; const b = $('sframe').firstChild; if (b.textContent !== tx) b.textContent = tx;  const gs = $('sgim').querySelector('span'), gt = `камера\n${Math.round(d.gim ?? 35)}°`; if (gs.textContent !== gt) { gs.textContent = gt; gs.style.whiteSpace = 'pre'; } }
     $('sphoto').classList.toggle('pulse', !!S.shoot); { const sh = $('sshoot'); sh.hidden = !S.shoot; }
     const dl = $('sdrone'); dl.hidden = !S.res.drone; dl.classList.toggle('on', !!S.dr); dl.innerHTML = S.dr ? '🛸<small>домой</small>' : `🛸<small>дрон · ${S.bats}</small>`;
+    { const q = fastTarget(), h = K.heli(), fb = $('sfast'), far = q && !S.dr && Math.hypot(q.X - h.X, q.Y - h.Y) > 1500; fb.hidden = !far; if (far) { const t = `⏩<small>к цели · ${Math.round(Math.hypot(q.X - h.X, q.Y - h.Y) / 3300 + 2)} мин</small>`; if (fb.innerHTML !== t) fb.innerHTML = t; } }
     const a = actLabel(), ab = $('sact'); ab.hidden = !a; if (a && ab.innerHTML !== a) ab.innerHTML = a; }
 
   // ---- дело: карта (рельеф района), маршрут по дням, улики, люди, отряды, заметки, лог ----

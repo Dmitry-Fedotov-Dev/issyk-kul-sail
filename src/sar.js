@@ -161,6 +161,10 @@ export function makeCase(code, h, opt = {}) {
   const nFake = 1 + Math.floor(r() * 2); for (let i = 0; i < nFake; i++) { const li = Math.floor(r() * (pts.length - 1)), P = around(r, lerpP([pts[li].X, pts[li].Y], [pts[li + 1].X, pts[li + 1].Y], r()), 250);
     clues.push({ k: ['pack', 'tent', 'glove'][Math.floor(r() * 3)], X: P[0], Y: P[1], t: ['Выцветший рюкзак — лежит здесь не первый год. Не наш', 'Рваная старая палатка, вмёрзла в лёд. Это чужая, давняя', 'Старая перчатка, истлевшая. Не по нашему делу'][Math.floor(r() * 3)], fake: 1 }); }
   c.clues = clues.map((q, i) => ({ ...q, id: i, X: Math.round(q.X), Y: Math.round(q.Y), path: q.path ? q.path.map(([x, y]) => [Math.round(x), Math.round(y)]) : null }));
+  // зацепка -- хук первой минуты: последняя метка группы уже известна (свидетели, соседняя экспедиция). Без связи --
+  // середина следа (остальное ищем), со связью -- конец следа: сразу к месту, где что-то случилось
+  { const tr = c.clues.filter((q) => (q.k === 'wand' || q.camp) && !q.key && !q.fake).sort((a, b) => a.day - b.day || (a.camp ? 1 : 0) - (b.camp ? 1 : 0)), q = tr[diff === 2 ? Math.floor(tr.length * 0.55) : tr.length - 1];
+    if (q) c.hook = { id: q.id, txt: `${['Альпинисты из соседнего лагеря', 'Носильщики, спускавшиеся вниз,', 'Экипаж утреннего облёта'][Math.floor(r() * 3)]} видели группу ${group[0].name} на маршруте дня ${q.day}: их вешка с оранжевой лентой${q.camp ? ' и запись в журнале лагеря' : ''}. Дальше их никто не видел` }; }
   // что известно на старте -- по связи
   const v0 = c.victims[0], days = pts.length - 1;
   if (diff === 0) { const a = r() * 6.283, d = 60 + r() * 140; c.last = { kind: 'ping', X: Math.round(v0.X + Math.cos(a) * d), Y: Math.round(v0.Y + Math.sin(a) * d), ago: Math.round(since / H), txt: `Трекер ${group[0].name}: SOS ${Math.round(since / H)} ч назад. «${sc.id === 'hape' ? 'Отёк лёгких, не можем спуститься' : sc.id === 'aval' ? 'Лавина! Двое под снегом' : sc.id === 'white' ? 'Потеряли тропу, роем пещеру' : sc.id === 'lost' ? 'Отстал от группы, не знаю где я' : 'Травма, нужен вертолёт'}». Точность трекера — до 200 м` }; }
