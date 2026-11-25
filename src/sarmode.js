@@ -18,6 +18,7 @@ body:not(.touchdev) #sbtns{right:16px;bottom:70px}
 #sflash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .35s}
 #sframe{position:fixed;inset:12% 10%;border:2px solid rgba(255,255,255,.55);border-radius:6px;pointer-events:none;box-shadow:0 0 0 2000px rgba(0,0,0,.12)}#sframe i{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px;border:2px solid rgba(255,255,255,.7);border-radius:50%}
 body.sardr #hhud,body.sardr #hscore,body.sardr #harr,body.sardr #hland,body.sardr #mark,body.sardr #hcr{display:none!important}
+#sgim{position:absolute;left:8px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:auto}#sgim button{width:44px;height:44px;border-radius:50%;border:2px solid rgba(255,255,255,.6);background:rgba(10,30,60,.55);color:#fff;font:700 18px var(--ui);touch-action:none}#sgim span{font:700 12px var(--ui);color:#fff;text-shadow:0 1px 4px #000;text-align:center}
 #sframe b{position:absolute;left:8px;top:6px;font:700 13px var(--ui);color:#fff;text-shadow:0 1px 4px #000}
 .spanel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(620px,94vw);max-height:92vh;overflow:auto;background:rgba(8,22,48,.94);border:2px solid #ff8a2a;border-radius:18px;padding:14px 16px;color:#fff;font-size:14px;line-height:1.35}
 .spanel h2{margin:0 0 4px;font-size:22px}.spanel h3{margin:12px 0 4px;font-size:13px;letter-spacing:.12em;color:#ffb07a;text-transform:uppercase}.spanel p{margin:4px 0}.spanel small{color:#b9c6dc}
@@ -46,14 +47,21 @@ export function makeSar(K) {
   // ---- сборка интерфейса ----
   function build() { if (built) return; built = true; const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     const w = document.createElement('div'); w.id = 'sarw'; w.hidden = true;
-    w.innerHTML = `<div id="sclock" class="hud"></div><div id="sframe" hidden><b></b><i></i></div><div id="sflash"></div>
+    w.innerHTML = `<div id="sclock" class="hud"></div><div id="sframe" hidden><b></b><i></i><div id="sgim"><button id="sgu">▲</button><span></span><button id="sgd">▼</button></div></div><div id="sflash"></div>
       <div id="sbtns"><button id="sphoto">📷<small>снимок</small></button><button id="sdrone">🛸<small>дрон</small></button><button id="sjb">🗺<small>дело</small></button><button id="sact" hidden></button></div>
       <div id="sbrief" class="spanel" hidden></div><div id="sjour" class="spanel" hidden></div>`;
     document.body.appendChild(w);
     const tap = (id, f) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); f(); });
     tap('sphoto', photo); tap('sdrone', () => (S && S.dr ? recall() : launch())); tap('sjb', () => journal(!$('sjour').hidden ? false : true)); tap('sact', act);
+    // подвес камеры дрона: тянуть пальцем/мышью по картинке вверх-вниз, колесо мыши, Q (к горизонту) / E (вниз), кнопки ▴▾
+    let gp = null; const gim = (dg) => { if (!S || !S.dr) return; S.dr.gim = S.gim = Math.max(0, Math.min(90, (S.dr.gim ?? 35) + dg)); };
+    window.addEventListener('pointerdown', (e) => { if (S && S.dr && e.target.tagName === 'CANVAS' && !e.target.closest('#sjour')) { gp = { id: e.pointerId, y: e.clientY }; } }, true);
+    window.addEventListener('pointermove', (e) => { if (gp && e.pointerId === gp.id) { gim((e.clientY - gp.y) * 0.25); gp.y = e.clientY; } }, true);
+    const gu = (e) => { if (gp && e.pointerId === gp.id) gp = null; }; window.addEventListener('pointerup', gu, true); window.addEventListener('pointercancel', gu, true);
+    window.addEventListener('wheel', (e) => { if (S && S.dr && e.target.tagName === 'CANVAS') { e.preventDefault(); e.stopImmediatePropagation(); gim(e.deltaY * 0.03); } }, { capture: true, passive: false });
+    tap('sgu', () => gim(-10)); tap('sgd', () => gim(10));
     window.addEventListener('keydown', (e) => { if (!S || !S.on || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
-      if (e.code === 'KeyF') photo(); else if (e.code === 'KeyG') (S.dr ? recall() : launch()); else if (e.code === 'KeyJ') journal($('sjour').hidden); else if (e.code === 'KeyB') act(); });
+      if (e.code === 'KeyQ' && S.dr) gim(-10); else if (e.code === 'KeyE' && S.dr) gim(10); else if (e.code === 'KeyF') photo(); else if (e.code === 'KeyG') (S.dr ? recall() : launch()); else if (e.code === 'KeyJ') journal($('sjour').hidden); else if (e.code === 'KeyB') act(); });
     // дрон: корпус, лучи, винты (маленький -- в 3 раза крупнее, чтобы был виден в кадре), мигалка
     const g = new THREE.Group(), m = new THREE.MeshStandardMaterial({ color: 0x2a2f38, roughness: 0.6 }), o = new THREE.MeshBasicMaterial({ color: 0xff7a1a });
     g.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.5), m)); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4, arm = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.06), m); arm.position.set(Math.cos(a) * 0.35, 0.05, Math.sin(a) * 0.35); arm.rotation.y = -a; g.add(arm);
@@ -149,7 +157,7 @@ export function makeSar(K) {
   // ---- дрон: запуск с земли, батарея, связь, ветер ----
   function launch() { if (!S || !S.run) return; if (!S.res.drone) { toast('Дрона в этой операции нет'); return; } if (S.dr) return; const h = K.heli();
     if (!h.ground) { toast('Дрон запускает расчёт с земли — сядьте (на базе или в лагере)'); return; } if (S.bats <= 0) { toast('Батареи дрона кончились'); return; }
-    S.bats--; S.dr = { X: h.X + 8, Y: h.Y, Z: h.Z + 2, th: h.th, vx: 0, vy: 0, vz: 0, bat: 1, L: { X: h.X, Y: h.Y }, kit: 1 }; drone.g.visible = true; $('sframe').hidden = false; document.body.classList.add('sardr'); K.pop('ДРОН В ВОЗДУХЕ', `батарея ~3 мин · запасных ${S.bats}`); }
+    S.bats--; S.dr = { gim: S.gim ?? 35, X: h.X + 8, Y: h.Y, Z: h.Z + 2, th: h.th, vx: 0, vy: 0, vz: 0, bat: 1, L: { X: h.X, Y: h.Y }, kit: 1 }; drone.g.visible = true; $('sframe').hidden = false; document.body.classList.add('sardr'); K.pop('ДРОН В ВОЗДУХЕ', `батарея ~3 мин · запасных ${S.bats}`); }
   function recall() { if (!S.dr) return; S.dr.home = true; toast('Дрон возвращается к точке запуска'); }
   function droneTick(dt, c) { const d = S.dr, wb = K.windAt(d.X, d.Y, d.Z), L = Math.hypot(d.X - d.L.X, d.Y - d.L.Y);
     d.bat -= dt / 190 * (1 + Math.hypot(wb.x, wb.y) / 30); let fwd = c.fwd, side = c.side, up = c.up;
@@ -212,9 +220,9 @@ export function makeSar(K) {
   function checkEnd() { const c = S.c; if (c.victims.every((v) => v.saved || (v.foundT !== undefined && v.dead))) setTimeout(() => S && S.on && !S.ended && end(), 1500); }
 
   // ---- камера дрона ----
-  // вид с камеры дрона (подвес смотрит вперёд-вниз на 35°): так видит пилот -- то и попадёт в снимок
+  // вид с камеры дрона (подвес: от горизонта 0° до «смотрит вниз» 90°; по умолчанию 35°): так видит пилот -- то и попадёт в снимок
   function cam(dt) { if (!S || !S.dr) return false; const d = S.dr, fx = Math.sin(d.th), fy = Math.cos(d.th); drone.g.visible = false;
-    camera.position.set(d.X, d.Z - 0.4, -d.Y); camera.up.set(0, 1, 0); camera.lookAt(d.X + fx * 10, d.Z - 7, -(d.Y + fy * 10));
+    camera.position.set(d.X, d.Z - 0.4, -d.Y); camera.up.set(0, 1, 0); const ga = (d.gim ?? 35) * Math.PI / 180, cg = Math.cos(ga) * 10; camera.lookAt(d.X + fx * cg, d.Z - Math.sin(ga) * 10 - 0.4, -(d.Y + fy * cg));
     camera.fov += (64 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); return true; }
 
   // ---- приборы ----
@@ -222,7 +230,7 @@ export function makeSar(K) {
     const since = (S.c.since + S.t) / 60, hope = since < 12 ? '<span class="sok">высокий</span>' : since < 30 ? 'средний' : '<span class="sbad">низкий</span>', hr = clockNow();
     const t = `<b>Т+ ${fmtT(S.t)}</b> · ${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.floor(hr % 1 * 60)).padStart(2, '0')}${NIGHT(hr) ? ' 🌙' : ''} · шанс найти живыми: ${hope}<br>улик ${S.found.size} · найдено ${S.c.victims.filter((v) => v.foundT !== undefined).length}/${S.c.victims.length}${S.saved ? ` · спасено ${S.saved}` : ''}${S.rescuerLost ? ` · <span class="sbad">потери ${S.rescuerLost}</span>` : ''}`;
     if (el.innerHTML !== t) el.innerHTML = t;
-    if (S.dr) { const d = S.dr, L = Math.hypot(d.X - d.L.X, d.Y - d.L.Y), tx = `ДРОН · батарея ${Math.max(0, Math.round(d.bat * 100))}% · ${Math.round(d.Z - H(d.X, d.Y))} м над землёй · ${(L / 1000).toFixed(1)} км${NIGHT(hr) ? ' · ТЕПЛОВИЗОР' : ''}`; const b = $('sframe').firstChild; if (b.textContent !== tx) b.textContent = tx; }
+    if (S.dr) { const d = S.dr, L = Math.hypot(d.X - d.L.X, d.Y - d.L.Y), tx = `ДРОН · батарея ${Math.max(0, Math.round(d.bat * 100))}% · ${Math.round(d.Z - H(d.X, d.Y))} м над землёй · ${(L / 1000).toFixed(1)} км${NIGHT(hr) ? ' · ТЕПЛОВИЗОР' : ''}`; const b = $('sframe').firstChild; if (b.textContent !== tx) b.textContent = tx;  const gs = $('sgim').querySelector('span'), gt = `камера\n${Math.round(d.gim ?? 35)}°`; if (gs.textContent !== gt) { gs.textContent = gt; gs.style.whiteSpace = 'pre'; } }
     const dl = $('sdrone'); dl.hidden = !S.res.drone; dl.classList.toggle('on', !!S.dr); dl.innerHTML = S.dr ? '🛸<small>домой</small>' : `🛸<small>дрон · ${S.bats}</small>`;
     const a = actLabel(), ab = $('sact'); ab.hidden = !a; if (a && ab.innerHTML !== a) ab.innerHTML = a; }
 
