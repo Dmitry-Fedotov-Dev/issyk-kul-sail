@@ -1,6 +1,7 @@
 // Всё, что выросло вокруг яхты: выбор снаряда, достижения, соревнования для гребных и моторных, сплав по реке,
 // движение в акватории и милиция, выбор места старта по карте (включая горы). Главный модуль вызывает отсюда крючки.
 import { KINDS as FKINDS } from './finds.js';
+import { merzPhase } from './merz.js';
 import { SPECS, CRAFT_ORDER, YACHT_INFO, ACH, makeCraftBody, aiPaddle, aiMotor, flow } from './crafts.js';
 import { MODEL, FX } from './craftmodels.js';
 import { makeTraffic } from './traffic.js';
@@ -234,13 +235,13 @@ export function installExtra(A) {
   // места старта -- ряд кнопок под снарядами (виден, только когда у снаряда есть выбор): параплан -- склоны, самолёт -- районы
   const SITES = { para: ['paraSite', 'airport', [['winch', 'Буксир', 'лебёдка на полосе'], ['airport', 'Аэродром', 'склон над городом'], ['kurgak', 'Кургак-Сай', 'вершина ≈4100 м'], ['kalitka', 'Калитка', 'гора ≈2600 м']]],
     jet: ['jetSite', 'rwy', [['rwy', 'Аэродром', 'полоса у Чолпон-Аты'], ['khan', 'Хан-Тенгри', 'Иныльчек · 7010 м']]],
-    heli: ['heliSite', 'khan', [['khan', 'Хан-Тенгри', 'база Южный Иныльчек'], ['merz', 'Мерцбахер', 'прорыв озера — сейчас'], ['rwy', 'Аэродром', 'Чолпон-Ата']]] };
+    heli: ['heliSite', 'khan', [['khan', 'Хан-Тенгри', 'база Южный Иныльчек'], ['merz', 'Мерцбахер', () => { const ph = merzPhase(); return ph.active ? 'прорыв кипит сейчас!' : `прорыв через ${Math.ceil((1 - ph.k) * 60)} мин · или сразу`; }], ['rwy', 'Аэродром', 'Чолпон-Ата']]] };
   function siteUI() { let box = $('psites'); if (!box) { const lbl = document.createElement('p'); lbl.className = 'lbl'; lbl.id = 'psitesl'; lbl.textContent = 'Старт';
       box = document.createElement('div'); box.className = 'chips'; box.id = 'psites'; $('crafts').after(lbl, box); }
     const S = SITES[sel]; box.hidden = !S; $('psitesl').hidden = !S; if (!S) return;
     if (box.dataset.for !== sel) { box.dataset.for = sel; box.innerHTML = '';
-      for (const [id, n, sub] of S[2]) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${n}</b><small>${sub}</small>`; b.onclick = () => { store.set(S[0], id); refreshMenu(); }; box.appendChild(b); } }
-    for (const c of box.children) c.setAttribute('aria-pressed', c.dataset.id === (store.get(S[0]) || S[1])); }
+      for (const [id, n, sub] of S[2]) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${n}</b><small>${typeof sub === 'function' ? sub() : sub}</small>`; if (typeof sub === 'function') b.dataset.live = 1; b.onclick = () => { store.set(S[0], id); refreshMenu(); }; box.appendChild(b); } }
+    for (const c of box.children) { c.setAttribute('aria-pressed', c.dataset.id === (store.get(S[0]) || S[1])); if (c.dataset.live) { const f = S[2].find((q) => q[0] === c.dataset.id)[2]; c.querySelector('small').textContent = f(); } } }
   function buildMenu() { yachtHow = $('how').innerHTML;
     for (const id of [...CRAFT_ORDER, 'para', 'jet', 'heli']) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); refreshMenu(); }; $('crafts').appendChild(b); }
     $('briver').onclick = () => { audio.start(); startRiver(); }; $('bjournal').onclick = () => { journal(); $('journal').hidden = false; }; $('jclose').onclick = () => { $('journal').hidden = true; };
