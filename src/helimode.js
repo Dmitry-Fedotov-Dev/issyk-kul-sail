@@ -32,6 +32,12 @@ body.touchdev.heli #hint{bottom:calc(206px + env(safe-area-inset-bottom,0px))}
 #hscore{right:calc(max(16px,env(safe-area-inset-right,0px)) + 0px);top:62px;text-align:right;background:rgba(8,22,48,.55);border-radius:12px;padding:4px 10px}#hscore b{font-size:24px}#hscore i{font-style:normal;color:#ffd24a;font-weight:800;margin-left:6px}
 #hcr{left:max(10px,env(safe-area-inset-left,0px));top:118px;width:150px;font-size:12px;background:rgba(8,22,48,.55);border-radius:10px;padding:4px 8px}#hcr .bar{width:100%;margin:3px 0 0}
 #hland{left:50%;top:40%;transform:translateX(-50%);background:rgba(8,22,48,.5);border-radius:10px;padding:4px 12px;font:800 clamp(18px,4vmin,28px) var(--ui);letter-spacing:.05em;text-shadow:0 2px 10px rgba(0,0,0,.7)}#hland.ok{color:#9fe0a0}#hland.go{color:#ffd27a}#hland.bad{color:#ff5a3a}
+@media (max-width:640px),(max-height:440px){#hhud{max-width:calc(100vw - 196px);padding:4px 8px}#hhud b.v{font-size:30px}#hhud small{font-size:11px}#hhud .r{font-size:12px;margin-top:1px}#hhud .r2,#hhud .r4,#hhud .lg{display:none}
+#hscore{top:58px;padding:2px 8px}#hscore b{font-size:19px}}
+@media (max-width:640px){#hmis{top:104px;width:calc(100vw - 24px);max-width:none;font-size:13px;padding:4px 10px}#hmis b{font-size:15px}#harr{top:178px}#harr i{font-size:44px;line-height:44px}
+#hcr{top:auto;bottom:calc(300px + env(safe-area-inset-bottom,0px));width:130px}#hpop{top:36%}#hland{top:46%}}
+@media (max-height:440px) and (min-width:641px){#hmis{top:8px;max-width:min(420px,44vw);font-size:12px;padding:3px 10px}#hmis b{font-size:14px}#harr{top:60px;font-size:12px}#harr i{font-size:34px;line-height:34px}
+#hcr{top:auto;bottom:calc(200px + env(safe-area-inset-bottom,0px))}#hcoach{bottom:calc(12px + env(safe-area-inset-bottom,0px));width:min(420px,50vw);font-size:14px;padding:8px 12px}}
 `;
 
 export function makeHeliMode(A) {
@@ -346,10 +352,10 @@ export function makeHeliMode(A) {
     pointMark(); hudT -= dt; if (hudT > 0) return; hudT = 0.1;
     const kmh = Math.round(Hc.speed * 3.6), alt = Math.round(Hc.Z + 1607), agl = Math.round(Math.max(0, Hc.agl)), m = Hc.mass, tw = Hc.Tmax / (m * 9.81), pw = Math.min(1.15, Hc.power);
     const cls = pw > 1 ? 'red' : pw > 0.92 ? 'hot' : '';
-    $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>км/ч</small></div><div class="r"><b>${alt}</b> м над морем · ${agl} м над землёй · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)} м/с</div>
-      <div class="r">шаг<span class="bar"><i class="${cls}" style="width:${Math.round(Math.min(1, pw) * 100)}%"></i></span>${Math.round(pw * 100)}% · обороты ${Math.round(Hc.rpm * 95)}%</div>
+    $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>км/ч</small></div><div class="r"><b>${alt}</b> м<span class="lg"> над морем</span> · ${agl} м<span class="lg"> над землёй</span> · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)} м/с</div>
+      <div class="r r2">шаг<span class="bar"><i class="${cls}" style="width:${Math.round(Math.min(1, pw) * 100)}%"></i></span>${Math.round(pw * 100)}% · обороты ${Math.round(Hc.rpm * 95)}%</div>
       <div class="r">ветер <b>${Math.round(WB.U || 0)}</b> м/с <i style="display:inline-block;font-style:normal;transform:rotate(${(wrapPi(Math.atan2(WB.x, WB.y) - Math.atan2(clook.x, -clook.z) - G.orbit)).toFixed(2)}rad)">⬆</i>${WB.kat > 2 ? ' · ледниковый сток' : ''} · корпус <b style="color:${Hc.hp > 60 ? '#9fe0a0' : Hc.hp > 30 ? '#ffd27a' : '#ff5a3a'}">${Math.round(Hc.hp)}%</b></div>
-      <div class="r">масса <b>${(m / 1000).toFixed(1)}</b> т · тяга/вес <b>${tw.toFixed(2)}</b>${Hc.ige > 0.03 ? ' · подушка' : ''} · топливо ${Math.round(Hc.fuel)} кг</div>`;
+      <div class="r r4">масса <b>${(m / 1000).toFixed(1)}</b> т · тяга/вес <b>${tw.toFixed(2)}</b>${Hc.ige > 0.03 ? ' · подушка' : ''} · топливо ${Math.round(Hc.fuel)} кг</div>`;
     $('hscore').innerHTML = `<b>${F.score}</b>${F.combo > 1 ? `<i>×${F.combo.toFixed(2).replace(/\.?0+$/, '')}</i>` : ''}<br><small>рекорд ${store.get('heliScore') || 0}</small>`;
     { const cr = $('hcr'), show = Hc.cr > 0.05 || Hc.heat > 0.02 || Hc.hot > 0; cr.hidden = !show; if (show) cr.innerHTML = `${Hc.hot > 0 ? `ПЕРЕГРЕВ · ${Math.ceil(Hc.hot)} с` : Hc.crOn ? '<b style="color:#ff8a2a">ЧР</b> · +12% тяги' : 'двигатели остывают'}<span class="bar"><i class="${Hc.heat > 0.75 ? 'red' : Hc.heat > 0.45 ? 'hot' : ''}" style="width:${Math.round(Hc.heat * 100)}%"></i></span>`; }
     const w = Hc.crash ? '' : Hc.gpws ? 'ЗЕМЛЯ! ВВЕРХ ▲' : F.gWarn ? `ПОРЫВ ${F.gWarn.side}! ${Math.round(F.gWarn.S)} М/С` : (F.wU || 0) > 30 && G.frame % 120 < 60 ? `ВЕТЕР ${Math.round(F.wU)} М/С` : Hc.warn === 'hot' ? '' : Hc.warn === 'rpm' ? 'ОБОРОТЫ! СБРОСЬ ШАГ' : Hc.warn === 'vrs' ? 'ВИХРЕВОЕ КОЛЬЦО — СКОРОСТЬ ВПЕРЁД' : Hc.warn === 'power' ? 'МОЩНОСТИ НЕ ХВАТАЕТ' : '';
