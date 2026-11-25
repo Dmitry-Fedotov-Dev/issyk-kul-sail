@@ -48,11 +48,12 @@ export class Heli {
     // ---- автоматика ориентации: ручка -- желаемая скорость относительно земли; отпустил -- зависание ----
     const vf = this.vx * fx + this.vy * fy, vs = this.vx * fy - this.vy * fx, Vg = Math.hypot(this.vx, this.vy);
     const steep = this.floor > this.Z + 25 ? Math.min(1, (this.floor - this.Z - 25) / 80) : 0; this.gpws = steep > 0.3; // склон выше, чем успеваем набрать, -- автомат тормозит
-    const wantF = u >= 0 ? (steep > 0.75 ? -4 : u * P.Vmax * 1.15 * (1 - steep)) : u * 12, wantS = Vg < 15 ? s * 6 * (1 - Math.abs(u)) : 0;
-    let pT = clamp(-(wantF - vf) * 0.035, -P.pitchMax, P.pitchMax * (steep > 0.2 ? 1 : 0.6)), rT = clamp((wantS - vs) * 0.05, -0.3, 0.3);
+    const strafe = !!ctl.strafe; // точное зависание у цели: смещение без разворота
+    const wantF = strafe ? u * 9 : u >= 0 ? (steep > 0.75 ? -4 : u * P.Vmax * 1.15 * (1 - steep)) : u * 12, wantS = strafe ? s * 8 : Vg < 15 ? s * 6 * (1 - Math.abs(u)) : 0;
+    let pT = clamp(-(wantF - vf) * 0.035, -P.pitchMax, P.pitchMax * 0.95), rT = clamp((wantS - vs) * 0.05, -0.3, 0.3);
     // на скорости ручка вбок -- вираж: крен и разворот по курсу; на месте -- педали (разворот на месте)
-    const fast = sm(8, 22, Vair); rT = rT * (1 - fast) + s * P.rollMax * fast;
-    const yr = s * P.yawRate * (1 - fast) + (fast > 0 ? g * Math.tan(this.roll) / Math.max(Vair, 12) * fast : 0);
+    const fast = strafe ? 0 : sm(8, 22, Vair); rT = rT * (1 - fast) + s * P.rollMax * fast;
+    const yr = (strafe ? 0 : s * P.yawRate * (1 - fast)) + (fast > 0 ? g * Math.tan(this.roll) / Math.max(Vair, 12) * fast : 0);
     const k = Math.min(1, dt / P.tau); this.pitch += (pT - this.pitch) * k; this.roll += (rT - this.roll) * k; this.yr += (yr - this.yr) * Math.min(1, dt * 2.5);
     if (!this.ground) this.th += this.yr * dt;
     // ---- тяга: что может винт здесь и сейчас ----
@@ -66,8 +67,9 @@ export class Heli {
     if (Math.abs(up) > 0.05) this.hold = this.Z;
     // автомат безопасной высоты: на скорости смотрит на 4 с вперёд и не даёт опуститься ниже 35 м над рельефом (садиться -- ▼ на малой скорости)
     // пробы: по курсу на 150-800 м (склон впереди -- заранее) и кольцом в 60 м -- в повороте сносит боком к стене долины
-    if (up >= -0.05 && Vg > 10 && !this.ground) { const ux = this.vx / Vg, uy = this.vy / Vg; let la = gz; for (const r of [150, 300, 500, 800]) la = Math.max(la, h(this.X + ux * r, this.Y + uy * r) - r * 0.04); for (const [a, b] of [[60, 0], [-60, 0], [0, 60], [0, -60]]) la = Math.max(la, h(this.X + a, this.Y + b));this.floor = la + 35; if (this.hold < this.floor) this.hold = this.floor; } else this.floor = -1e9;
-    const vzT = Math.abs(up) > 0.05 ? (up > 0 ? up * 8 : up * Math.min(7, 1.3 + Math.max(0, this.agl) * 0.2)) : /* вниз: у земли автомат сам гасит снижение до ~1.5 м/с */ clamp((this.hold - this.Z) * 0.6, -3, this.hold > this.Z + 20 ? 12 : 3);
+    if ((up >= -0.05 && Vg > 10 || Vg > 12) && !this.ground) { const ux = this.vx / Vg, uy = this.vy / Vg; let la = gz; for (const r of [150, 300, 500, 800]) la = Math.max(la, h(this.X + ux * r, this.Y + uy * r) - r * 0.04); for (const [a, b] of [[60, 0], [-60, 0], [0, 60], [0, -60]]) la = Math.max(la, h(this.X + a, this.Y + b));this.floor = la + (up < -0.05 ? 10 : 35); if (this.hold < this.floor) this.hold = this.floor; } else this.floor = -1e9;
+    let vzT = Math.abs(up) > 0.05 ? (up > 0 ? up * 8 : up * Math.min(7, 1.3 + Math.max(0, this.agl) * 0.2)) : /* вниз: у земли автомат сам гасит снижение до ~1.5 м/с */ clamp((this.hold - this.Z) * 0.6, -3, this.hold > this.Z + 20 ? 12 : 3);
+    if (this.Z < this.floor) vzT = Math.max(vzT, clamp((this.floor - this.Z) * 0.6, 0, 12)); // ниже «пола» не опускаемся, даже с ▼
     let Treq = m * (g + clamp((vzT - this.vz) * 1.4, -6, 6)) / Math.max(0.5, cz);
     if (this.ground && up <= 0.05) Treq = Math.min(Treq, m * g * 0.6);                                                    // на земле без шага -- стоим
     const demand = Treq / Tcap; this.col += (clamp(demand, 0, 1) - this.col) * Math.min(1, dt * 2.2);

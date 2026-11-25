@@ -16,10 +16,10 @@ import { clamp, wrapPi } from './sim.js';
 const AIRPORT = { X: -4385, Y: 1809 };
 const CSS = `
 body.heli #speed>b,body.heli #speed>small,body.heli #pos,body.heli #wear,body.heli #dialwrap,body.heli #race,body.heli #bpro,body.heli #bfoot{display:none!important}body.heli #tools{position:fixed;right:max(16px,env(safe-area-inset-right,0px));top:12px}
-#hhud{left:max(16px,env(safe-area-inset-left,0px));top:14px;line-height:1.15}#hhud b.v{font-size:44px;font-weight:300;letter-spacing:-1px}#hhud small{font-size:13px;color:var(--dim);margin-left:4px}
+#hhud{left:max(10px,env(safe-area-inset-left,0px));top:10px;line-height:1.15;background:rgba(8,22,48,.55);border-radius:12px;padding:6px 10px}#hhud b.v{font-size:44px;font-weight:300;letter-spacing:-1px}#hhud small{font-size:13px;color:var(--dim);margin-left:4px}
 #hhud .r{font-size:14px;margin-top:3px}#hhud .r b{font-weight:600}#hhud .bar{display:inline-block;width:86px;height:7px;border-radius:4px;background:rgba(255,255,255,.18);vertical-align:middle;margin:0 6px;overflow:hidden}#hhud .bar i{display:block;height:100%;background:#9fe0a0}#hhud .bar i.hot{background:#ff8a2a}#hhud .bar i.red{background:#ff4a3a}
 #hwarn{left:50%;top:28%;transform:translateX(-50%);font:800 clamp(20px,4.6vmin,34px) var(--ui);color:#ff5a3a;text-shadow:0 2px 12px rgba(0,0,0,.7);letter-spacing:.06em;animation:jblink .5s steps(2) infinite}
-#hmis{left:50%;top:14px;transform:translateX(-50%);text-align:center;font-size:14px;max-width:min(560px,70vw)}#hmis b{font-size:17px}
+#hmis{left:50%;top:10px;transform:translateX(-50%);text-align:center;font-size:14px;max-width:min(560px,60vw);background:rgba(8,22,48,.55);border-radius:12px;padding:6px 12px}#hmis b{font-size:17px}
 #hcol{position:fixed;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(40px + env(safe-area-inset-bottom,0px));display:none;flex-direction:column;gap:14px;z-index:2}
 #hcol button{width:76px;height:76px;border-radius:50%;border:2px solid rgba(255,255,255,.6);background:rgba(10,30,60,.45);color:#fff;font:800 26px var(--ui);touch-action:none;-webkit-user-select:none;user-select:none}
 #hcol button.on{background:rgba(255,138,42,.75)}body.touchdev.heli #hcol{display:flex}
@@ -27,8 +27,8 @@ body.touchdev.heli #joy{display:block;left:calc(26px + env(safe-area-inset-left,
 body.touchdev.heli #hint{bottom:calc(206px + env(safe-area-inset-bottom,0px))}
 #hcoach{left:50%;bottom:calc(210px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(520px,86vw);background:rgba(8,24,52,.72);border:2px solid #ff8a2a;border-radius:16px;padding:12px 16px;font-size:17px;line-height:1.3;text-align:center;pointer-events:none}
 #hcoach small{display:block;color:#ffb07a;font-size:12px;letter-spacing:.12em;margin-bottom:4px}body:not(.touchdev) #hcoach{bottom:40px}
-#harr{left:50%;top:84px;transform:translateX(-50%);text-align:center;font-size:14px}#harr i{display:inline-block;font-style:normal;font-size:34px;line-height:34px;color:#ff8a2a;text-shadow:0 2px 8px rgba(0,0,0,.6)}
-#hland{left:50%;top:40%;transform:translateX(-50%);font:800 clamp(18px,4vmin,28px) var(--ui);letter-spacing:.05em;text-shadow:0 2px 10px rgba(0,0,0,.7)}#hland.ok{color:#9fe0a0}#hland.go{color:#ffd27a}#hland.bad{color:#ff5a3a}
+#harr{left:50%;top:96px;transform:translateX(-50%);text-align:center;font-size:14px}#harr i{display:inline-block;font-style:normal;font-size:58px;line-height:58px;color:#ff8a2a;-webkit-text-stroke:2px #3a1a00;text-shadow:0 2px 10px rgba(0,0,0,.6)}#harr div{font-weight:700;background:rgba(8,22,48,.55);border-radius:8px;padding:1px 8px;display:inline-block}
+#hland{left:50%;top:40%;transform:translateX(-50%);background:rgba(8,22,48,.5);border-radius:10px;padding:4px 12px;font:800 clamp(18px,4vmin,28px) var(--ui);letter-spacing:.05em;text-shadow:0 2px 10px rgba(0,0,0,.7)}#hland.ok{color:#9fe0a0}#hland.go{color:#ffd27a}#hland.bad{color:#ff5a3a}
 `;
 
 export function makeHeliMode(A) {
@@ -109,13 +109,21 @@ export function makeHeliMode(A) {
     // 5000-5400 м, подлёт от лагеря без стены выше потолка груженого вертолёта
     // настоящие лагеря южного маршрута на Хан-Тенгри (OpenStreetMap): лагерь 1 -- 4200 м на леднике Семёнова-Звёздочка,
     // лагерь 2 -- 5200 м под стеной; без данных -- места по рельефу
-    const camp = (ele) => { let best = null; for (const [n, X, Y, e] of KCAMPS) { if (Math.abs(e - ele) > 60) continue; const d = Math.hypot(X - k.X, Y - k.Y); if (d < 12000 && (!best || d < best.d)) best = { X, Y, d, n }; } return best; };
-    const c1p = camp(4200) || onIce(bc, 4500, 8000, 4000, 4350, k), c1 = site(c1p.X, c1p.Y, 'camp', { name: 'лагерь 1 · 4200 м', people: 1, seed: 1 });
+    // вылеты по кругу: Хан-Тенгри -> пик Победы -> север и Мерцбахер; каждый следующий -- другой настоящий маршрут
+    const nS = store.get('heliSorties') || 0, route = nS % 3, pk = route === 1 ? z.poi.pobeda : k;
+    const camp = (ele, near = pk) => { let best = null; for (const [n, X, Y, e] of KCAMPS) { if (Math.abs(e - ele) > 60) continue; const d = Math.hypot(X - near.X, Y - near.Y); if (d < 12000 && (!best || d < best.d)) best = { X, Y, d, n }; } return best; };
+    if (route === 2) { const nb = KCAMPS.find((c) => /Базовый лагерь Хан/.test(c[0])), pm = KCAMPS.find((c) => /Мерцбахер/.test(c[0]));
+      const s1 = nb ? site(nb[1], nb[2], 'camp', { name: 'базовый лагерь «Северный Иныльчек»', people: 1, seed: 2 }) : null, s2 = pm ? site(pm[1], pm[2], 'slope', { name: 'поляна Мерцбахера', people: 2, seed: 4 }) : null;
+      if (s1 && s2) { pts.push({ t: 'Заброска', d: 'Спасатели и снаряжение — в северный базовый лагерь, через перевал', to: s1, load: 600, how: 'land', done: 'Спасатели на месте. Перевал пройден' });
+        pts.push({ t: 'Эвакуация', d: 'Туристки на поляне Мерцбахера: озеро вот-вот прорвёт — забрать!', timer: true, to: s2, add: 2 * 60, how: 'winch', done: 'Успели до прорыва!' });
+        pts.push({ t: 'На базу', d: 'В базовый лагерь Южный Иныльчек', to: b, how: 'land', done: 'Вылет завершён' }); store.set('heliSorties', nS + 1); return pts; } }
+    store.set('heliSorties', nS + 1);
+    const e1 = route === 1 ? 4600 : 4200, c1p = camp(e1) || onIce(bc, 4500, 8000, 4000, 4350, k), c1 = site(c1p.X, c1p.Y, 'camp', { name: `лагерь 1 · ${e1} м`, people: 1, seed: 1 });
     const c2p = camp(5200) || reach(c1p, k, 6000, 5000, 5400), c2 = site(c2p.X, c2p.Y, 'slope', { name: 'лагерь 2 · 5200 м', people: 2, seed: 0 });
     if (mode === 'merz' && G.merz) { const o = G.merz.out, ob = site(o.X, o.Y, 'none', { name: 'прорыв Мерцбахера' }); ob.z = G.merz.top;
       pts.push({ t: 'Гидрологи', d: 'Озеро Мерцбахера прорывается! Зависните у плотины — снимаем сброс воды', to: ob, how: 'watch', done: 'Снято! Данные ушли в Бишкек и Аксу' });
       pts.push({ t: 'На базу', d: 'В базовый лагерь Южный Иныльчек', to: b, how: 'land', done: 'Вылет завершён' }); return pts; }
-    pts.push({ t: 'Доставка', d: 'Медикаменты в лагерь 1 маршрута на Хан-Тенгри (4200 м)', to: c1, load: 350, how: 'land', done: 'Аптечка в лагере. Врач на связи' });
+    pts.push({ t: 'Доставка', d: `Медикаменты в лагерь 1 маршрута на ${route === 1 ? 'пик Победы' : 'Хан-Тенгри'} (${e1} м)`, to: c1, load: 350, how: 'land', done: 'Аптечка в лагере. Врач на связи' });
     pts.push({ t: 'Эвакуация', d: 'Две туристки замерзают в лагере 2 на 5200 м — сесть нельзя, лебёдкой на борт', timer: true, to: c2, add: 2 * 60, how: 'winch', done: 'Обе на борту! Тяжелее на 120 кг — на высоте это чувствуется' });
     pts.push({ t: 'На базу', d: 'В базовый лагерь Южный Иныльчек — врачи ждут', to: b, how: 'land', done: 'Спасены. Экипаж МЧС — благодарность' });
     return pts; }
@@ -123,7 +131,7 @@ export function makeHeliMode(A) {
     let ok = false; if (m.how === 'land') ok = Hc.ground && d < 45; else if (m.how === 'watch') ok = !Hc.ground && d < 900 && Hc.speed < 8; else ok = !Hc.ground && d < 25 && Hc.agl < 16 && Hc.speed < 4;
     F.hold = ok ? F.hold + dt : Math.max(0, F.hold - dt * 2); M.setWinch(m.how === 'winch' && ok ? Math.min(Hc.agl, F.hold * 6) : 0);
     if (F.hold >= (m.how === 'land' ? 2 : m.how === 'watch' ? 15 : 5)) { F.hold = 0; if (m.load > 0) Hc.load = Math.max(0, Hc.load - m.load); if (m.add) Hc.load += m.add;
-      for (const s of m.to.folks) s.visible = m.how !== 'winch'; toast(m.done); audio.chime && audio.chime(); G.shake = Math.max(G.shake, 0.25); F.mi++;
+      for (const s of m.to.folks) s.visible = m.how !== 'winch'; toast(m.done); F.banner = { t: 2.6, txt: m.how === 'winch' ? 'НА БОРТУ ✓' : m.how === 'watch' ? 'СНЯТО ✓' : F.mi === F.mis.length - 1 ? 'ДОМА ✓' : 'ДОСТАВЛЕНО ✓' }; audio.chime && audio.chime(); G.shake = Math.max(G.shake, 0.25); F.mi++;
       if (F.mis[F.mi] && F.mis[F.mi].timer) F.pt = 100;
       if (F.mi >= F.mis.length) { finish('rescue'); } else announce(); } }
   function announce() { const m = F.mis[F.mi]; if (!m) return; audio.chime && audio.chime(); } // текст задания -- в верхней строке (#hmis)
@@ -175,6 +183,9 @@ export function makeHeliMode(A) {
   function ctl() { let x = (input.right ? 1 : 0) - (input.left ? 1 : 0), y = (input.sin ? 1 : 0) - (input.flare ? 1 : 0);
     if (input.joy) { const j = input.joy, ex = (v) => (Math.abs(v) < 0.08 ? 0 : Math.sign(v) * Math.pow((Math.abs(v) - 0.08) / 0.92, 1.3)); x = ex(j.x); y = -ex(j.y); }
     const up = (input.bar || input.hu ? 1 : 0) - (input.shift || input.hd ? 1 : 0), mag = Math.min(1, Math.hypot(x, y)); let fwd = 0, side = 0;
+    const mi = F.mis[F.mi], near = mi && Math.hypot(mi.to.X - Hc.X, mi.to.Y - Hc.Y) < 220 && Hc.speed < 14;
+    // у цели на малой скорости -- точное зависание: ручка сдвигает вертолёт (вперёд, вбок), нос не разворачивается
+    if (mag > 0.05 && near) { const camYaw = Math.atan2(clook.x, -clook.z), rel = wrapPi(camYaw + Math.atan2(x, y) - Hc.th); return { fwd: Math.cos(rel) * mag, side: Math.sin(rel) * mag, up, strafe: true }; }
     if (mag > 0.05) { if (y < -0.3 && Math.abs(x) < 0.6) { fwd = y; side = x * 0.5; } // на себя -- тормоз и назад
       else { const camYaw = Math.atan2(clook.x, -clook.z) + G.orbit * 0, want = camYaw + Math.atan2(x, Math.max(0.05, y)), err = wrapPi(want - Hc.th);
         side = clamp(err * 1.6, -1, 1); fwd = mag * Math.max(0, Math.cos(err)) * (Math.abs(err) > 1.2 ? 0.3 : 1); F.want = want; } }
@@ -234,7 +245,7 @@ export function makeHeliMode(A) {
     const hint = F.coach === undefined && F.t < 30 && Hc.ground && !F.mi ? (TOUCH ? '▲ — шаг вверх · джойстик — куда лететь · отпустил — висит' : 'Пробел — вверх, Shift — вниз · стрелки — куда лететь · отпустил — висит') : '';
     const he = $('hint'); if (he.textContent !== hint) he.textContent = hint; he.hidden = !hint; he.className = 'hud'; }
   // стрелка к цели (относительно взгляда камеры) и посадочные подсказки у цели
-  function guide(mi) { const ar = $('harr'), ld = $('hland'); if (!mi || Hc.crash) { ar.hidden = true; ld.hidden = true; return; }
+  function guide(mi) { const ar = $('harr'), ld = $('hland'); if (F.banner && F.banner.t > 0) { F.banner.t -= 0.1; ar.hidden = true; ld.hidden = false; ld.textContent = F.banner.txt; ld.className = 'hud ok'; ld.style.fontSize = '42px'; return; } ld.style.fontSize = ''; if (!mi || Hc.crash) { ar.hidden = true; ld.hidden = true; return; }
     const dx = mi.to.X - Hc.X, dy = mi.to.Y - Hc.Y, d = Math.hypot(dx, dy), camYaw = Math.atan2(clook.x, -clook.z) + G.orbit, rel = wrapPi(Math.atan2(dx, dy) - camYaw);
     ar.hidden = d < 120; if (!ar.hidden) { ar.firstChild.style.transform = `rotate(${rel}rad)`; ar.lastChild.textContent = d >= 1000 ? (d / 1000).toFixed(1) + ' км' : Math.round(d) + ' м'; }
     let t = '', c = 'go'; const agl = Hc.agl;
