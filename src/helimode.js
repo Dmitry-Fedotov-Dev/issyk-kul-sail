@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { Heli, MI8, hoverCeiling } from './heli.js';
 import { makeHeli } from './helimodel.js';
 import { NPCART } from './npcart.js';
+import { KCAMPS } from './khanosm.js';
 import { clamp, wrapPi } from './sim.js';
 
 const AIRPORT = { X: -4385, Y: 1809 };
@@ -106,13 +107,16 @@ export function makeHeliMode(A) {
     const bc = z.poi.bcS, k = z.poi.khan, b = site(bc.X, bc.Y, 'base', { name: 'база «Южный Иныльчек»', people: 2, seed: 3 }); F.base = b;
     // лагерь 1 -- выше по леднику Южный Иныльчек, на 4000-4300 м, с чистым пролётом от базы; седловина -- у Хан-Тенгри,
     // 5000-5400 м, подлёт от лагеря без стены выше потолка груженого вертолёта
-    const c1p = onIce(bc, 4500, 8000, 4000, 4350, k), c1 = site(c1p.X, c1p.Y, 'camp', { name: 'лагерь 1, ледник Южный Иныльчек', people: 1, seed: 1 });
-    const c2p = reach(c1p, k, 6000, 5000, 5400), c2 = site(c2p.X, c2p.Y, 'slope', { name: 'седловина под Хан-Тенгри', people: 2, seed: 0 });
+    // настоящие лагеря южного маршрута на Хан-Тенгри (OpenStreetMap): лагерь 1 -- 4200 м на леднике Семёнова-Звёздочка,
+    // лагерь 2 -- 5200 м под стеной; без данных -- места по рельефу
+    const camp = (ele) => { let best = null; for (const [n, X, Y, e] of KCAMPS) { if (Math.abs(e - ele) > 60) continue; const d = Math.hypot(X - k.X, Y - k.Y); if (d < 12000 && (!best || d < best.d)) best = { X, Y, d, n }; } return best; };
+    const c1p = camp(4200) || onIce(bc, 4500, 8000, 4000, 4350, k), c1 = site(c1p.X, c1p.Y, 'camp', { name: 'лагерь 1 · 4200 м', people: 1, seed: 1 });
+    const c2p = camp(5200) || reach(c1p, k, 6000, 5000, 5400), c2 = site(c2p.X, c2p.Y, 'slope', { name: 'лагерь 2 · 5200 м', people: 2, seed: 0 });
     if (mode === 'merz' && G.merz) { const o = G.merz.out, ob = site(o.X, o.Y, 'none', { name: 'прорыв Мерцбахера' }); ob.z = G.merz.top;
       pts.push({ t: 'Гидрологи', d: 'Озеро Мерцбахера прорывается! Зависните у плотины — снимаем сброс воды', to: ob, how: 'watch', done: 'Снято! Данные ушли в Бишкек и Аксу' });
       pts.push({ t: 'На базу', d: 'В базовый лагерь Южный Иныльчек', to: b, how: 'land', done: 'Вылет завершён' }); return pts; }
-    pts.push({ t: 'Доставка', d: 'Медикаменты в лагерь 1 под Хан-Тенгри', to: c1, load: 350, how: 'land', done: 'Аптечка в лагере. Врач на связи' });
-    pts.push({ t: 'Эвакуация', d: 'Две туристки замерзают на седловине 5200 м — лебёдкой на борт', timer: true, to: c2, add: 2 * 60, how: 'winch', done: 'Обе на борту! Тяжелее на 120 кг — на высоте это чувствуется' });
+    pts.push({ t: 'Доставка', d: 'Медикаменты в лагерь 1 маршрута на Хан-Тенгри (4200 м)', to: c1, load: 350, how: 'land', done: 'Аптечка в лагере. Врач на связи' });
+    pts.push({ t: 'Эвакуация', d: 'Две туристки замерзают в лагере 2 на 5200 м — сесть нельзя, лебёдкой на борт', timer: true, to: c2, add: 2 * 60, how: 'winch', done: 'Обе на борту! Тяжелее на 120 кг — на высоте это чувствуется' });
     pts.push({ t: 'На базу', d: 'В базовый лагерь Южный Иныльчек — врачи ждут', to: b, how: 'land', done: 'Спасены. Экипаж МЧС — благодарность' });
     return pts; }
   function missionTick(dt) { const m = F.mis[F.mi]; if (!m) return; const dx = Hc.X - m.to.X, dy = Hc.Y - m.to.Y, d = Math.hypot(dx, dy);

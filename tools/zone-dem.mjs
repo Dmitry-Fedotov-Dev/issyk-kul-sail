@@ -1,6 +1,6 @@
 // Карта высот горного района (Хан-Тенгри, Иныльчек) из открытых тайлов Terrain Tiles (Mapzen/AWS, terrarium, z11 ~ 57 м).
 // Пересчёт в координаты игры: веб-меркатор, начало мира -- 42.6361 с.ш., 77.1105 в.д., масштаб широты 42.65° (как у основной карты).
-// Запуск: node tools/zone-dem.mjs  -> src/khandata.js
+// Запуск: node tools/zone-dem.mjs  -> src/khandata.js, src/khan.png; затем node tools/zone-osm.mjs (ледники и озеро -- в синий канал)
 import zlib from 'node:zlib'; import fs from 'node:fs';
 const LAT0 = 42.6361, LON0 = 77.1105, K = Math.cos(42.65 * Math.PI / 180), R = 6378137;
 const mx = (lon) => R * lon * Math.PI / 180, my = (lat) => R * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));

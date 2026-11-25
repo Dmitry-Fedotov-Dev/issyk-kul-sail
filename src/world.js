@@ -406,6 +406,13 @@ void main(){ vec3 N=normalize(vN); float h=vH;
 #endif
   float ambK=0.42+0.58*smoothstep(-0.04,0.32,uSun.y); // низкое солнце -- рассеянного света мало: склоны против солнца уходят в тёмный силуэт
   vec3 col=c*(sunC*l*(1.25+0.75*sunny)+(shC*ao*(1.25+0.3*sunny)+snowM*vec3(0.36,0.42,0.60)*mix(1.,0.5,uStorm)*ao)*ambK);
+#ifdef ZONE
+  // цел-шейдинг высокогорья: свет ступенями -- тень (сине-фиолетовая, снег в тени голубеет), полутон, свет (тёплый);
+  // край ступени -- ровно в пиксель, без «лесенки»
+  { float L=dot(N,uSun)*uSunI, aw=max(fwidth(L)*1.2,0.02), t=0.42*smoothstep(0.06-aw,0.06+aw,L)+0.58*smoothstep(0.44-aw,0.44+aw,L);
+    vec3 shd=mix(mix(vec3(0.34,0.40,0.66),vec3(0.42,0.36,0.62),uDusk),vec3(0.30,0.33,0.40),uStorm)*(0.85+0.3*snowM), lit=sunC*1.18;
+    col=mix(col, c*mix(shd, lit, t)*(0.88+0.2*ao)*(0.55+0.45*ambK+0.25*t), 0.8); }
+#endif
 #ifdef DEMN
   // реки: вода нарисована прямо на склоне по запечённой маске русла -- светлые струйки бегут вниз по течению
   if(uRivOn>0.){ vec2 ru=vec2((vP.x-uRivT.x)*uRivT.z, (uRivT.y+vP.z)*uRivT.w); vec4 rv=texture2D(uRiv, clamp(ru,0.,1.));
