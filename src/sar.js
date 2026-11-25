@@ -150,6 +150,8 @@ export function makeCase(code, h, opt = {}) {
   c.since = since; c.cause = t.cause; c.zone = t.zone; c.high = !!t.high;
   c.clock0 = 7 + Math.floor(r() * 8); // в котором часу случилось
   c.victims = t.victims.map((v, i) => { const w = v.walker ? walkerPos(v, since, c.clock0) : [v.X, v.Y]; return { ...v, id: i, X: Math.round(w[0]), Y: Math.round(w[1]), z: h(w[0], w[1]), alive0: v.tS > since, left: Math.max(0, v.tS - since) }; });
+  // жанр: спасать должно быть кого -- если все уже погибли, в 85% дел один держится (часы -- впритык)
+  if (!c.victims.some((v) => v.alive0) && r() < 0.85) { const v = c.victims.find((q) => !q.buried) || c.victims[0]; v.alive0 = true; v.left = Math.round((2.5 + r() * 4) * H); v.buried = false; if (v.pose === 'buried') v.pose = 'sit'; }
   // улики: вешки группы вдоль маршрута до места происшествия + особые по ситуации + ложные (старьё других экспедиций)
   const clues = []; const legLen = (i) => Math.hypot(pts[i + 1].X - pts[i].X, pts[i + 1].Y - pts[i].Y);
   for (let i = 0; i <= legIdx; i++) { const L = legLen(i), n = Math.max(1, Math.floor(L / 900)), fmax = i < legIdx ? 1 : 0.3;
@@ -195,6 +197,7 @@ export function scoreOf(o) {
   add(-o.rescuerLost * 900, `потери спасателей × ${o.rescuerLost}`);
   add(-o.droneLost * 150, `потеряно дронов × ${o.droneLost}`);
   add(o.heliCrash ? -2000 : 0, 'авария вертолёта');
+  for (const [t, v] of o.extra || []) add(v, t);
   const k = o.comm ? o.comm.k : 1, raw = parts.reduce((a, [, v]) => a + v, 0), total = Math.round(Math.max(0, raw) * k);
   const stars = o.saved > 0 && o.saved === o.alive && !o.rescuerLost && !o.heliCrash ? 3 : o.saved > 0 ? 2 : o.dead + o.aliveFound > 0 ? 1 : 0;
   return { parts, k, total, stars }; }

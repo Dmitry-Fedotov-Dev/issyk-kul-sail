@@ -89,6 +89,7 @@ export function makeHeliMode(A) {
     SAR = makeSar({ G, scene, camera, $, store, toast, audio, TOUCH, input, H, net: A.net, personSprite, flagPole, pop: (t, sub) => pop(t, sub), score: (p, t, sub) => score(p, t, sub), buzz: (ms) => buzz(ms),
       heli: () => Hc, base: () => F.base, windAt: (X, Y, Z) => wind(X, Y, Z),
       addMission(m) { const to = m.base ? F.base : site(m.X, m.Y, 'slope', { people: 1, name: m.d.split(':')[0], seed: 1 }); F.mis.push({ ...m, to }); if (F.mi === F.mis.length - 1) announce(); },
+      setGoal(g) { F.goal = g ? { ...g, to: { X: g.X, Y: g.Y, z: H(g.X, g.Y), name: g.name || g.t } } : null; }, busy: () => F.mi < F.mis.length,
       hasMission: (k) => F.mis.slice(F.mi).some((m) => (k === 'base' ? m.base : false)) });
     Hc = new Heli(); M = makeHeli(); scene.add(M.root); M.root.visible = false; boom = makeBoom();
     marks = new THREE.Group(); scene.add(marks); people = []; beacon = makeBeacon(); reticle = makeReticle();
@@ -316,7 +317,7 @@ export function makeHeliMode(A) {
     missionTick(dt); coachTick(dt); washTick(dt); gustTick(dt); streakTick(dt);
     if (Hc.hit) { const h = Hc.hit; Hc.hit = null; F.combo = 1; F.hits = (F.hits || 0) + 1; G.shake = Math.max(G.shake, Math.min(1.2, 0.3 + h.imp * 0.05)); audio.thump && audio.thump(Math.min(1.4, 0.4 + h.imp * 0.05)); buzz([70, 30, 90]);
       pop('УДАР!', `корпус ${Math.round(Hc.hp)}% · комбо сгорело`); for (let i = 0; i < 24 && G.spray; i++) G.spray.emit(Hc.X, Hc.Z + 1, -Hc.Y, (Math.random() - 0.5) * 14, 2 + Math.random() * 6, (Math.random() - 0.5) * 14, 4, 1, 1); }
-    { const mi = F.mis[F.mi]; beaconTick(dt, mi ? mi.to : null, mi ? Math.hypot(Hc.X - mi.to.X, Hc.Y - mi.to.Y) : 0); if (mi) F.wv = WB; }
+    { const mi = F.mis[F.mi] || F.goal; beaconTick(dt, mi ? mi.to : null, mi ? Math.hypot(Hc.X - mi.to.X, Hc.Y - mi.to.Y) : 0); if (mi) F.wv = WB; }
     if (F.pt !== undefined && F.mis[F.mi] && F.mis[F.mi].timer) F.pt = Math.max(0, F.pt - dt / 4.5); // состояние пострадавших тает: спешите, но без риска
     const b = P.b; b.X = Hc.X; b.Y = Hc.Y; b.th = Hc.th; b.speed = Hc.speed; b.base = Hc.Z; b.y = Hc.Z; }
   function startCrash() { boom.t = 0; boom.m.visible = true; boom.m.position.set(Hc.X, Hc.Z + 2, -Hc.Y); M.root.visible = false; audio.thump && audio.thump(1.6); G.shake = 1.4;
@@ -368,7 +369,7 @@ export function makeHeliMode(A) {
     { const cr = $('hcr'), show = Hc.cr > 0.05 || Hc.heat > 0.02 || Hc.hot > 0; cr.hidden = !show; if (show) cr.innerHTML = `${Hc.hot > 0 ? `ПЕРЕГРЕВ · ${Math.ceil(Hc.hot)} с` : Hc.crOn ? '<b style="color:#ff8a2a">ЧР</b> · +12% тяги' : 'двигатели остывают'}<span class="bar"><i class="${Hc.heat > 0.75 ? 'red' : Hc.heat > 0.45 ? 'hot' : ''}" style="width:${Math.round(Hc.heat * 100)}%"></i></span>`; }
     const w = Hc.crash ? '' : Hc.gpws ? 'ЗЕМЛЯ! ВВЕРХ ▲' : F.gWarn ? `ПОРЫВ ${F.gWarn.side}! ${Math.round(F.gWarn.S)} М/С` : (F.wU || 0) > 30 && G.frame % 120 < 60 ? `ВЕТЕР ${Math.round(F.wU)} М/С` : Hc.warn === 'hot' ? '' : Hc.warn === 'rpm' ? 'ОБОРОТЫ! СБРОСЬ ШАГ' : Hc.warn === 'vrs' ? 'ВИХРЕВОЕ КОЛЬЦО — СКОРОСТЬ ВПЕРЁД' : Hc.warn === 'power' ? 'МОЩНОСТИ НЕ ХВАТАЕТ' : '';
     const wl = $('hwarn'); if (wl.textContent !== w) wl.textContent = w; wl.hidden = !w; if (w && audio.beep && G.frame % 18 === 0) audio.beep(true);
-    const mi = F.mis[F.mi], me = $('hmis'); guide(mi); if (mi) { me.hidden = false; const t = `<b>${mi.t}</b>${mi.timer && F.pt !== undefined ? ` · <span style="color:${F.pt > 50 ? '#9fe0a0' : F.pt > 25 ? '#ffd27a' : '#ff5a3a'}">состояние ${Math.round(F.pt)}%</span>` : ''}<br>${mi.d}${mi.how === 'winch' ? ` · на борту ${mi.to.folks.filter((f) => f.userData.up).length} из ${mi.to.folks.length}` : F.hold > 0.2 ? ` · ${mi.how === 'watch' ? 'съёмка' : 'выгрузка'} ${Math.min(100, Math.round(F.hold / (mi.how === 'watch' ? 15 : 2) * 100))}%` : ''}`; if (me.innerHTML !== t) me.innerHTML = t; } else me.hidden = true;
+    const mi = F.mis[F.mi] || F.goal, me = $('hmis'); guide(mi); if (mi) { me.hidden = false; const t = `<b>${mi.t}</b>${mi.timer && F.pt !== undefined ? ` · <span style="color:${F.pt > 50 ? '#9fe0a0' : F.pt > 25 ? '#ffd27a' : '#ff5a3a'}">состояние ${Math.round(F.pt)}%</span>` : ''}<br>${mi.d}${mi.how === 'winch' ? ` · на борту ${mi.to.folks.filter((f) => f.userData.up).length} из ${mi.to.folks.length}` : F.hold > 0.2 ? ` · ${mi.how === 'watch' ? 'съёмка' : 'выгрузка'} ${Math.min(100, Math.round(F.hold / (mi.how === 'watch' ? 15 : 2) * 100))}%` : ''}`; if (me.innerHTML !== t) me.innerHTML = t; } else me.hidden = true;
     const hint = !F.sar && F.coach === undefined && F.t < 30 && Hc.ground && !F.mi ? (TOUCH ? '▲ — вверх · джойстик: вперёд — разгон, на себя — тормоз, вбок — поворот' : 'Пробел — вверх, Shift — вниз · ↑ разгон, ↓ тормоз, ← → поворот') : '';
     const he = $('hint'); if (he.textContent !== hint) he.textContent = hint; he.hidden = !hint; he.className = 'hud'; }
   // стрелка к цели (относительно взгляда камеры) и посадочные подсказки у цели
@@ -384,7 +385,7 @@ export function makeHeliMode(A) {
         else if (W.sw > 0.45) { t = 'РАСКАЧКА! ДЕРЖИ РОВНО'; c = 'bad'; } else { t = W.sw < 0.17 ? 'ПОДЪЁМ · РОВНО — БЫСТРЕЕ' : 'ПОДЪЁМ · ГАСИ КАЧКУ'; c = W.sw < 0.17 ? 'ok' : 'go'; } } }
     else if (mi.how === 'watch' && d < 900) { t = Hc.speed > 8 ? 'ЗАВИСНИ — ИДЁТ СЪЁМКА' : 'СНИМАЕМ… ДЕРЖИ МЕСТО'; c = Hc.speed > 8 ? 'go' : 'ok'; }
     ld.hidden = !t; if (ld.textContent !== t) ld.textContent = t; ld.className = 'hud ' + c; }
-  function pointMark() { const mk = $('mark'), mi = F && F.mis[F.mi]; if (!mi || Hc.crash) { mk.hidden = true; return; } const tg = [mi.to.X, mi.to.Y, mi.to.z + 6], w = window.innerWidth, hh = window.innerHeight;
+  function pointMark() { const mk = $('mark'), mi = F && (F.mis[F.mi] || F.goal); if (!mi || Hc.crash) { mk.hidden = true; return; } const tg = [mi.to.X, mi.to.Y, mi.to.z + 6], w = window.innerWidth, hh = window.innerHeight;
     v3.set(tg[0], tg[2], -tg[1]).project(camera); const behind = v3.z > 1; let mx = (v3.x * 0.5 + 0.5) * w, my = (1 - (v3.y * 0.5 + 0.5)) * hh; if (behind) { mx = w - mx; my = hh * 0.5; mx = mx < w / 2 ? 0 : w; }
     const cx = clamp(mx, 74, w - 74), cy = clamp(my, 150, hh - 150), off = behind || cx !== mx || cy !== my; mk.hidden = false; mk.className = 'hud' + (off ? ' off' : ''); mk.style.transform = `translate(${cx}px,${cy}px) translate(-50%,-100%)`;
     if (G.frame % 6 === 0) { const d = Math.hypot(tg[0] - Hc.X, tg[1] - Hc.Y), lab = mi.to.name || 'цель', t = `${off && cx < w / 2 ? '◀ ' : ''}${lab} · ${d >= 1000 ? (d / 1000).toFixed(1) + ' км' : Math.round(d) + ' м'}${off && cx > w / 2 ? ' ▶' : ''}`; if ($('markd').textContent !== t) $('markd').textContent = t; } }
