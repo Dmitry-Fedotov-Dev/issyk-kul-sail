@@ -226,7 +226,7 @@ export function installExtra(A) {
   // ---------- меню ----------
   function refreshMenu() { for (const c of $('crafts').children) c.setAttribute('aria-pressed', c.dataset.id === sel);
     $('brace').innerHTML = `${COMPETE[sel][0]}<small>${COMPETE[sel][1]}</small>`; $('briver').hidden = sel !== 'kayak';
-    siteUI(); $('bfree').innerHTML = sel === 'heli' ? (store.get('heliSite') === 'rwy' ? 'Свободный полёт<small>площадка аэродрома Чолпон-Аты</small>' : 'Спасработы<small>Хан-Тенгри: база на леднике Южный Иныльчек</small>') : sel === 'jet' ? (store.get('jetSite') === 'khan' ? 'Свободный полёт<small>над Иныльчеком: Хан-Тенгри, пик Победы</small>' : 'Свободный полёт<small>взлёт с полосы старого аэродрома</small>') : sel === 'para' ? `Свободный полёт<small>старт: ${({ winch: 'лебёдка на полосе аэродрома', airport: 'склон над аэродромом', kurgak: 'пик Кургак-Сай', kalitka: 'гора Калитка' })[store.get('paraSite') || 'airport']}</small>` : 'Свободное плавание<small>бухта, мыс, открытая вода</small>';
+    siteUI(); $('bfree').innerHTML = sel === 'heli' ? (store.get('heliSite') === 'rwy' ? 'Свободный полёт<small>площадка аэродрома Чолпон-Аты</small>' : (store.get('heliSite') === 'merz' ? 'К озеру Мерцбахера<small>прорыв ледникового озера — грохот, воронка, айсберги</small>' : 'Спасработы<small>Хан-Тенгри: база на леднике Южный Иныльчек</small>')) : sel === 'jet' ? (store.get('jetSite') === 'khan' ? 'Свободный полёт<small>над Иныльчеком: Хан-Тенгри, пик Победы</small>' : 'Свободный полёт<small>взлёт с полосы старого аэродрома</small>') : sel === 'para' ? `Свободный полёт<small>старт: ${({ winch: 'лебёдка на полосе аэродрома', airport: 'склон над аэродромом', kurgak: 'пик Кургак-Сай', kalitka: 'гора Калитка' })[store.get('paraSite') || 'airport']}</small>` : 'Свободное плавание<small>бухта, мыс, открытая вода</small>';
     $('how').innerHTML = sel === 'yacht' ? yachtHow : HOW[sel].replace(/<b>Пробел<\/b>/g, TOUCH ? `кнопка <b>«${info(sel).key}»</b>` : '<b>Пробел</b>').replace(/<b>← →<\/b>/g, TOUCH ? '<b>касание слева и справа</b>' : '<b>← →</b>');
     $('bmap').textContent = startAt ? `Место: ${startAt.label}` : 'Место: Чолпон-Ата';
     const br = brokenStored(sel); $('brace').classList.toggle('pulse', br); $('brace').title = br ? 'Ресурс 0% — финиш в гонке восстановит его' : ''; }
@@ -234,7 +234,7 @@ export function installExtra(A) {
   // места старта -- ряд кнопок под снарядами (виден, только когда у снаряда есть выбор): параплан -- склоны, самолёт -- районы
   const SITES = { para: ['paraSite', 'airport', [['winch', 'Буксир', 'лебёдка на полосе'], ['airport', 'Аэродром', 'склон над городом'], ['kurgak', 'Кургак-Сай', 'вершина ≈4100 м'], ['kalitka', 'Калитка', 'гора ≈2600 м']]],
     jet: ['jetSite', 'rwy', [['rwy', 'Аэродром', 'полоса у Чолпон-Аты'], ['khan', 'Хан-Тенгри', 'Иныльчек · 7010 м']]],
-    heli: ['heliSite', 'khan', [['khan', 'Хан-Тенгри', 'база Южный Иныльчек'], ['rwy', 'Аэродром', 'Чолпон-Ата']]] };
+    heli: ['heliSite', 'khan', [['khan', 'Хан-Тенгри', 'база Южный Иныльчек'], ['merz', 'Мерцбахер', 'прорыв озера — сейчас'], ['rwy', 'Аэродром', 'Чолпон-Ата']]] };
   function siteUI() { let box = $('psites'); if (!box) { const lbl = document.createElement('p'); lbl.className = 'lbl'; lbl.id = 'psitesl'; lbl.textContent = 'Старт';
       box = document.createElement('div'); box.className = 'chips'; box.id = 'psites'; $('crafts').after(lbl, box); }
     const S = SITES[sel]; box.hidden = !S; $('psitesl').hidden = !S; if (!S) return;

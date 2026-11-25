@@ -25,6 +25,7 @@ import { analyzeBasinAsync } from './cloudgeo.js';
 import { makeStars, sunDir as astroSun } from './stars.js';
 import { loadKhan, khanInside } from './khan.js';
 import { makeHeliMode } from './helimode.js';
+import { makeMerz } from './merz.js';
 import { makeRidges, setRidgeRes } from './ridges.js';
 
 const $ = (id) => document.getElementById(id);
@@ -524,10 +525,10 @@ function sunTint(sinEl, eve, storm) { const hD = Math.max(-0.6, Math.asin(clamp(
   if (!eve) { cb += 0.06 * (1 - cg); } // утренний свет розовее
   const w = storm * 0.8; ENV.uSunCol.value.set(cr + (0.9 - cr) * w, cg + (0.9 - cg) * w, cb + (0.92 - cb) * w); ENV.uSunX.value = clamp(r * 1.06, 0, 1); ENV.uEve.value = eve ? 1 : 0; }
 // район Хан-Тенгри: рельеф грузится при первом входе (отдельный файл), дальше -- сразу
-async function startKhan(craft) { const b = $('bfree'); b.classList.add('wait');
-  try { if (!G.khan) { toast('Летим на Хан-Тенгри… грузим рельеф Иныльчека'); G.khan = await loadKhan(scene); } } catch (e) { toast(e.message); return; } finally { b.classList.remove('wait'); }
-  if (craft === 'jet') JM.startZone(G.khan); else if (craft === 'heli') HM.startFree(); }
-function heliGo() { if (!HM) { toast('Вертолёт не загрузился — выберите другой снаряд'); return; } audio.start(); G.clock = G.todHour(); if (store.get('heliSite') === 'rwy') HM.startFree(); else startKhan('heli'); }
+async function startKhan(craft, merzNow = false) { const b = $('bfree'); b.classList.add('wait');
+  try { if (!G.khan) { toast('Летим на Хан-Тенгри… грузим рельеф Иныльчека'); G.khan = await loadKhan(scene); G.merz = makeMerz(scene, G.khan); } } catch (e) { toast(e.message); return; } finally { b.classList.remove('wait'); }
+  if (craft === 'jet') JM.startZone(G.khan); else if (craft === 'heli') { if (merzNow) G.merz.force(); HM.startFree(merzNow ? 'merz' : ''); } }
+function heliGo() { if (!HM) { toast('Вертолёт не загрузился — выберите другой снаряд'); return; } audio.start(); G.clock = G.todHour(); if (store.get('heliSite') === 'rwy') HM.startFree(); else startKhan('heli', store.get('heliSite') === 'merz'); }
 function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; { const c = G.clock + (G.mode === 'menu' ? 0 : dt / 60 * (G.clockK || 1)); if (c >= 24) G.day = (G.day || 0) + 1; G.clock = c % 24; } const k = G.wx; if (!k) return; // G.day -- игровые сутки от 23 июля: идут сезоны; в меню время стоит на выбранном
   astroSun(G.day || 0, G.clock, SUN); const sinEl = SUN.y; // Солнце -- по эфемериде на игровую дату (astro.js): долгота дня и заря меняются с сезоном
   sunTint(sinEl, G.clock > 12, k.storm);
@@ -586,7 +587,8 @@ function loop(now) {
   G.stars.update(camera.position.x, -camera.position.z, G.clock ?? 13, renderer.getPixelRatio(), now / 1000, G.day || 0); G.stars.showLines(G.cLines || (SPY && SPY.on)); // звёзды -- для той точки карты, где камера
   { const k = PG && PG.on ? 0 : Math.min(0.88, G.clouds.inside * 1.05), el = $('cfog'); if (Math.abs(k - (G.cfogK || 0)) > 0.01) { G.cfogK = k; el.style.opacity = k.toFixed(2); // внутри облака -- мгла (у параплана своя)
     el.style.background = ENV.uDay.value > 0.3 ? 'rgba(236,241,248,1)' : 'rgba(40,46,70,1)'; } }
-  G.inKhan = !!(G.khan && khanInside(camera.position.x, -camera.position.z)); // камера в районе Хан-Тенгри: облака выше и реже
+  G.inKhan = !!(G.khan && khanInside(camera.position.x, -camera.position.z));
+  if (G.merz && G.inKhan) G.merz.update(dt, { X: camera.position.x, Y: -camera.position.z }, audio, G.spray); // озеро Мерцбахера: прорыв по часам // камера в районе Хан-Тенгри: облака выше и реже
   lodTick(dt);   if (G.jailoo) G.jailoo.update(dt, G.t); G.clouds.update(dt, camera, { cover: Math.min(1, Math.max(0, (ENV.uCover.value + 0.62) / 1.48)) * (G.inKhan ? 0.55 : 1), storm: ENV.uStorm.value, cirrus: ENV.uCirrus.value, wind: G.wind, clock: G.clock, preset: G.preset, baseUp: G.inKhan ? 2300 : 0 }); // облачность погоды (-0.62..0.86) -> 0..1; пресет -- какой ветер (улан, санташ, бриз)
   if (G.beach) G.beachHint = G.beach.update(dt, FT && FT.on ? FT.state : null);
   if (G.finds && G.mode !== 'menu') G.finds.update(dt, FT && FT.on && !FT.state.swim && FT.state.st !== 'dis' ? FT.state : null, G.beach.dayN, FT ? FT.magnet : 1.2);
