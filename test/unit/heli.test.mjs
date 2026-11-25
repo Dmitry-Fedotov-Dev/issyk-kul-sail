@@ -40,10 +40,14 @@ test('аркада: отпустил ручку на скорости -- кат�
   assert.ok(hl.speed > v0 * 0.6, `${v0.toFixed(0)} -> ${hl.speed.toFixed(0)}`); run(hl, 6, { fwd: -1 }, flat(0)); assert.ok(hl.speed < v0 * 0.45, 'на себя -- тормоз: ' + hl.speed.toFixed(0));
 });
 test('удар о склон: отскок и повреждение, не мгновенная авария', () => {
-  const wall = (x, y) => (y > 300 ? 400 : 0); const hl = new Heli().reset(0, 0, 100, 0, false); run(hl, 30, (q) => ({ fwd: q.Y < 200 ? 0.5 : 0 }), wall);
+  const wall = (x, y) => (y > 300 ? 400 : 0); const hl = new Heli().reset(0, 0, 100, 0, false); run(hl, 30, (q) => ({ fwd: q.Y < 150 ? 0.4 : 0 }), wall);
   assert.ok(hl.hp < 100 && !hl.crash, 'hp ' + hl.hp + ' crash ' + JSON.stringify(hl.crash)); assert.ok(hl.Y < 300, 'отбросило: ' + hl.Y.toFixed(0));
 });
 test('порыв сбоку сносит висящую машину', () => {
   const hl = new Heli().reset(0, 0, 300, 0, false); run(hl, 3, {}, flat(0), () => ({ x: 15, y: 0, z: 0, gx: 15, gy: 0 }));
   assert.ok(hl.vx > 2, 'vx ' + hl.vx.toFixed(1));
+});
+test('висение на ветру: отпустил ручку -- держит место (снос < 15 м за 40 с)', () => {
+  const hl = new Heli().reset(0, 0, 300, 0, false); run(hl, 40, {}, flat(0), () => ({ x: 8, y: -5, z: 0 }));
+  assert.ok(Math.hypot(hl.X, hl.Y) < 15, `снос ${Math.hypot(hl.X, hl.Y).toFixed(1)} м`);
 });

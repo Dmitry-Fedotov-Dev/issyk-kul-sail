@@ -41,6 +41,8 @@ export function followNpc(e, s, dt) { const b = e.b, q = e.nf || (e.nf = { s: nu
   b.X += b.vx * dt + (q.tx - b.X) * k; b.Y += b.vy * dt + (q.ty - b.Y) * k; b.th = wrapPi(b.th + wrapPi(q.s[2] - b.th) * k); b.phi += (q.s[3] - b.phi) * k;
   if (b.kind) { if (b.st) { b.st.t += dt; if (b.st.t >= b.st.T) { b.st = null; b.endT = 0; } } else b.endT = (b.endT || 0) + dt; } }
 
+// совместная поисковая операция (sarmode.js): события дела приходят сюда
+export const NETHOOK = { sar: null };
 export function makeNet(scene, ctx) {
   const pups = new Map(), st = { online: 0, id: 0, up: false, off: 0, sync: false }; let ws = null, acc = 0, retry = 2, wait = 0;
   const can = typeof WebSocket !== 'undefined' && /^https?:$/.test(location.protocol);
@@ -55,7 +57,8 @@ export function makeNet(scene, ctx) {
       else if (m.t === 'hit' && ctx.onHit) ctx.onHit(m);
       else if (m.t === 'found' && ctx.onFound) ctx.onFound(m.list || []);
       else if (m.t === 'friend' && ctx.onFriend) ctx.onFriend(m);
-      else if (m.t === 'hook' && ctx.onHook) ctx.onHook(m); }; }
+      else if (m.t === 'hook' && ctx.onHook) ctx.onHook(m);
+      else if ((m.t === 'sar' || m.t === 'sarh') && NETHOOK.sar) NETHOOK.sar(m); }; }
   function make(k) { const yacht = k === 'yacht' || !SPECS[k], b = yacht ? new Boat() : makeCraftBody(k), model = yacht ? makeBoat({ hull: 0x7a2f5a, accent: '#f4f3ee', text: 'ONLINE' }) : MODEL[k]({ hull: 0x7a2f5a, deck: 0xf4f3ee });
     scene.add(model.root); const tag = nameTag(''); scene.add(tag); return { k, b, model, tag, tagText: null, tx: 0, ty: 0, tth: 0, tphi: 0, seen: 0, fresh: true, fseq: null }; }
   const drop = (id, p) => { scene.remove(p.model.root); scene.remove(p.tag); p.tag.material.map.dispose(); p.tag.material.dispose(); if (p.model.dispose) p.model.dispose(); pups.delete(id); };
@@ -79,6 +82,8 @@ export function makeNet(scene, ctx) {
     find: (fids) => sendJ({ t: 'find', fids }),
     friend: (to) => sendJ({ t: 'friend', to, n: ctx.name() }),
     hook: (to, on, L, j) => sendJ({ t: 'hook', to, on, L: +(+L).toFixed(1), j: +(+(j || 0)).toFixed(2) }), // on: 1 -- зацепил, 0 -- отдал, 2 -- рывок
+    // операция: войти (сервер пришлёт историю событий), событие для всех участников, выйти
+    sarJoin: (op) => sendJ({ t: 'sarj', op, n: ctx.name() }), sar: (op, e) => sendJ({ t: 'sar', op, e }), sarLeave: () => sendJ({ t: 'sarx' }),
     hit: (to, vx, vy, i) => sendJ({ t: 'hit', to, vx: +vx.toFixed(2), vy: +vy.toFixed(2), i: +i.toFixed(2) }),
     tick(dt, P, world_, t, rr) {
       if (!can) return; if (!ws) { wait -= dt; if (wait <= 0) { wait = 1e9; connect(); } }

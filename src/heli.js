@@ -35,7 +35,7 @@ export class Heli {
   constructor() { this.reset(0, 0, 0, 0); this.load = 0; }
   // th -- курс (0 -- север, по часовой)
   reset(X, Y, Z, th, ground = true) {
-    Object.assign(this, { hp: 100, hit: null, cr: 0, heat: 0, hot: 0, crOn: false, floor: -1e9, gpws: false, X, Y, Z, th, vx: 0, vy: 0, vz: 0, pitch: 0, roll: 0, yr: 0, col: ground ? 0 : 0.85, rpm: 1, T: 0, Tmax: 0, power: 0, ground, crash: null,
+    Object.assign(this, { anc: null, iF: 0, iS: 0, hp: 100, hit: null, cr: 0, heat: 0, hot: 0, crOn: false, floor: -1e9, gpws: false, X, Y, Z, th, vx: 0, vy: 0, vz: 0, pitch: 0, roll: 0, yr: 0, col: ground ? 0 : 0.85, rpm: 1, T: 0, Tmax: 0, power: 0, ground, crash: null,
       vrs: 0, ige: 0, etl: 0, agl: 0, sig: 1, t: 0, fuel: MI8.fuel, warn: '', shake: 0, touch: null, hold: Z, tb: 0 });
     if (!ground) { this.hold = Z; } return this; }
   get mass() { return MI8.empty + MI8.crew + this.fuel + this.load; }
@@ -54,10 +54,13 @@ export class Heli {
     const sinking = (this.dem || 0) > 0.96 && (this.Z < this.hold - 2 || up > 0.05 || this.vz < -1.5); this.tl = clamp((this.tl ?? 1) + (sinking ? -dt * 2 : dt * 0.35), 0.3, 1);
     // висение: ручка отпущена на малой скорости -- машина сама гасит снос и парирует ветер (с «памятью» -- держит наклон против ветра)
     const hov = free && Vg < 10 && !this.ground ? 1 - sm(6, 10, Vg) : 0;
-    if (hov) { this.iF = clamp((this.iF || 0) + vf * dt * 0.025 * hov, -0.25, 0.25); this.iS = clamp((this.iS || 0) + vs * dt * 0.025 * hov, -0.25, 0.25); } else { const k = Math.max(0, 1 - dt * 1.5); this.iF = (this.iF || 0) * k; this.iS = (this.iS || 0) * k; }
-    const pT = clamp(-u * (u > 0 ? P.pitchMax * this.tl : P.pitchMax * 1.05) + brake * (1 - hov) + hov * (clamp(vf * 0.035, -0.2, 0.2) + this.iF), -P.pitchMax, P.pitchMax * 1.05);
+    // висение держит и место: точка, где отпустили ручку, -- медленно тянет к ней (ветер не сносит от людей)
+    if (hov > 0.5) { if (!this.anc) this.anc = { X: this.X, Y: this.Y }; } else this.anc = null;
+    let eF = vf, eS = vs; if (this.anc) { const ax2 = clamp((this.anc.X - this.X) * 0.15, -3, 3), ay2 = clamp((this.anc.Y - this.Y) * 0.15, -3, 3); eF -= ax2 * fx + ay2 * fy; eS -= ax2 * fy - ay2 * fx; }
+    if (hov) { this.iF = clamp((this.iF || 0) + eF * dt * 0.05 * hov, -0.3, 0.3); this.iS = clamp((this.iS || 0) + eS * dt * 0.05 * hov, -0.3, 0.3); } else { const k = Math.max(0, 1 - dt * 1.5); this.iF = (this.iF || 0) * k; this.iS = (this.iS || 0) * k; }
+    const pT = clamp(-u * (u > 0 ? P.pitchMax * this.tl : P.pitchMax * 1.05) + brake * (1 - hov) + hov * (clamp(eF * 0.045, -0.22, 0.22) + this.iF), -P.pitchMax, P.pitchMax * 1.05);
     // крен: на скорости -- вираж; на месте -- ручка вбок крутит нос (педали), а боковой снос гасится сам
-    const rT = s * P.rollMax * fast + (1 - fast) * (clamp(-vs * 0.04, -0.2, 0.2) - this.iS * (Math.abs(s) < 0.05 ? 1 : 0.5));
+    const rT = s * P.rollMax * fast + (1 - fast) * (clamp(-(hov ? eS : vs) * 0.045, -0.22, 0.22) - this.iS * (Math.abs(s) < 0.05 ? 1 : 0.5));
     const yr = s * P.yawRate * (1 - fast * 0.55) + (fast > 0 ? g * Math.tan(this.roll) / Math.max(Vair, 14) * fast * 0.9 : 0);
     // порыв ветра сбоку -- машину дёргает креном
     if (w.gx !== undefined) { const gl = w.gx * fy - w.gy * fx; this.rv = (this.rv || 0) + (gl - (this.glP ?? gl)) * 0.05; this.glP = gl; }
@@ -114,8 +117,8 @@ export class Heli {
       if (h(this.X, this.Y) < 0) { this.crash = { water: true, vz: hard }; return; }
       if (hard <= 4.5 && side <= 9 && slope <= 0.28 && Math.abs(this.roll) <= 0.35) { this.touch = { vz: hard, V: side, slope }; this.ground = true; this.vz = 0; this.hold = this.Z; return; }
       // удар: отскок от склона, повреждение по силе удара (вдоль нормали полностью, вскользь -- на треть)
-      const tang = Math.sqrt(Math.max(0, this.vx * this.vx + this.vy * this.vy + this.vz * this.vz - vn * vn)), imp = Math.max(0, -vn) + 0.3 * tang, dmg = imp > 3.5 ? clamp((imp - 3) * 5, 4, 100) : 0;
-      if (dmg) { this.hp -= dmg; this.hit = { dmg, imp }; }
+      const tang = Math.sqrt(Math.max(0, this.vx * this.vx + this.vy * this.vy + this.vz * this.vz - vn * vn)), imp = Math.max(0, -vn) + 0.3 * tang, dmg = imp > 3.5 ? clamp((imp - 3) * 4, 4, 100) : 0;
+      if (dmg) { this.hp -= dmg; this.hit = { dmg, imp }; } this.anc = null; this.iF = 0; this.iS = 0;
       if (this.hp <= 0 || imp > 24) { this.hp = Math.max(0, this.hp); this.crash = { vz: hard, V: side, slope }; return; }
       const k = (1.35) * Math.min(0, vn); this.vx = (this.vx - k * nx) * 0.7; this.vy = (this.vy - k * ny) * 0.7; this.vz = (this.vz - k * nz) * 0.7 + 1.5;
       this.X = pX + nx * 0.8; this.Y = pY + ny * 0.8; this.Z = Math.max(pZ, h(this.X, this.Y) + 1.2); // назад, откуда прилетел (со стены -- не на её верх) this.hold = Math.max(this.hold, this.Z + 4);

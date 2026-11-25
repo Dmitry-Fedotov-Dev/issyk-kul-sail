@@ -153,7 +153,7 @@ async function init() {
   await late('пляж', () => { G.beach = makeBeach({ G, scene, camera, audio, toast }); G.finds = makeFinds({ G, scene, camera, beach: G.beach, audio, toast, store, ach: X.ach, onTake: (k) => FT && FT.found(k) }); });
   await late('пеший режим', () => { FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach, store, ach: X.ach, finds: G.finds }); $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey(); });
   await late('Як-130', () => { JM = makeJetMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt }); });
-  await late('Ми-8', () => { HM = makeHeliMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt }); });
+  await late('Ми-8', () => { HM = makeHeliMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, net: () => X && X.net }); });
   await late('параплан', () => { PG = makeParaMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, lens }); });
   await loadStep(86, 'Рисуем облака…');
   const cap = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(r, ms))]); // не ждём вечно, если поток не ответил
@@ -526,10 +526,10 @@ function sunTint(sinEl, eve, storm) { const hD = Math.max(-0.6, Math.asin(clamp(
   if (!eve) { cb += 0.06 * (1 - cg); } // утренний свет розовее
   const w = storm * 0.8; ENV.uSunCol.value.set(cr + (0.9 - cr) * w, cg + (0.9 - cg) * w, cb + (0.92 - cb) * w); ENV.uSunX.value = clamp(r * 1.06, 0, 1); ENV.uEve.value = eve ? 1 : 0; }
 // район Хан-Тенгри: рельеф грузится при первом входе (отдельный файл), дальше -- сразу
-async function startKhan(craft, merzNow = false) { const b = $('bfree'); b.classList.add('wait');
+async function startKhan(craft, mode = '') { const merzNow = mode === 'merz'; const b = $('bfree'); b.classList.add('wait');
   try { if (!G.khan) { toast('Летим на Хан-Тенгри… грузим рельеф Иныльчека'); G.khan = await loadKhan(scene); G.merz = makeMerz(scene, G.khan); G.snow = makeSnow(scene); G.klabels = makePeakLabels($('game'), G.khan.h); } } catch (e) { toast(e.message); return; } finally { b.classList.remove('wait'); }
-  if (craft === 'jet') JM.startZone(G.khan); else if (craft === 'heli') { if (merzNow) G.merz.force(); HM.startFree(merzNow ? 'merz' : ''); } }
-function heliGo() { if (!HM) { toast('Вертолёт не загрузился — выберите другой снаряд'); return; } audio.start(); G.clock = G.todHour(); if (store.get('heliSite') === 'rwy') HM.startFree(); else startKhan('heli', store.get('heliSite') === 'merz'); }
+  if (craft === 'jet') JM.startZone(G.khan); else if (craft === 'heli') { if (merzNow) G.merz.force(); HM.startFree(mode); } }
+function heliGo() { if (!HM) { toast('Вертолёт не загрузился — выберите другой снаряд'); return; } audio.start(); G.clock = G.todHour(); if (store.get('heliSite') === 'rwy') HM.startFree(); else startKhan('heli', ['merz', 'sar'].includes(store.get('heliSite')) ? store.get('heliSite') : ''); }
 function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; { const c = G.clock + (G.mode === 'menu' ? 0 : dt / 60 * (G.clockK || 1)); if (c >= 24) G.day = (G.day || 0) + 1; G.clock = c % 24; } const k = G.wx; if (!k) return; // G.day -- игровые сутки от 23 июля: идут сезоны; в меню время стоит на выбранном
   astroSun(G.day || 0, G.clock, SUN); const sinEl = SUN.y; // Солнце -- по эфемериде на игровую дату (astro.js): долгота дня и заря меняются с сезоном
   sunTint(sinEl, G.clock > 12, k.storm);

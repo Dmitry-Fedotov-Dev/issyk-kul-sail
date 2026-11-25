@@ -54,7 +54,7 @@ server.on('upgrade', (req, sock) => {
   sock.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' +
     crypto.createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64') + '\r\n\r\n');
   const c = { id: nextId++, sock, s: null, seen: Date.now() }; clients.set(c.id, c); let buf = Buffer.alloc(0);
-  const drop = () => { if (c.lobby) leave(c); clients.delete(c.id); sock.destroy(); };
+  const drop = () => { sarLeave(c); if (c.lobby) leave(c); clients.delete(c.id); sock.destroy(); };
   c.pid = 'c' + c.id;
   sock.setNoDelay(true); sock.write(frame(JSON.stringify({ t: 'hi', id: c.id })));
   sock.on('data', (d) => { buf = Buffer.concat([buf, d]); if (buf.length > 65536) return drop();
@@ -79,6 +79,10 @@ server.on('upgrade', (req, sock) => {
       else if (m.t === 'friend') { const o = byFid(String(m.to || '').slice(0, 16)); if (o && o !== c && c.fid) send(o, { t: 'friend', fid: c.fid, n: String(m.n || c.name || '').slice(0, 16) }); }
       // абордажный крюк: зацепить можно только того, кто рядом; отдать трос -- всегда
       else if (m.t === 'hook') { const o = clients.get(+m.to); if (o && o !== c && (!m.on || (c.s && o.s && Math.hypot(o.s.X - c.s.X, o.s.Y - c.s.Y) < 45))) send(o, { t: 'hook', from: c.id, n: c.name || '', on: m.on === 2 ? 2 : m.on ? 1 : 0, L: +m.L || 0, j: Math.min(20, Math.abs(+m.j || 0)) }); }
+      // совместная поисковая операция: войти по коду (получить историю), событие -- всем участникам, выйти
+      else if (m.t === 'sarj') sarJoin(c, String(m.op || '').slice(0, 8), String(m.n || c.name || '').slice(0, 16));
+      else if (m.t === 'sar') sarEvent(c, m.e);
+      else if (m.t === 'sarx') sarLeave(c);
       else if (m.t === 'join') { if (m.n) c.name = String(m.n).slice(0, 16); join(c, String(m.k || ''), String(m.p || '')); }
       else if (m.t === 'go') go(c);
       else if (m.t === 'leave') leave(c);
@@ -122,6 +126,20 @@ setInterval(() => { const now = Date.now();
     for (const m of [...L.members.values()]) if (m.gone && now - m.gone > GRACE && !m.r[1]) L.members.delete(m.pid);
     if (![...L.members.values()].some((x) => !x.gone || now - x.gone < GRACE)) { lobbies.delete(id); continue; }
     if (L.T0 < now) notify(L); } }, 1000);
+
+// ---------- поисковые операции ----------
+// Дело у всех одно (оно строится из кода операции на клиенте), сервер только хранит и пересылает события: найденные
+// улики и люди, заметки на карте, положения (их не храним). Операция живёт 6 часов после последнего события.
+const ops = new Map(), OP_TTL = 6 * 3600 * 1000;
+function sarJoin(c, op, n) { if (!/^[A-Z0-9]{5}$/.test(op)) return; sarLeave(c); let O = ops.get(op); if (!O) { if (ops.size > 2000) return; O = { members: new Set(), ev: [], t: Date.now() }; ops.set(op, O); }
+  O.members.add(c); c.op = op; if (n) c.name = c.name || n; send(c, { t: 'sarh', op, ev: O.ev }); }
+function sarEvent(c, e) { const O = c.op && ops.get(c.op); if (!O || !e || typeof e !== 'object') return;
+  const k = String(e.k || ''); if (!['clue', 'vic', 'note', 'pos', 'saved'].includes(k)) return;
+  const x = { k, n: String(c.name || 'Спасатель').slice(0, 16) }; for (const f of ['id', 'X', 'Y', 'd']) if (Number.isFinite(+e[f])) x[f] = Math.round(+e[f]); if (k === 'vic') x.alive = e.alive ? 1 : 0; if (k === 'note') x.txt = String(e.txt || '').slice(0, 80);
+  if (k !== 'pos') { O.ev.push(x); if (O.ev.length > 400) O.ev.shift(); O.t = Date.now(); }
+  for (const o of O.members) if (o !== c) send(o, { t: 'sar', op: c.op, e: x }); }
+function sarLeave(c) { const O = c.op && ops.get(c.op); if (O) O.members.delete(c); c.op = null; }
+setInterval(() => { const now = Date.now(); for (const [k, O] of ops) if (!O.members.size && now - O.t > OP_TTL) ops.delete(k); }, 60000);
 
 // ---------- рассылка: каждому -- только его окрестность ----------
 setInterval(() => { const now = Date.now(), list = [...clients.values()];
