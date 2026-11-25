@@ -509,13 +509,26 @@ function splash(b, n) { const fx = Math.sin(b.th), fz = -Math.cos(b.th); for (le
 // Время суток, как в GTA: игровая минута идёт одну секунду, сутки -- 24 минуты. Солнце ходит по настоящей дуге для
 // широты Чолпон-Аты (42.6 с. ш.) в середине лета; от его высоты зависят свет, цвет неба, заря, звёзды и ночной полумрак.
 const LIGHT = new THREE.Vector3().copy(SUN); let envT = 0;
+// Цвет солнца -- по толще воздуха на пути луча (воздушная масса, Kasten-Young) и рэлеевскому ослаблению по каналам:
+// в зените свет почти белый, к горизонту синее и зелёное рассеиваются -- солнце желтеет, оранжевеет и садится красным.
+// Высота 1600 м -- воздух тоньше, но вечером в нём больше пыли после дня (свет краснее), утром воздух чище (розовее).
+// uSunCol -- оттенок (максимальный канал = 1), uSunX -- сколько света дошло (для яркости диска)
+function sunTint(sinEl, eve, storm) { const hD = Math.max(-0.6, Math.asin(clamp(sinEl, -1, 1)) * 57.2958);
+  const am = 1 / (Math.sin(hD / 57.2958) + 0.50572 * Math.pow(hD + 6.07995, -1.6364)), a = Math.max(0, am - 1), q = eve ? 1.25 : 0.95;
+  const r = Math.exp(-0.060 * q * a), g = Math.exp(-0.135 * q * a), b = Math.exp(-0.30 * q * a), mx = Math.max(r, g, b);
+  let cr = r / mx, cg = Math.max(g / mx, 0.16), cb = Math.max(b / mx, eve ? 0.03 : 0.07); // у горизонта -- алый, не «чистый» красный
+  if (!eve) { cb += 0.06 * (1 - cg); } // утренний свет розовее
+  const w = storm * 0.8; ENV.uSunCol.value.set(cr + (0.9 - cr) * w, cg + (0.9 - cg) * w, cb + (0.92 - cb) * w); ENV.uSunX.value = clamp(r * 1.06, 0, 1); ENV.uEve.value = eve ? 1 : 0; }
 function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; { const c = G.clock + (G.mode === 'menu' ? 0 : dt / 60 * (G.clockK || 1)); if (c >= 24) G.day = (G.day || 0) + 1; G.clock = c % 24; } const k = G.wx; if (!k) return; // G.day -- игровые сутки от 23 июля: идут сезоны; в меню время стоит на выбранном
   astroSun(G.day || 0, G.clock, SUN); const sinEl = SUN.y; // Солнце -- по эфемериде на игровую дату (astro.js): долгота дня и заря меняются с сезоном
-  const day = smooth(-0.1, 0.14, sinEl), dusk = clamp(1 - Math.abs(sinEl - 0.04) / 0.26, 0, 1), sI = k.sun * smooth(-0.02, 0.22, sinEl), st = k.storm;
+  sunTint(sinEl, G.clock > 12, k.storm);
+  const day = smooth(-0.16, 0.08, sinEl), dusk = sinEl > 0.02 ? 1 - smooth(0.02, 0.30, sinEl) : smooth(-0.17, 0.02, sinEl), sI = k.sun * smooth(-0.02, 0.22, sinEl), st = k.storm;
   ENV.uDay.value = day; ENV.uDusk.value = dusk; ENV.uSunI.value = sI; G.night = day < 0.35;
-  const d2 = dusk * 0.55 * (1 - st), m = 0.03 + 0.97 * day; ENV.uHor.value.set((k.hor[0] * (1 - d2) + 0.98 * d2) * m, (k.hor[1] * (1 - d2) + 0.56 * d2) * m, (k.hor[2] * (1 - d2) + 0.36 * d2) * m + 0.012 * (1 - day)); scene.fog.color.setRGB(ENV.uHor.value.x, ENV.uHor.value.y, ENV.uHor.value.z); // Color.copy от вектора дала бы NaN и чёрные лодки
-  if (sinEl > 0.02) { LIGHT.copy(SUN); sunL.color.setRGB(1, 0.95 - 0.33 * dusk, 0.86 - 0.5 * dusk); sunL.intensity = 3.1 * sI; } else { const M = ENV.uMoon.value; if (M.y > 0.02) { LIGHT.set(M.x, M.y, M.z); sunL.intensity = (0.06 + 0.4 * M.w) * (1 - st); } else { LIGHT.set(0.2, 1, 0.1).normalize(); sunL.intensity = 0.05 * (1 - st); } sunL.color.setRGB(0.6, 0.72, 1); } // ночью светит настоящая Луна (stars.js): ярче в полнолуние, без Луны -- только свет неба
-  hemi.intensity = 1.9 * (1 - 0.35 * st) * (0.1 + 0.9 * day); G.spray.uniforms.uLight.value = 0.12 + 0.88 * sI; WAKE_LIGHT.value = 0.1 + 0.9 * day;
+  // дымка у горизонта: на заре тёплая (вечером -- персиковая, пыльная после дня; утром -- чище и розовее)
+  const d2 = dusk * 0.55 * (1 - st), m = 0.03 + 0.97 * day, ev = G.clock > 12, hz = ev ? [1.0, 0.55, 0.32] : [0.94, 0.62, 0.56];
+  ENV.uHor.value.set((k.hor[0] * (1 - d2) + hz[0] * d2) * m, (k.hor[1] * (1 - d2) + hz[1] * d2) * m, (k.hor[2] * (1 - d2) + hz[2] * d2) * m + 0.012 * (1 - day)); scene.fog.color.setRGB(ENV.uHor.value.x, ENV.uHor.value.y, ENV.uHor.value.z); // Color.copy от вектора дала бы NaN и чёрные лодки
+  if (sinEl > 0.02) { LIGHT.copy(SUN); { const c = ENV.uSunCol.value; sunL.color.setRGB(c.x, 0.08 + 0.92 * c.y, 0.06 + 0.94 * c.z); } sunL.intensity = 3.1 * sI; } else { const M = ENV.uMoon.value; if (M.y > 0.02) { LIGHT.set(M.x, M.y, M.z); sunL.intensity = (0.06 + 0.4 * M.w) * (1 - st); } else { LIGHT.set(0.2, 1, 0.1).normalize(); sunL.intensity = 0.05 * (1 - st); } sunL.color.setRGB(0.6, 0.72, 1); } // ночью светит настоящая Луна (stars.js): ярче в полнолуние, без Луны -- только свет неба
+  hemi.intensity = 1.9 * (1 - 0.35 * st) * (0.1 + 0.9 * day) * (0.5 + 0.5 * smooth(-0.04, 0.32, sinEl) + 0.5 * (1 - day)); G.spray.uniforms.uLight.value = 0.12 + 0.88 * sI; WAKE_LIGHT.value = 0.1 + 0.9 * day;
   envT -= dt; if (dt > 0 && envT <= 0) { envT = 12; updateEnv(G.sky); } }
 // ---------- топографическая карта: квадраты, снятые сверху с настоящего 3D-мира ----------
 // Ортокамера над квадратом смотрит вниз (север -- вверх) и видит только рельеф, берег с посёлками и тушь хребтов (слои
@@ -533,8 +546,8 @@ mapCam.up.set(0, 0, -1); mapCam.layers.set(1);
 function mapTile(l, i, j) { const k = l + '/' + i + '/' + j, t = tileCache.get(k); if (t) { tileCache.delete(k); tileCache.set(k, t); return t; } if (!tileWant.has(k)) { tileWant.add(k); tileQueue.push([k, l, i, j]); } return null; }
 function mapWork() { if (!G) return; if (!mapReady) { mapReady = true; makeMapLake(); const en = (o, l) => o.traverse((c) => c.layers.enable(l)); for (const o of G.mapObjs) en(o, 1); en(G.ridges, 2); for (const o of scene.children) if (o.isLight) o.layers.enable(1); }
   const g = G.far.userData.grid, size = (g.W * g.STEP), pr = renderer.getPixelRatio(), buf = renderer.getDrawingBufferSize(new THREE.Vector2()), cc = new THREE.Color(), ca = renderer.getClearAlpha(); renderer.getClearColor(cc);
-  const keep = { sun: SUN.clone(), day: ENV.uDay.value, dusk: ENV.uDusk.value, si: ENV.uSunI.value, st: ENV.uStorm.value, cov: ENV.uCover.value, hor: ENV.uHor.value.clone() };
-  SUN.set(-0.55, 0.72, -0.42).normalize(); Object.assign(ENV.uDay, { value: 1 }); ENV.uDusk.value = 0; ENV.uSunI.value = 1; ENV.uStorm.value = 0; ENV.uCover.value = -1; ENV.uHor.value.set(0.56, 0.76, 0.97); ENV.uMap.value = 1;
+  const keep = { sc: ENV.uSunCol.value.clone(), sun: SUN.clone(), day: ENV.uDay.value, dusk: ENV.uDusk.value, si: ENV.uSunI.value, st: ENV.uStorm.value, cov: ENV.uCover.value, hor: ENV.uHor.value.clone() };
+  SUN.set(-0.55, 0.72, -0.42).normalize(); Object.assign(ENV.uDay, { value: 1 }); ENV.uDusk.value = 0; ENV.uSunI.value = 1; ENV.uStorm.value = 0; ENV.uCover.value = -1; ENV.uHor.value.set(0.56, 0.76, 0.97); ENV.uSunCol.value.set(1, 0.97, 0.9); ENV.uMap.value = 1;
   renderer.shadowMap.autoUpdate = false; renderer.setClearColor(0xd9cfb2, 1); // дыры сетки -- низины за хребтами: суша renderer.setRenderTarget(null); renderer.setScissorTest(true);
   const t0 = performance.now();
   while (tileQueue.length && performance.now() - t0 < 10) { const [k, l, i, j] = tileQueue.pop(); tileWant.delete(k); const ts = size / 2 ** l, cx = g.X0 + (i + 0.5) * ts, cy = g.Y1 - (j + 0.5) * ts;
@@ -543,7 +556,7 @@ function mapWork() { if (!G) return; if (!mapReady) { mapReady = true; makeMapLa
     setRidgeRes(TILE, TILE); renderer.setViewport(0, 0, TILE / pr, TILE / pr); renderer.setScissor(0, 0, TILE / pr, TILE / pr); renderer.render(scene, mapCam);
     const c = document.createElement('canvas'); c.width = c.height = TILE; c.getContext('2d').drawImage(renderer.domElement, 0, buf.y - TILE, TILE, TILE, 0, 0, TILE, TILE);
     tileCache.set(k, c); if (tileCache.size > 120) tileCache.delete(tileCache.keys().next().value); }
-  SUN.copy(keep.sun); ENV.uDay.value = keep.day; ENV.uDusk.value = keep.dusk; ENV.uSunI.value = keep.si; ENV.uStorm.value = keep.st; ENV.uCover.value = keep.cov; ENV.uHor.value.copy(keep.hor); ENV.uMap.value = 0;
+  SUN.copy(keep.sun); ENV.uDay.value = keep.day; ENV.uDusk.value = keep.dusk; ENV.uSunI.value = keep.si; ENV.uStorm.value = keep.st; ENV.uCover.value = keep.cov; ENV.uHor.value.copy(keep.hor); ENV.uSunCol.value.copy(keep.sc); ENV.uMap.value = 0;
   renderer.setScissorTest(false); renderer.setViewport(0, 0, buf.x / pr, buf.y / pr); renderer.setClearColor(cc, ca); renderer.shadowMap.autoUpdate = true; setRidgeRes(buf.x, buf.y);
   if (G.onTiles) G.onTiles(); }
 // ---------- главный цикл ----------
@@ -578,9 +591,12 @@ function loop(now) {
       if (quality > 0) setQuality(quality - 1); else if (pixelRatio > PR_MIN) { pixelRatio = Math.max(PR_MIN, pixelRatio * 0.86); resize(); } }
     else if (fps > 57 && pixelRatio < PR_MAX && ++G.slow > 4) { G.slow = 0; pixelRatio = Math.min(PR_MAX, pixelRatio * 1.1); resize(); } }
   if (post) { // где солнце на экране и насколько оно «в кадре»
-    tmpV.copy(camera.position).addScaledVector(SUN, 1e5).project(camera); camera.getWorldDirection(sunDir); const f = sunDir.dot(SUN), sx = tmpV.x * 0.5 + 0.5, sy = tmpV.y * 0.5 + 0.5;
+    // матрицы камеры -- этого кадра (иначе солнце на экране «отстаёт» на кадр и уезжает при поворотах)
+    camera.updateMatrixWorld(); tmpV.copy(camera.position).addScaledVector(SUN, 1e5).project(camera); camera.getWorldDirection(sunDir); const f = sunDir.dot(SUN), sx = tmpV.x * 0.5 + 0.5, sy = tmpV.y * 0.5 + 0.5;
     const off = Math.max(0, Math.max(Math.abs(sx - 0.5), Math.abs(sy - 0.5)) - 0.5), a = f > 0.05 ? ENV.uSunI.value * (1 - ENV.uStorm.value) * smooth(0.05, 0.35, f) * Math.exp(-off * 3.5) : 0;
-    post.setSun(sx, sy, G.mode === 'menu' ? a * 0.6 : a); }
+    // блик объектива -- по силе солнца: в зените ярче, к горизонту, когда свет проходит толщу воздуха, почти гаснет
+    const X = ENV.uSunX.value; post.setSun(sx, sy, (G.mode === 'menu' ? a * 0.6 : a) * X * X * 0.42, ENV.uSunCol.value);
+  }
   if (post) post.render(scene, camera); else renderer.render(scene, camera);
   G.frame++;
 }

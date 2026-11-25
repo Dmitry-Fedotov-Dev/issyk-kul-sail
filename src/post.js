@@ -15,10 +15,10 @@ export function postSupported(gl) { return !!gl && !!(gl.getExtension('EXT_color
 export function makePost(renderer) {
   const depth = new THREE.DepthTexture(4, 4); depth.type = THREE.UnsignedIntType;
   const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthTexture: depth, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, stencilBuffer: false });
-  const u = { tC: { value: rt.texture }, tD: { value: depth }, uPx: { value: new THREE.Vector2(1, 1) }, uNF: { value: new THREE.Vector2(0.5, 3e5) }, uK: { value: 1 }, uInk: { value: 1 }, uSunP: { value: new THREE.Vector3(0.5, 0.5, 0) }, uSpy: { value: 0 }, uSpyB: { value: 0 } };
+  const u = { tC: { value: rt.texture }, tD: { value: depth }, uPx: { value: new THREE.Vector2(1, 1) }, uNF: { value: new THREE.Vector2(0.5, 3e5) }, uK: { value: 1 }, uInk: { value: 1 }, uSunP: { value: new THREE.Vector3(0.5, 0.5, 0) }, uSunC: { value: new THREE.Vector3(1, 0.93, 0.78) }, uSpy: { value: 0 }, uSpyB: { value: 0 } };
   const mat = new THREE.ShaderMaterial({ uniforms: u, depthTest: false, depthWrite: false,
     vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }',
-    fragmentShader: `precision highp float; uniform sampler2D tC, tD; uniform vec2 uPx, uNF; uniform float uK, uInk, uSpy, uSpyB; uniform vec3 uSunP; varying vec2 vUv;
+    fragmentShader: `precision highp float; uniform sampler2D tC, tD; uniform vec2 uPx, uNF; uniform float uK, uInk, uSpy, uSpyB; uniform vec3 uSunP, uSunC; varying vec2 vUv;
 float Z(vec2 uv){ float d=texture2D(tD,uv).x; return uNF.x*uNF.y/(uNF.y-d*(uNF.y-uNF.x)); }
 float L(vec2 uv){ vec3 c=texture2D(tC,uv).rgb; c=c/(1.+c); return dot(c,vec3(0.3,0.59,0.11)); }
 void main(){
@@ -49,7 +49,7 @@ void main(){
   // через центр кадра. Если солнце закрыто парусом или горой (по карте глубины), блики гаснут, остаётся слабый ореол.
   if(uSunP.z>0.003){ vec2 sp=uSunP.xy, asp=vec2(uPx.y/uPx.x,1.), dv=(U-sp)*asp; float len=length(dv), an=atan(dv.y,dv.x);
     float open=(sp.x>0.&&sp.x<1.&&sp.y>0.&&sp.y<1.) ? step(uNF.y*0.9, Z(sp)) : 1., A=uSunP.z*(0.12+0.88*open);
-    vec3 warm=vec3(1.,0.93,0.78), fl=warm*(exp(-len*3.2)*0.20+exp(-len*10.)*0.5+exp(-len*40.)*3.);
+    vec3 warm=uSunC, fl=warm*(exp(-len*3.2)*0.20+exp(-len*10.)*0.5+exp(-len*40.)*3.);
     fl+=warm*(pow(abs(sin(an*4.+0.4)),14.)*0.22+pow(abs(sin(an*7.-1.1)),22.)*0.14)*exp(-len*2.6);          // лучи
     fl+=vec3(1.,0.85,0.6)*exp(-pow((len-0.34)/0.014,2.))*0.16+vec3(0.6,0.8,1.)*exp(-pow((len-0.365)/0.012,2.))*0.12; // гало
     vec2 ax=vec2(0.5)-sp;                                                                                 // блики по оси
@@ -70,7 +70,7 @@ void main(){
 }` });
   const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat); quad.frustumCulled = false; scene.add(quad);
   let ok = true, checked = false; const size = new THREE.Vector2();
-  return { get ok() { return ok; }, setSun(x, y, a) { u.uSunP.value.set(x, y, a); }, setSpy(a, b) { u.uSpy.value = a; u.uSpyB.value = b; },
+  return { get ok() { return ok; }, setSun(x, y, a, c) { u.uSunP.value.set(x, y, a); if (c) u.uSunC.value.set(c.x, 0.12 + 0.88 * c.y, 0.08 + 0.92 * c.z); }, // засветка -- цвета солнца: на закате оранжевая setSpy(a, b) { u.uSpy.value = a; u.uSpyB.value = b; },
     resize() { renderer.getDrawingBufferSize(size); rt.setSize(Math.max(2, size.x), Math.max(2, size.y)); u.uPx.value.set(1 / size.x, 1 / size.y); u.uK.value = Math.max(0.75, size.y / 720); checked = false; },
     render(sc, camera) {
       if (!ok) { renderer.render(sc, camera); return; }

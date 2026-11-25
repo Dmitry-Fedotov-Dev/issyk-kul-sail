@@ -38,13 +38,13 @@ export async function loadHeight() {
 // Общее состояние неба и света: одни и те же объекты uniform'ов разделяют небо, рельеф и вода.
 export const ENV = {
   uSun: { value: SUN }, uHor: { value: new THREE.Vector3(0.56, 0.76, 0.97) }, uCover: { value: 0.4 }, uCirrus: { value: 0.3 },
-  uStorm: { value: 0 }, uEq: { value: new THREE.Matrix3() }, uMoon: { value: new THREE.Vector4(0, -1, 0, 0) }, uNT: { value: 0 }, uCine: { value: 1 }, uCuK: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() }, // Луна: направление и освещённая доля; uNT -- время для метеоров
+  uStorm: { value: 0 }, uEq: { value: new THREE.Matrix3() }, uMoon: { value: new THREE.Vector4(0, -1, 0, 0) }, uNT: { value: 0 }, uCine: { value: 1 }, uCuK: { value: 0 }, uDay: { value: 1 }, uDusk: { value: 0 }, uSunCol: { value: new THREE.Vector3(1, 0.97, 0.9) }, uSunX: { value: 1 }, uEve: { value: 1 }, uCloudScale: { value: 1 }, uSunI: { value: 1 }, uCloud: { value: new THREE.Vector2() }, // Луна: направление и освещённая доля; uNT -- время для метеоров
   uMap: { value: 0 }, uMapDeep: { value: new THREE.Color(0x1d5ea6) }, uLakeM: { value: null }, uLakeT: { value: new THREE.Vector4() }, uFarH: { value: null },
   uRiv: { value: null }, uRivT: { value: new THREE.Vector4() }, uRivOn: { value: 0 }, uRT: { value: 0 }, // реки коридора -- маской (corridorart)
   uLC: { value: null }, uLCOn: { value: 0 }, uPaint: { value: 1 }, uLCT: { value: new THREE.Vector4(-141000, 63000, 1 / 273600, 1 / 180600) }, // маска зон OSM (по требованию) // съёмка карты сверху: дно плавно уходит в цвет озера на карте
 };
 export const GLSL_COMMON = /* glsl */`
-uniform vec3 uSun, uHor; uniform vec4 uMoon; uniform float uNT, uCine; uniform float uCuK; uniform float uCover, uCirrus, uStorm, uCloudScale, uSunI, uDay, uDusk; uniform vec2 uCloud;
+uniform vec3 uSun, uHor; uniform vec4 uMoon; uniform float uNT, uCine; uniform float uCuK; uniform float uCover, uCirrus, uStorm, uCloudScale, uSunI, uDay, uDusk; uniform vec3 uSunCol; uniform float uSunX, uEve; uniform vec2 uCloud;
 #define HOR uHor
 float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
 float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
@@ -53,17 +53,44 @@ float fbm(vec2 p){ float a=.5, s=0.; for(int i=0;i<FBM_OCT;i++){ s+=a*vnoise(p);
 // небо высокогорья: тёмно-синий зенит, светлая полоса у горизонта
 vec3 skyBase(vec3 d){ float y=max(d.y,0.);
   // высокогорное небо: воздуха над головой меньше, поэтому зенит тёмный, густо-синий с фиолетовым оттенком
-  vec3 c=mix(uHor, vec3(0.045,0.235,0.78), smoothstep(0.,0.24,y)); c=mix(c, vec3(0.010,0.085,0.50), smoothstep(0.10,0.55,y)); c=mix(c, vec3(0.006,0.030,0.27), smoothstep(0.40,1.,y));
+  // на заре горизонт со стороны солнца -- золотой и оранжевый, а не общий розовый: дымку освещает само солнце
+  float sgE=max(dot(normalize(d.xz+1e-4),normalize(uSun.xz+1e-5)),0.), dz=uDusk*(1.-uStorm), und=smoothstep(0.03,-0.07,uSun.y);
+  vec3 H=mix(uHor, mix(vec3(1.,0.70,0.36),vec3(0.95,0.42,0.22),und)*mix(0.95,0.5,smoothstep(-0.03,-0.15,uSun.y)), dz*pow(sgE,1.3)*0.85);
+  vec3 c=mix(H, vec3(0.045,0.235,0.78), smoothstep(0.,0.24,y));
+  // смесь оранжевого с синим даёт грязно-сиреневый; в настоящем небе между ними -- бледное золото и светлая лазурь:
+  // со стороны солнца лишний пурпур уводим в зелёный канал (сиреневое оставляем поясу Венеры напротив)
+  { float pu=max(0., min(c.r,c.b)-c.g); c.g+=pu*0.85*dz*sgE*(1.-und*0.6); } c=mix(c, vec3(0.010,0.085,0.50), smoothstep(0.10,0.55,y)); c=mix(c, vec3(0.006,0.030,0.27), smoothstep(0.40,1.,y));
   c=mix(c, vec3(0.20,0.24,0.30)*(0.75+0.5*y), uStorm*0.85);
+  c*=mix(1., mix(0.42,0.8,sgE*sgE)*mix(1.,0.8,smoothstep(0.1,0.6,y)), dz*smoothstep(0.03,0.4,y)); // на заре небо темнеет к зениту и в стороне от солнца -- заря на нём горит, а не выцветает
   // ночь по палитре референса: зенит глубокий синий, ниже синий, у горизонта сине-фиолетовый с тонким свечением воздуха;
   // при Луне небо светлеет холодным синим
   // зенит #020820 -> глубокое небо #07153D -> синее #0C2B6B -> дымка горизонта #7E8CCB (линейные, под экспозицию сцены)
   vec3 nc=mix(vec3(0.075,0.085,0.20), vec3(0.018,0.050,0.165), smoothstep(0.,0.16,y)); nc=mix(nc, vec3(0.008,0.022,0.080), smoothstep(0.12,0.5,y)); nc=mix(nc, vec3(0.002,0.006,0.026), smoothstep(0.45,1.,y));
   nc+=vec3(0.035,0.030,0.075)*exp(-y*14.)*(1.+0.6*uCine); nc+=vec3(0.020,0.034,0.080)*uMoon.w*smoothstep(-0.05,0.2,uMoon.y); nc=mix(nc, vec3(0.012,0.014,0.020), uStorm*0.85);
   c=mix(nc, c*mix(0.025,1.,uDay), smoothstep(0.02,0.35,uDay));
-  { float sg=max(dot(normalize(d.xz+1e-4),normalize(uSun.xz)),0.); c+=vec3(1.,0.42,0.14)*uDusk*(1.-uStorm)*pow(1.-y,5.)*(0.25+0.75*sg*sg); } // заря у горизонта со стороны солнца
+  // ---- заря: как в живописи -- слоями. Со стороны солнца у горизонта алая полоса, выше оранжевая, ещё выше бледно-
+  // золотая, и она тает в синеву; солнце уходит -- полосы опускаются, густеют и гаснут, над ними проступает сиреневый
+  // «пурпурный свет». На противоположной стороне неба -- тень Земли (сизо-синяя полоса у горизонта, растёт, когда
+  // солнце садится) и над ней розовый «пояс Венеры». Вечером заря огненнее (в воздухе пыль после дня), утром -- чище,
+  // розово-персиковая.
+  { float e=uSun.y, cl=1.-uStorm*0.9; vec2 sh=normalize(uSun.xz+1e-5); float sg=dot(normalize(d.xz+1e-4),sh), fs=max(sg,0.), bk=max(-sg,0.);
+    float tw=smoothstep(-0.19,-0.03,e)*(1.-smoothstep(0.0,0.14,e))*cl;                  // разгорается к самому закату, держится в сумерках
+    if(tw>0.001){ float under=smoothstep(0.03,-0.07,e), bri=mix(1.,0.25,smoothstep(-0.03,-0.17,e));   // глубже солнце -- заря ниже и темнее
+      float hgt=mix(0.09,0.06,under)+0.16*fs*fs*fs;                                       // над солнцем полосы выше
+      float t=y/hgt, a=exp(-t*0.9)*(0.18+0.82*pow(fs,1.6));
+      vec3 lowC=mix(uSunCol*vec3(1.,0.92,0.85), mix(vec3(1.,0.20,0.06),vec3(0.98,0.30,0.22),1.-uEve), under), midC=mix(vec3(1.,0.52,0.16),vec3(1.,0.58,0.36),1.-uEve), hiC=vec3(1.,0.84,0.55);
+      vec3 zc=mix(lowC, midC, smoothstep(0.15,0.9,t)); zc=mix(zc, hiC, smoothstep(0.9,2.2,t));
+      c=c*(1.-a*tw*0.6)+zc*a*tw*bri*1.25;
+      // пурпурный свет: сиреневое пятно высоко над зашедшим солнцем
+      c+=vec3(0.30,0.10,0.34)*under*smoothstep(-0.16,-0.05,e)*exp(-pow((y-0.22)/0.14,2.))*fs*fs*cl*0.6;
+      // тень Земли и пояс Венеры -- против солнца, пока солнце у горизонта или чуть под ним
+      float as=smoothstep(-0.15,-0.02,e)*(1.-smoothstep(0.01,0.08,e))*smoothstep(0.1,0.7,bk)*cl, hs=0.012+max(0.,-e)*0.55;
+      c=mix(c, vec3(0.12,0.15,0.30)*mix(1.,0.45,smoothstep(-0.05,-0.15,e)), as*(1.-smoothstep(hs-0.012,hs+0.012,y))*0.75);
+      c+=mix(vec3(0.62,0.30,0.38),vec3(0.66,0.34,0.44),1.-uEve)*as*smoothstep(hs-0.012,hs+0.02,y)*(1.-smoothstep(hs+0.03,hs+0.16,y))*0.55; }
+    // синий час: солнце на 4-8° под горизонтом -- всё небо густо-синее, чистое
+    float bh=smoothstep(-0.05,-0.09,e)*(1.-smoothstep(-0.14,-0.2,e))*cl; c=mix(c, c*vec3(0.72,0.86,1.35), bh*0.6); }
   // солнце высокогорья: слепящий диск и широкое сияние вокруг
-  float s=max(dot(d,uSun),0.), sunny=uSunI*(1.-uStorm); c+=vec3(1.,.86,.62)*(pow(s,10.)*.16+pow(s,220.)*.55)*uSunI+vec3(1.,.9,.7)*(pow(s,3.)*.10+pow(s,40.)*.35+pow(s,900.)*2.5)*sunny; return c; }
+  float s=max(dot(d,uSun),0.), sunny=uSunI*(1.-uStorm); vec3 sc=uSunCol*mix(vec3(1.),vec3(1.,.9,.75),uSunX)*mix(0.45,1.,uSunX); c+=sc*(pow(s,10.)*.16+pow(s,220.)*.55)*uSunI+sc*(pow(s,3.)*.10+pow(s,40.)*.35+pow(s,900.)*2.5*uSunX*uSunX)*sunny*mix(1.6,1.,uSunX); return c; } // низкое солнце -- ореол слабее: красный диск виден на небе
 vec2 cloudUV(vec3 d){ return d.xz/(d.y+0.10)*uCloudScale+uCloud; }
 float cloudDens(vec2 p){ return fbm(p*0.45+3.1)*0.62+fbm(p*1.9)*0.38; }
 float cloudLo(){ return 0.60-uCover*0.2; }
@@ -107,7 +134,7 @@ void main(){ vec3 d=normalize(vDir); vec3 c=skyBase(d); float dk=mix(0.05,1.,uDa
     float knots=smoothstep(0.62,0.85,fbm(gp*vec2(26.,40.)+21.))*disk;                                          // плотные яркие узлы звёздных облаков
     float mott=0.55+0.9*fbm(gp*vec2(45.,80.)+31.);                                                              // мелкая рябь звёздных облаков
     float lum=(disk*(0.12+1.1*clouds*clouds)*(0.7+0.55*grain)*mott+knots*0.9+bulge*1.6+halo*0.1)*(1.-dust)*(1.-0.35*fil);
-    float dark=smoothstep(0.6,0.02,uDay)*(1.-uStorm)*smoothstep(0.,0.25,d.y)*(1.-0.75*uMoon.w*smoothstep(-0.05,0.2,uMoon.y)); // Луна гасит Млечный Путь
+    float dark=smoothstep(0.28,0.0,uDay)*(1.-uStorm)*smoothstep(0.,0.25,d.y)*(1.-0.75*uMoon.w*smoothstep(-0.05,0.2,uMoon.y)); // Луна гасит Млечный Путь
     float pinkK=smoothstep(0.45,0.75,fbm(gp*vec2(6.,10.)+13.))*disk, blueK=smoothstep(0.5,0.8,sc2)*disk;
     vec3 mwc=mix(vec3(0.62,0.66,1.0), vec3(1.0,0.80,0.70), bulge/(bulge+disk*0.5+1e-3));                   // холодный диск, тёплое ядро
     mwc=mix(mwc, vec3(1.0,0.48,0.82), pinkK*0.7); mwc=mix(mwc, vec3(0.58,0.80,1.1), blueK*0.5); mwc=mix(mwc, vec3(0.60,0.42,0.95), (1.-clouds)*disk*0.4); // розовые, голубые и фиолетовые области            // розовые и голубые области
@@ -123,7 +150,19 @@ void main(){ vec3 d=normalize(vDir); vec3 c=skyBase(d); float dk=mix(0.05,1.,uDa
       vec3 S=normalize(vec3(sin(a1)*cos(h1),sin(h1),cos(a1)*cos(h1))), Dv=normalize(vec3(sin(a2),-0.9,cos(a2))-S*dot(vec3(sin(a2),-0.9,cos(a2)),S)), E=normalize(S+Dv*0.22*f);
       vec3 se=E-S; float tt=clamp(dot(d-S,se)/max(dot(se,se),1e-6),0.,1.), dd=length(d-(S+se*tt));
       c+=vec3(0.85,0.92,1.)*exp(-dd*dd/2.5e-6)*tt*tt*(1.-f)*1.6*(1.-uStorm)*smoothstep(0.4,0.,uDay); } }
-  c+=vec3(1.,.95,.8)*smoothstep(0.99955,0.9998,dot(d,uSun))*6.*uSunI;
+  // диск: у горизонта сквозь толщу воздуха на него можно смотреть -- он густеет до оранжевого и алого и тускнеет;
+  // в последний градус рефракция сплющивает его по вертикали
+  { vec3 dv=d-uSun; dv.y*=1.+0.35*(1.-smoothstep(0.,0.03,uSun.y)); float rs=1.+0.7*(1.-smoothstep(0.,0.22,uSun.y)), dd=length(dv), disc=1.-smoothstep(0.0195*rs,0.0215*rs,dd); // у горизонта диск крупнее -- рядом с горами глаз видит его большим
+    vec3 dc=uSunCol*vec3(1.,mix(0.62,1.,uSunX),mix(0.4,1.,uSunX))*mix(1.5,7.,smoothstep(0.6,0.98,uSunX)); // у горизонта -- умеренно яркий: иначе тональная обработка выжгла бы красный в жёлтый
+    c=mix(c, dc, disc*smoothstep(-0.03,0.,uSun.y+0.02)*(1.-uStorm*0.9)); }
+  // лучи заката: солнце за гребнем (или только что село) -- из-за горы веером расходятся светлые лучи с тенями
+  // между ними (тени облаков и вершин за горизонтом). Нижнюю часть веера закрывают сами горы -- лучи встают из-за хребта
+  { float e=uSun.y, rk=smoothstep(-0.075,-0.012,e)*(1.-smoothstep(0.035,0.075,e))*(1.-uStorm);
+    if(rk>0.001 && d.y>-0.02){ vec3 t1=normalize(cross(vec3(0.,1.,0.),uSun)+1e-5), t2=cross(uSun,t1); float an=atan(dot(d,t2),dot(d,t1)), r=acos(clamp(dot(d,uSun),-1.,1.));
+      float bm=vnoise(vec2(an*7.,1.3))*0.6+vnoise(vec2(an*17.,5.1))*0.4, b=smoothstep(0.4,0.85,bm), up=smoothstep(-0.25,0.35,sin(an));
+      float fall=exp(-r*3.4)*smoothstep(0.015,0.08,r)*up*rk;
+      vec3 rcol=mix(uSunCol, vec3(1.,0.62,0.4), 0.3);
+      c=c*(1.-(1.-b)*fall*0.18)+rcol*b*fall*0.17; } }
   // старые процедурные слои неба (перистые, пелена, «барашки») убраны: облака рисуют спрайты clouds.js
   // кучевые: плотность -> покрытие, освещённость -- по перепаду плотности в сторону солнца
   if(uCuK>0.001 && d.y>0.004){ vec2 p=cloudUV(d); float n=cloudDens(p), a=cloudCov(n); // старые процедурные облака неба -- выключены (uCuK = 0): небо рисуют спрайтовые облака clouds.js
@@ -306,7 +345,7 @@ void main(){ vec3 N=normalize(vN); float h=vH;
   // живопись светом: солнечные склоны тёплые, золотистые; тени холодные, сине-фиолетовые; цвета гуще
   // погодный фильтр: на солнце краски сочные, в шторм -- выцветшие и холодные, на заре -- тёплые
   float wxS=uSunI*(1.-uStorm); c=mix(vec3(dot(c,vec3(0.3,0.59,0.11))), c, 0.62+0.78*wxS); c=mix(c, c*vec3(0.78,0.86,1.02), uStorm);
-  vec3 sunC=mix(mix(vec3(1.08,1.0,0.88), vec3(1.5,0.72,0.38), uDusk), vec3(0.8,0.85,0.9), uStorm), shC=mix(vec3(0.27,0.33,0.50), vec3(0.22,0.25,0.30), uStorm);
+  vec3 sunC=mix(uSunCol*vec3(1.08,1.03,0.98)*mix(1.,1.45,uDusk), vec3(0.8,0.85,0.9), uStorm), shC=mix(mix(vec3(0.27,0.33,0.50), vec3(0.30,0.27,0.54), uDusk), vec3(0.22,0.25,0.30), uStorm); // свет -- цвета солнца (на заре оранжевый и алый), тень на заре сиреневая
   c*=mix(1.,0.88,mt*(1.-snowM)); // камень и трава в горах темнее выгоревшей степи у берега
   float sunny=uSunI*(1.-uStorm); // в ясный день горы залиты светом: солнечные склоны почти слепят, тени наполнены отражённым
 #ifdef DEMN
@@ -322,7 +361,8 @@ void main(){ vec3 N=normalize(vN); float h=vH;
     c=a*mix(0.5,0.9,sn); snowM=sn; // под яркий свет сцены: иначе склоны выгорают в белое
     float hsh=dot(N, normalize(vec3(-0.55,0.7,-0.45))); ao*=clamp((1.+cav*0.5)*mix(0.72,1.15,hsh),0.45,1.4); l*=clamp(1.+cav*0.25,0.7,1.25); }
 #endif
-  vec3 col=c*(sunC*l*(1.25+0.75*sunny)+shC*ao*(1.25+0.3*sunny)+snowM*vec3(0.36,0.42,0.60)*mix(1.,0.5,uStorm)*ao);
+  float ambK=0.42+0.58*smoothstep(-0.04,0.32,uSun.y); // низкое солнце -- рассеянного света мало: склоны против солнца уходят в тёмный силуэт
+  vec3 col=c*(sunC*l*(1.25+0.75*sunny)+(shC*ao*(1.25+0.3*sunny)+snowM*vec3(0.36,0.42,0.60)*mix(1.,0.5,uStorm)*ao)*ambK);
 #ifdef DEMN
   // реки: вода нарисована прямо на склоне по запечённой маске русла -- светлые струйки бегут вниз по течению
   if(uRivOn>0.){ vec2 ru=vec2((vP.x-uRivT.x)*uRivT.z, (uRivT.y+vP.z)*uRivT.w); vec4 rv=texture2D(uRiv, clamp(ru,0.,1.));
@@ -371,6 +411,11 @@ void main(){ vec3 N=normalize(vN); float h=vH;
     col=mix(col, pcol, pk); }
   // в шторм вершины уходят в тучу
   col=mix(col, vec3(0.24,0.27,0.31), uStorm*smoothstep(1300.,2600.,h)*0.8);
+  // альпийское зарево: солнце уже за горизонтом у воды, а вершины на 4 км ещё видят его -- снег и скалы розовеют,
+  // сначала гаснут подножия, последними -- самые высокие пики; склоны к солнцу горят ярче
+  { float e=uSun.y, top=smoothstep(900.,2700.,h), hz=mix(-0.012,-0.065,top); // выше вершина -- дольше её освещает
+    float ag=smoothstep(hz-0.02,hz+0.01,e)*(1.-smoothstep(0.015,0.08,e))*top*(1.-uStorm)*max(dot(N,normalize(vec3(uSun.x,0.3,uSun.z))),0.);
+    col+=c*mix(vec3(1.,0.38,0.42),vec3(1.,0.46,0.58),1.-uEve)*ag*(0.55+0.75*snowM)*1.1; }
   col*=mix(vec3(0.085,0.10,0.19)*(1.+0.9*uMoon.w*smoothstep(-0.05,0.2,uMoon.y)), vec3(1.), uDay); // ночью -- сине-фиолетовый полумрак: хребты читаются, в полнолуние светлее
   // живописная даль: своя лёгкая воздушная перспектива -- планы светлеют и холодеют, но цвет не тонет в дымке
   { vec3 fogd=applyFog(col, dist, h); if(pk>0.){ float f2=min((1.-exp(-dist/100000.))*mix(1.,0.45,smoothstep(150.,2600.,h)),0.17);
@@ -528,12 +573,12 @@ void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
   float hullF=(1.-smoothstep(0.95,1.45,e))*(0.35+0.65*bv)*(0.55+0.45*smoothstep(-2.,3.,bl));
   vec3 N=normalize(vec3(-sl.x,1.,-sl.y)); vec3 V=normalize(cameraPosition-vW);
   float F=0.02+0.98*pow(1.-max(dot(N,V),0.),5.); F=min(F,0.55)*mix(1.,0.82,smoothstep(0.,0.6,rip));
-  vec3 R=reflect(-V,N); R.y=abs(R.y)*0.8+0.22; R=normalize(R);
+  vec3 R=reflect(-V,N); R.y=abs(R.y)*0.8+mix(0.22,0.05,uDusk*(1.-uStorm)); R=normalize(R); // на заре вода отражает низкое небо -- зарю
   vec3 sky=skyBase(R);
   float cr=uStorm*0.6; // старые облака в отражении убраны; в грозу вода отражает только общую пелену
   sky=mix(sky, mix(vec3(0.86,0.88,0.90), vec3(0.16,0.18,0.21), uStorm)*mix(0.05,1.,uDay), cr*0.75);
   float sd=max(dot(R,uSun),0.), far=smoothstep(100.,4000.,dist);
-  vec3 spec=vec3(1.,.93,.78)*(pow(sd,mix(700.,90.,far))*mix(8.,1.2,far))*uSunI;
+  vec3 spec=uSunCol*vec3(1.,.97,.9)*(pow(sd,mix(700.,90.,far))*mix(8.,1.2,far))*max(uSunI,0.35*uSunX*smoothstep(-0.01,0.01,uSun.y)); // дорожка -- цвета солнца: на закате золотая и алая
   // лунная дорожка: та же блестящая полоса, только от Луны -- холодная, ярче в полнолуние
   { float md=max(dot(R,uMoon.xyz),0.); spec+=vec3(0.62,0.72,1.)*pow(md,mix(500.,70.,far))*mix(5.,0.9,far)*uMoon.w*smoothstep(-0.02,0.08,uMoon.y)*(1.-smoothstep(0.,0.3,uDay))*(1.-uStorm); }
   vec3 deep=vec3(0.004,0.075,0.34), turq=vec3(0.0,0.34,0.60), shal=vec3(0.06,0.72,0.70);
@@ -557,6 +602,8 @@ void main(){ vec2 o=vO; float dist=length(vW-cameraPosition);
   // ложбины темнее; мелкая фактура -- через уклон ряби к солнцу. Сам решётчатый шум в цвет не идёт: он давал клетчатые пятна
   body*=clamp(0.94+hh*0.22+dot(ds,normalize(uSun.xz))*0.05*rip,0.72,1.22);
   body*=mix(1.10,0.74,smoothstep(0.80,1.60,g));
+  // вода светится рассеянным светом: солнце низко -- его меньше и он тёплый; бирюза гаснет и теплеет к закату
+  body*=mix(vec3(0.26,0.30,0.46), mix(vec3(1.), uSunCol*vec3(1.05,1.0,1.1), 0.55*uDusk), smoothstep(-0.04,0.30,uSun.y)*(1.-0.2*uStorm)+0.2*uStorm);
   body=mix(vec3(0.010,0.026,0.085)*(1.+1.2*uMoon.w*step(0.,uMoon.y)), body, smoothstep(0.,0.35,uDay)); // ночью озеро тёмно-синее (отражение неба и дорожки -- сверху), а не чёрное и не бирюзовое body*=1.-0.42*shd;
   vec3 col=mix(body,sky,F*(1.-0.25*shd))+spec*(1.-shd);
   float fn=fvn(o*0.9+uTime*0.05)*0.65+fvn(o*2.6-uTime*0.04)*0.35, lc=0.;
