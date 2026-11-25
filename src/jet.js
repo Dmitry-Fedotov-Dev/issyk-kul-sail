@@ -15,8 +15,8 @@
 export const YAK = {
   m: 7250, Vs: 52, Vr: 58, Vmax: 295, nMax: 8, nMin: -3, // сваливание ~190 км/ч, отрыв ~210, максимум ~1060
   T: 13.8,         // тяга на максимале, м/с^2 (две АИ-222-25 по 2500 кгс) x2 -- игровая мощь
-  cd: 6.9 / (295 * 295), ki: 8000, // сопротивление: вредное ~V^2, индуктивное ~n^2/V^2 -- в глубоком вираже скорость тает
-  roll: 4.4,       // предельная угловая скорость крена, рад/с (Як-130 крутит бочку меньше чем за 1.5 с)
+  cd: 6.9 / (295 * 295), ki: 5200, // сопротивление: вредное ~V^2, индуктивное ~n^2/V^2 -- в глубоком вираже скорость тает
+  roll: 6.0,       // предельная угловая скорость крена, рад/с (бочка ~1 с) -- на малой скорости рули вялые
   cruise: 180,     // автомат тяги: 650 км/ч
 };
 const g = 9.81, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -30,7 +30,7 @@ export class Jet {
   constructor() { this.reset(0, 0, 0, 0, 'ground'); }
   // th -- курс (0 -- на север, по часовой), mode: 'ground' (на полосе) или 'air'
   reset(X, Y, Z, th, mode = 'ground', V = 0) {
-    Object.assign(this, { X, Y, Z, V, mode, thr: 0, n: 1, gear: mode === 'ground', brake: false, max: false, t: 0, stall: false, pull: false, gpws: false, nPeak: 0, onRwy: mode === 'ground' });
+    Object.assign(this, { X, Y, Z, V, mode, thr: 0, n: 1, gear: mode === 'ground', brake: false, max: false, t: 0, stall: false, pull: false, gpws: false, nPeak: 0, p: 0, aoa: 0, buf: 0, q: 1, onRwy: mode === 'ground' });
     this.f = [Math.sin(th), Math.cos(th), 0]; this.u = [0, 0, 1]; this.r = cross(this.f, this.u);
   }
   get th() { return Math.atan2(this.f[0], this.f[1]); }                       // курс
@@ -59,10 +59,19 @@ export class Jet {
     if (this.f[2] > 0 && this.V < P.Vs * 1.6 && Math.abs(pitch) < 0.05) n0 -= (P.Vs * 1.6 - this.V) / P.Vs * 1.2 * cg;
     let n = pitch >= 0 ? n0 + pitch * (P.nMax - n0) : n0 + -pitch * (P.nMin - n0);
     const nAero = (this.V / P.Vs) ** 2 * sig / 0.84; this.stall = nAero < Math.abs(n0) * 0.95 && this.V < P.Vs * 1.05; // меньше скорости сваливания -- крыло не держит
-    n = clamp(n, -nAero * 0.6, nAero); n = clamp(n, P.nMin, P.nMax); this.n = n; this.nPeak = Math.max(this.nPeak, n); this.pull = pitch > 0.5;
+    n = clamp(n, -nAero * 0.6, nAero); n = clamp(n, P.nMin, P.nMax);
+    // контакт с воздухом: перегрузка нарастает за доли секунды (самолёт «опирается» на воздух), быстрее на большой скорости
+    const q = clamp((this.V / 140) ** 2 * sig / 0.84, 0.25, 1.6); this.q = q;
+    this.n = (this.n ?? 1) + (n - (this.n ?? 1)) * Math.min(1, dt * (5 + 5 * Math.min(1, q))); n = this.n; this.nPeak = Math.max(this.nPeak, n); this.pull = pitch > 0.5;
+    // угол атаки: нос выше вектора скорости тем сильнее, чем больше перегрузка и меньше скорость; у предела крыла -- тряска
+    const lim = Math.max(0.6, nAero), aw = clamp(0.3 * n / lim, -0.12, 0.36); this.aoa = (this.aoa || 0) + (aw - (this.aoa || 0)) * Math.min(1, dt * 8);
+    this.buf = clamp((Math.abs(n) / lim - 0.78) / 0.22, 0, 1) * (pitch > 0.2 || this.stall ? 1 : 0.4) + (this.stall ? 0.6 : 0);
     // крен: ручкой -- до 3.2 рад/с; отпустил -- автомат выводит крылья в горизонт (если не тянешь петлю)
     let p; const phi = this.phi;
-    if (Math.abs(roll) > 0.05) p = roll * P.roll; else if (pitch > 0.4 || cg < 0.3) p = 0; else p = clamp(-phi * 2.2, -1.6, 1.6);
+    const ra = clamp(0.35 + 0.65 * q, 0.35, 1.15); // эффективность элеронов -- от скоростного напора
+    if (Math.abs(roll) > 0.05) p = roll * P.roll * ra; else if (pitch > 0.4 || cg < 0.3) p = 0; else p = clamp(-phi * 2.6, -2, 2);
+    // инерция крена: разгон и останов вращения за ~0.1 с -- крыло «врезается» в воздух, а не щёлкает
+    p = (this.p || 0) + (p - (this.p || 0)) * Math.min(1, dt * (8 + 6 * Math.min(1, q)));
     this.u = rot(this.u, this.f, p * dt); this.p = p;
     // силы: тяга и сопротивление -- по скорости, подъёмная -- по u, вес -- вниз
     const ind = P.ki * n * n / Math.max(this.V * this.V * sig / 0.84, 400), drag = P.cd * sig / 0.84 * this.V * this.V * (this.brake ? 2.6 : 1) + ind + (this.gear ? 0.0012 * this.V * this.V * 0.06 : 0);
@@ -98,7 +107,7 @@ export class Jet {
     const fr = (this.brake || this.thr < 0.1 ? 2.2 : 0.25) + (onR ? 0 : 1.2) + P.cd * this.V * this.V * 2;
     this.V = Math.max(0, this.V + (P.T * this.thr - fr) * dt);
     const steer = roll * clamp(9 / Math.max(this.V, 4), 0.02, 0.6); this.f = norm(rot(f, W, -steer * dt)); this.u = [0, 0, 1]; this.r = cross(this.f, this.u);
-    this.X += this.f[0] * this.V * dt; this.Y += this.f[1] * this.V * dt; this.Z = Math.max(h(this.X, this.Y), 0); this.agl = 0; this.n = 1; this.stall = false; this.gpws = false;
+    this.X += this.f[0] * this.V * dt; this.Y += this.f[1] * this.V * dt; this.Z = Math.max(h(this.X, this.Y), 0); this.agl = 0; this.n = 1; this.aoa = 0; this.buf = 0; this.p = 0; this.stall = false; this.gpws = false;
     if (h(this.X, this.Y) < -0.3) { this.mode = 'crash'; this.crash = { water: true, V: this.V }; return; } // укатились в воду
     // отрыв: на скорости отрыва ручку на себя
     const head = wind ? -(wind.sx * this.f[0] + wind.sy * this.f[1]) : 0; this.Vair = this.V + head; // встречный ветер -- короче разбег

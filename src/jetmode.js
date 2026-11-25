@@ -169,10 +169,12 @@ export function makeJetMode(A) {
   let camInit = false;
   function cam(dt) { if (camera.view && camera.view.enabled) camera.clearViewOffset(); // меню сдвигает кадр -- в полёте кадр по центру
     const pos = T3([J.X, J.Y, J.Z + 1.8]), f = T3(J.f), u = T3(J.u), r = T3(J.r);
-    m4.makeBasis(r, u, f.clone().negate()); M.root.quaternion.setFromRotationMatrix(m4); M.root.position.copy(pos); M.setGear(F ? F.gearK : 1); M.setThrust(J.thr);
+    m4.makeBasis(r, u, f.clone().negate()); M.root.quaternion.setFromRotationMatrix(m4); M.root.position.copy(pos);
+    // угол атаки -- нос над вектором скорости; у предела крыла планер мелко трясёт
+    if (J.mode === 'air') { const b = (J.buf || 0) * 0.012 + (J.bump || 0) * 0.02; M.root.rotateX(J.aoa || 0); if (b > 0) { M.root.rotateX((Math.random() - 0.5) * b); M.root.rotateZ((Math.random() - 0.5) * b * 1.6); } } M.setGear(F ? F.gearK : 1); M.setThrust(J.thr);
     if (J.mode === 'crash') { const c = chute.position; v3.set(c.x + 30, c.y + 10, c.z + 30); camera.position.lerp(v3, Math.min(1, dt * 2)); camera.up.set(0, 1, 0); camera.lookAt(c.x, c.y + 3, c.z); camera.fov += (55 - camera.fov) * Math.min(1, dt * 2); camera.updateProjectionMatrix(); M.fp(false); return; }
     M.fp(G.cam === 1);
-    if (G.cam === 1) { camera.position.copy(pos).addScaledVector(f, 2.3).addScaledVector(u, 1.12); camera.up.copy(u); m4.makeBasis(r, u, f.clone().negate()); camera.quaternion.setFromRotationMatrix(m4); camera.rotateY(-G.orbit); camera.rotateX(-0.06 - G.orbitP * 0.8);
+    if (G.cam === 1) { camera.position.copy(pos).addScaledVector(f, 2.3).addScaledVector(u, 1.12); camera.up.copy(u); m4.makeBasis(r, u, f.clone().negate()); camera.quaternion.setFromRotationMatrix(m4); if (J.mode === 'air') camera.rotateX((J.aoa || 0) + (Math.random() - 0.5) * (J.buf || 0) * 0.01); camera.rotateY(-G.orbit); camera.rotateX(-0.06 - G.orbitP * 0.8);
       camera.fov += (clamp(70 * G.zoom, 35, 95) + J.V * 0.03 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); return; }
     const far = G.cam === 2, d = (far ? 70 : 22 + J.V * 0.04 + (F ? F.punch * 6 : 0)) * G.zoom, upB = far ? 0.15 : 0.5; // при максимале камера на миг отстаёт -- рывок вперёд
     const UP = new THREE.Vector3(0, 1, 0), cu = UP.clone().lerp(u, upB).normalize(); // «верх» камеры -- между небом и кабиной: крен чувствуется, а горизонт не кувыркается
@@ -182,7 +184,7 @@ export function makeJetMode(A) {
     F.lean = (F.lean || 0) + ((J.mode === 'air' ? clamp((J.n - 1) / 7, -0.4, 1) : 0) - (F.lean || 0)) * Math.min(1, dt * 3); // перегрузка: самолёт «уходит» вверх по кадру
     v3.copy(pos).addScaledVector(back, d).addScaledVector(cup, d * ((far ? 0.35 : 0.24) - 0.12 * F.lean) + G.orbitP * d);
     const gy = Math.max(0, H(v3.x, -v3.z)) + 3; if (v3.y < gy) v3.y = gy;
-    G.shake = Math.max(0, G.shake - dt * 1.4); const sh = G.shake * G.shake * 1.6 + Math.max(0, J.n - 4) * 0.012 + (J.V > 240 ? 0.004 : 0) + (J.bump || 0) * 0.5, jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh;
+    G.shake = Math.max(0, G.shake - dt * 1.4); const sh = G.shake * G.shake * 1.6 + Math.max(0, J.n - 4) * 0.012 + (J.V > 240 ? 0.004 : 0) + (J.bump || 0) * 0.5 + (J.mode === 'air' ? (J.buf || 0) * 0.3 + Math.max(0, (J.q || 0) - 0.9) * 0.025 : 0), jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh;
     camera.position.copy(v3); camera.position.x += jx; camera.position.y += jy; camera.up.copy(cup); const tall = window.innerHeight > window.innerWidth; camera.lookAt(cpos.copy(pos).addScaledVector(clook, 30).addScaledVector(cup, tall ? -1.2 : 3.5)); // на телефоне стоймя самолёт выше -- над джойстиком // самолёт -- в нижней трети, впереди виден горизонт
     camera.fov += (60 + Math.max(0, J.V - 120) * 0.07 + (F ? F.punch * 9 : 0) - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); }
   function resetCam() { camInit = false; camera.up.set(0, 1, 0); }
@@ -221,7 +223,7 @@ export function makeJetMode(A) {
       const p = [J.X + J.r[0] * 4.9 * sx, J.Y + J.r[1] * 4.9 * sx, J.Z + 1.8 + J.r[2] * 4.9 * sx]; a[0] = p[0]; a[1] = p[2]; a[2] = -p[1]; if (trails.n < N) for (let i = 1; i < N; i++) { a[i * 3] = a[0]; a[i * 3 + 1] = a[1]; a[i * 3 + 2] = a[2]; }
       L.geometry.attributes.position.needsUpdate = true; L.material.opacity = 0.65 * trails.on; } trails.n = N; }
 
-  function sound() { if (!on) return; audio.jet && audio.jet(J.mode === 'crash' ? 0 : J.thr, J.V, J.mode !== 'crash'); audio.airflow(Math.min(60, J.V * 0.12), J.n > 5 ? 0.4 : 0, 0, J.mode === 'air'); }
+  function sound() { if (!on) return; audio.jet && audio.jet(J.mode === 'crash' ? 0 : J.thr, J.V, J.mode !== 'crash'); audio.airflow(Math.min(60, J.V * 0.12), Math.min(1, (J.n > 5 ? 0.4 : 0) + (J.buf || 0) * 0.8), 0, J.mode === 'air'); }
 
   return { _F: () => F, get on() { return on; }, get jet() { return J; }, get runway() { return rwy; }, get rings() { return rings; }, startFree, startRace, stop, tick, camera: cam, hud, sound, resetCam,
     restart() { if (R) startRace(); else startFree(); }, again() { $('result').hidden = true; if (R) startRace(); else startFree(); } };
