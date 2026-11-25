@@ -98,7 +98,7 @@ export function makeJetMode(A) {
 
   // ---- управление ----
   function ctl() { let roll = (input.right ? 1 : 0) - (input.left ? 1 : 0), pitch = (input.flare ? 1 : 0) - (input.sin ? 1 : 0);
-    // джойстик: вниз -- на себя; экспонента -- у центра точно, у края резко; ручка до упора -- автомат даёт максимал
+    // джойстик: вниз -- на себя; экспонента -- у центра точно, у края резко
     if (input.joy) { const j = input.joy, ex = (v) => (Math.abs(v) < 0.06 ? 0 : Math.sign(v) * Math.pow((Math.abs(v) - 0.06) / 0.94, 1.5)); roll = ex(j.x); pitch = ex(j.y); }
     if (input.joyTap && input.joyTap !== F.tap) { F.tap = input.joyTap; F.boostT = 3.2; } // двойной тап -- максимал
     if (input.bar && !F.barWas) F.boostT = Math.max(F.boostT || 0, 0.01); F.barWas = !!input.bar;
@@ -199,7 +199,7 @@ export function makeJetMode(A) {
     const wl = $('jwarn'); if (wl.textContent !== w) wl.textContent = w; wl.hidden = !w; if (w && audio.beep && G.frame % 18 === 0) audio.beep(true);
     const rr = $('jring'); if (R) { rr.hidden = false; rr.innerHTML = `<b>${fmt(R.t)}</b><br>кольцо ${Math.min(R.next + 1, rings.length)} из ${rings.length}${R.best ? ` · рекорд ${fmt(R.best)}` : ''}`; } else rr.hidden = true;
     const hint = J.mode === 'ground' && !F.landed ? (J.V < 3 ? (TOUCH ? 'Потяните джойстик на себя — разбег и взлёт' : 'Пробел — максимал: разбег') : J.V < YAK.Vr ? `Разбег… отрыв на ${Math.round(YAK.Vr * 3.6)} км/ч` : (TOUCH ? 'Джойстик вниз — на себя!' : '↓ — на себя: отрыв!'))
-      : J.mode === 'air' && F.t < 40 && F.free ? (TOUCH ? 'Джойстик — ручка · до упора — максимал · двойной тап — рывок' : '← → крен · ↓ на себя, ↑ от себя · отпустил — автомат держит · Пробел — максимал · Shift — щитки') : '';
+      : J.mode === 'air' && F.t < 40 && F.free ? (TOUCH ? 'Джойстик — ручка · двойной тап — форсаж' : '← → крен · ↓ на себя, ↑ от себя · отпустил — автомат держит · Пробел — максимал · Shift — щитки') : '';
     const he = $('hint'); if (he.textContent !== hint) he.textContent = hint; he.hidden = !hint; he.className = 'hud'; }
   // ИЛС из кабины: линия горизонта и «птичка» вектора скорости, лестница тангажа -- зелёным, как на настоящем
   function drawHorizon() { const W = window.innerWidth, Hh = window.innerHeight; if (hzc.width !== W || hzc.height !== Hh) { hzc.width = W; hzc.height = Hh; } hz.clearRect(0, 0, W, Hh);

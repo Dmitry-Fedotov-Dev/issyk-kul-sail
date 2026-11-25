@@ -304,7 +304,7 @@ window.addEventListener('error',function(e){fail(e&&e.message)});window.addEvent
 var lastMsg='',still=0,wd=setInterval(function(){var g=document.getElementById('loadmsg');if(!L||L.classList.contains('done')||L.onclick){clearInterval(wd);return}
 if(g.textContent!==lastMsg){lastMsg=g.textContent;still=0;return}still+=5;if(still>=45){clearInterval(wd);g.textContent+=' Загрузка затянулась: нажмите, чтобы начать заново';L.style.cursor='pointer';L.onclick=function(){location.reload()};}},5000);})();</script>
 
-<script>(function(){var src="game.862abd44d0.js",size=6565821,m=document.getElementById('loadmsg'),f=document.getElementById('loadfill'),mb=function(b){return (b/1048576).toFixed(1)};
+<script>(function(){var src="game.d518b25d69.js",size=6565668,m=document.getElementById('loadmsg'),f=document.getElementById('loadfill'),mb=function(b){return (b/1048576).toFixed(1)};
 function tag(){var s=document.createElement('script');s.src=src;s.onerror=function(){m.textContent='Не удалось скачать игру. Проверьте интернет и нажмите, чтобы попробовать ещё раз';var L=document.getElementById('load');L.style.cursor='pointer';L.onclick=function(){location.reload()}};document.body.appendChild(s)}
 if(location.protocol==='file:'||!window.fetch||!window.ReadableStream||!window.TextDecoder){tag();return}
 m.textContent='Загружаем игру…';
