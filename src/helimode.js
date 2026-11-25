@@ -89,7 +89,7 @@ export function makeHeliMode(A) {
     SAR = makeSar({ G, scene, camera, $, store, toast, audio, TOUCH, input, H, net: A.net, personSprite, flagPole, pop: (t, sub) => pop(t, sub), score: (p, t, sub) => score(p, t, sub), buzz: (ms) => buzz(ms),
       heli: () => Hc, base: () => F.base, windAt: (X, Y, Z) => wind(X, Y, Z),
       addMission(m) { const to = m.base ? F.base : site(m.X, m.Y, 'slope', { people: 1, name: m.d.split(':')[0], seed: 1 }); F.mis.push({ ...m, to }); if (F.mi === F.mis.length - 1) announce(); },
-      setGoal(g) { F.goal = g ? { ...g, to: { X: g.X, Y: g.Y, z: H(g.X, g.Y), name: g.name || g.t } } : null; }, busy: () => F.mi < F.mis.length,
+      setGoal(g) { F.goal = g ? { ...g, to: { X: g.X, Y: g.Y, z: H(g.X, g.Y), name: g.name || g.t } } : null; }, busy: () => F.mi < F.mis.length, goal: () => F.goal && { X: F.goal.to.X, Y: F.goal.to.Y },
       hasMission: (k) => F.mis.slice(F.mi).some((m) => (k === 'base' ? m.base : false)) });
     Hc = new Heli(); M = makeHeli(); scene.add(M.root); M.root.visible = false; boom = makeBoom();
     marks = new THREE.Group(); scene.add(marks); people = []; beacon = makeBeacon(); reticle = makeReticle();

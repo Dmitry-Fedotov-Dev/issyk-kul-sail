@@ -12,6 +12,7 @@ import { playSarToon } from './sartoon.js';
 const CSS = `
 #sarw{position:fixed;inset:0;pointer-events:none;z-index:3}#sarw>*{pointer-events:auto}
 #sclock{left:50%;top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:rgba(8,22,48,.62);border-radius:12px;padding:4px 12px;font-size:14px;text-align:center;white-space:nowrap}#sclock b{font-size:17px}
+#smini{position:fixed;left:max(10px,env(safe-area-inset-left,0px));top:160px;width:170px;height:170px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.4);cursor:pointer;touch-action:none}body.sardr #smini{top:auto;bottom:calc(220px + env(safe-area-inset-bottom,0px))}
 #sbtns{position:fixed;right:calc(108px + env(safe-area-inset-right,0px));bottom:calc(40px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
 body:not(.touchdev) #sbtns{right:16px;bottom:70px}
 #sbtns button{min-width:62px;height:54px;border-radius:14px;border:2px solid rgba(255,255,255,.6);background:rgba(10,30,60,.6);color:#fff;font:700 14px var(--ui);padding:0 10px;touch-action:none}
@@ -36,7 +37,7 @@ body.sardr #hhud,body.sardr #hscore,body.sardr #harr,body.sardr #hland,body.sard
 #steams{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}#steams button{border-radius:10px;border:2px solid rgba(255,255,255,.35);background:rgba(60,140,255,.18);color:#fff;font:600 13px var(--ui);padding:4px 8px}#steams button.on{border-color:#6cf}
 #snoteb{display:flex;gap:6px;margin-top:6px}#snoteb input{flex:1;width:auto;text-transform:none}
 .sbad{color:#ff7a5a}.sok{color:#9fe0a0}
-@media (max-width:640px){#sframe{inset:200px 8px 250px 8px}#sbtns{right:calc(100px + env(safe-area-inset-right,0px));bottom:calc(24px + env(safe-area-inset-bottom,0px));gap:8px}#sbtns button{min-width:54px;height:46px;font-size:13px}#sclock{bottom:auto;top:150px;font-size:12px}}
+@media (max-width:640px){#smini{top:auto;bottom:calc(210px + env(safe-area-inset-bottom,0px));width:120px;height:120px}#sframe{inset:200px 8px 250px 8px}#sbtns{right:calc(100px + env(safe-area-inset-right,0px));bottom:calc(24px + env(safe-area-inset-bottom,0px));gap:8px}#sbtns button{min-width:54px;height:46px;font-size:13px}#sclock{bottom:auto;top:150px;font-size:12px}}
 `;
 const NIGHT = (hr) => hr < 6 || hr > 20.5;
 const CLUEICON = { wand: '🚩', note: '📝', tent: '⛺', pole: '🦯', glove: '🧤', debris: '❄', rope: '〰', pack: '🎒', axe: '⛏', track: '👣', cave: '🕳', cornice: '⚠', helmet: '⛑', rocks: '🪨', mirror: '✨', wrap: '🍫', bivy: '💤' };
@@ -51,12 +52,12 @@ export function makeSar(K) {
   // ---- сборка интерфейса ----
   function build() { if (built) return; built = true; const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     const w = document.createElement('div'); w.id = 'sarw'; w.hidden = true;
-    w.innerHTML = `<div id="sclock" class="hud"></div><div id="sframe" hidden><b></b><i></i><div id="sgim"><button id="sgu">▲</button><span></span><button id="sgd">▼</button></div></div><div id="sflash"></div><div id="sshoot" class="hud" hidden>📷 В КАДРЕ ЧТО-ТО ЕСТЬ — СНИМАЙ!</div>
+    w.innerHTML = `<div id="sclock" class="hud"></div><canvas id="smini" title="Дело: карта"></canvas><div id="sframe" hidden><b></b><i></i><div id="sgim"><button id="sgu">▲</button><span></span><button id="sgd">▼</button></div></div><div id="sflash"></div><div id="sshoot" class="hud" hidden>📷 В КАДРЕ ЧТО-ТО ЕСТЬ — СНИМАЙ!</div>
       <div id="sbtns"><button id="sphoto">📷<small>снимок</small></button><button id="sdrone">🛸<small>дрон</small></button><button id="sjb">🗺<small>дело</small></button><button id="sact" hidden></button></div>
       <div id="sbrief" class="spanel" hidden></div><div id="sjour" class="spanel" hidden></div>`;
     document.body.appendChild(w);
     const tap = (id, f) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); f(); });
-    tap('sphoto', photo); tap('sdrone', () => (S && S.dr ? recall() : launch())); tap('sjb', () => journal(!$('sjour').hidden ? false : true)); tap('sact', act);
+    tap('sphoto', photo); tap('smini', () => journal(true)); tap('sdrone', () => (S && S.dr ? recall() : launch())); tap('sjb', () => journal(!$('sjour').hidden ? false : true)); tap('sact', act);
     // подвес камеры дрона: тянуть пальцем/мышью по картинке вверх-вниз, колесо мыши, Q (к горизонту) / E (вниз), кнопки ▴▾
     let gp = null; const gim = (dg) => { if (!S || !S.dr) return; S.dr.gim = S.gim = Math.max(0, Math.min(90, (S.dr.gim ?? 35) + dg)); };
     window.addEventListener('pointerdown', (e) => { if (S && S.dr && e.target.tagName === 'CANVAS' && !e.target.closest('#sjour')) { gp = { id: e.pointerId, y: e.clientY }; } }, true);
@@ -84,7 +85,7 @@ export function makeSar(K) {
     if (wait) { c.since += wait; for (const v of c.victims) { v.left = Math.max(0, v.left - wait); v.alive0 = v.left > 0; } }
     G.clock = wait ? 6 : alarm;
     for (const v of c.victims) { v.foundT = undefined; v.saved = false; v.kit = 0; v.dead = false; v.inEvac = false; }
-    worldObjects(); mapImg = null; $('sarw').hidden = false; $('sbtns').hidden = false; brief(); syncJoin();
+    worldObjects(); mapImg = null; $('sarw').hidden = false; $('sbtns').hidden = false; $('smini').hidden = true; S.view = null; brief(); syncJoin();
     if (!store.get('sarToon')) { store.set('sarToon', 1); film(); } }
   // ролик-инструктаж: время операции на паузе, пока он идёт
   function film() { if (!S) return; S.film = true; playSarToon({ audio, TOUCH, onDone: () => { if (S) S.film = false; } }); }
@@ -105,7 +106,7 @@ export function makeSar(K) {
       <p style="margin-top:10px"><small>Присоединиться к чужой операции:</small> <input id="sjoin" maxlength="5" placeholder="КОД"> <button class="ch" id="sjoinb" style="flex:none;display:inline-block;min-width:0">Войти</button></p>`;
     for (const b of el.querySelectorAll('.ch[data-k]')) b.onclick = () => { S.res[b.dataset.k] = +b.dataset.v; brief(); };
     $('sgo').onclick = start; $('stoon').onclick = () => film(); $('sjoinb').onclick = () => { const v = $('sjoin').value.trim().toUpperCase(); if (seedOf(v) === null) { toast('Код — 5 знаков, например K7QZA'); return; } stopWorld(); begin(v); }; }
-  function start() { $('sbrief').hidden = true; S.run = true; S.bats = S.res.drone ? 3 : 0; const b = K.base();
+  function start() { $('sbrief').hidden = true; S.run = true; $('smini').hidden = false; S.bats = S.res.drone ? 3 : 0; const b = K.base();
     for (let i = 0; i < S.res.men / 4; i++) S.teams.push({ id: i + 1, n: 4, X: b.X + 20 + i * 12, Y: b.Y - 25, tgt: null, carry: null, risk: 0, spr: teamSprite() });
     say(`Операция «${S.c.code}» началась. ${S.teams.length ? `Отряды на базе: укажите им цель на карте (🗺) или возьмите на борт.` : 'Ищем с воздуха.'}`);
     if (S.c.last.kind === 'ping') { ping.visible = true; ping.position.set(S.c.last.X, H(S.c.last.X, S.c.last.Y) + 10, -S.c.last.Y); }
@@ -130,7 +131,7 @@ export function makeSar(K) {
   const aliveNow = (v) => !v.dead && aliveAt(v, S.t);
 
   // ---- лог операции и общие события ----
-  function say(txt, me = true) { S.log.unshift({ t: S.t, txt }); if (S.log.length > 60) S.log.pop(); if (me) toast(txt); if (!$('sjour').hidden) journal(true); }
+  function say(txt, me = true) { S.log.unshift({ t: S.t, txt }); if (S.log.length > 60) S.log.pop(); if (me) toast(txt); refreshJournal(); }
   function share(e) { const n = net(); if (n && n.sar) n.sar(S.c.code, e); }
   function syncJoin() { const n = net(); if (n && n.sarJoin) n.sarJoin(S.c.code); NETHOOK.sar = (m) => { if (!S || !S.on) return;
     const list = m.t === 'sarh' ? m.ev || [] : [m.e]; for (const e of list) remote(e || {}, m.t === 'sarh'); }; }
@@ -227,7 +228,7 @@ export function makeSar(K) {
     // ночью дрон смотрит тепловизором
     const nightDr = !!S.dr && NIGHT(clockNow()); if (nightDr !== S.nightOn) { S.nightOn = nightDr; const cv = document.querySelector('canvas'); if (cv) cv.style.filter = nightDr ? 'grayscale(1) brightness(3.2) contrast(1.25)' : ''; }
     S.posT -= dt; if (S.posT <= 0) { S.posT = 2; const p = S.dr || h; share({ k: 'pos', X: Math.round(p.X), Y: Math.round(p.Y), d: S.dr ? 1 : 0 }); }
-    if (!$('sjour').hidden && (S.mapT = (S.mapT || 0) - dt) <= 0) { S.mapT = 0.5; drawMap(); }
+    if ((S.mapT = (S.mapT || 0) - dt) <= 0) { S.mapT = 0.25; if (!$('sjour').hidden) drawMap(); const mc = $('smini'), p = S.dr || h; if (mc && !mc.hidden) drawMap(mc, { cx: p.X, cy: p.Y, R: 3000 }, true); }
     { const hr = clockNow(); if (hr > 19.4 && hr < 19.6 && !S.duskWarn) { S.duskWarn = 1; K.pop('ДО ТЕМНОТЫ ЧАС', 'садитесь на базе или в лагере: ночью в горах не летают'); say('⚠ До темноты час. Ночной полёт — штраф и риск'); }
       if (hr > 6 && hr < 7) S.duskWarn = 0;
       if (NIGHT(hr) && !h.ground && !h.crash) { S.nightT = (S.nightT || 0) + dt; if (S.nightT >= 30) { S.nightT = 0; S.nightPen = (S.nightPen || 0) + 150; K.pop('−150 НОЧНОЙ ПОЛЁТ', 'темно: садитесь — дрон ночью видит тепловизором'); K.buzz([60, 40, 60]); } } }
@@ -285,47 +286,83 @@ export function makeSar(K) {
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const X = B.x0 + i * k, Y = B.y1 - j * k, z = H(X, Y) + ASL, sx = H(X + k, Y) - H(X - k, Y), sy = H(X, Y + k) - H(X, Y - k), sh = Math.max(0, Math.min(1, 0.62 + (-sx + sy) / (4 * k) * 0.9)), o = (j * N + i) * 4;
       const snow = z > 4300 ? 1 : z > 3700 ? (z - 3700) / 600 : 0, r = (120 + 120 * snow) * sh, g = (112 + 128 * snow) * sh, b = (104 + 146 * snow) * sh; img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255; }
     x.putImageData(img, 0, 0); return cv; }
-  function drawMap() { const cv = $('smap'); if (!cv) return; const W = cv.clientWidth || 360, dpr = Math.min(2, window.devicePixelRatio || 1); if (cv.width !== Math.round(W * dpr)) { cv.width = cv.height = Math.round(W * dpr); }
-    const B = bbox(); if (!mapImg) mapImg = relief(B, 260); const x = cv.getContext('2d'), N = cv.width, P = (X, Y) => [(X - B.x0) / (B.x1 - B.x0) * N, (B.y1 - Y) / (B.y1 - B.y0) * N], u = N / 360;
-    x.drawImage(mapImg, 0, 0, N, N); const c = S.c;
+  // вид карты: центр и половина ширины (м); по умолчанию -- весь маршрут. Рельеф рисуется один раз и растягивается по виду
+  const homeView = () => { const B = bbox(); return { cx: (B.x0 + B.x1) / 2, cy: (B.y0 + B.y1) / 2, R: (B.x1 - B.x0) / 2 }; };
+  function drawMap(cv = $('smap'), view = S.view, mini = false) { if (!cv || !S) return; const Wc = cv.clientWidth || (mini ? 150 : 360), dpr = Math.min(2, window.devicePixelRatio || 1); if (cv.width !== Math.round(Wc * dpr)) { cv.width = cv.height = Math.round(Wc * dpr); }
+    const HB = bbox(); if (!mapImg) mapImg = relief(HB, 512); view = view || (S.view = homeView());
+    const B = { x0: view.cx - view.R, x1: view.cx + view.R, y0: view.cy - view.R, y1: view.cy + view.R }, x = cv.getContext('2d'), N = cv.width, P = (X, Y) => [(X - B.x0) / (B.x1 - B.x0) * N, (B.y1 - Y) / (B.y1 - B.y0) * N], u = N / (mini ? 190 : 360), m2p = N / (B.x1 - B.x0);
+    x.fillStyle = '#3a4258'; x.fillRect(0, 0, N, N); { const [a, b] = P(HB.x0, HB.y1), [c2, d2] = P(HB.x1, HB.y0); x.drawImage(mapImg, a, b, c2 - a, d2 - b); } const c = S.c;
     // маршрут по плану: дни
     x.lineWidth = 3 * u; x.strokeStyle = 'rgba(255,138,42,.9)'; x.setLineDash([8 * u, 6 * u]); x.beginPath(); c.pts.forEach((p, i) => { const [a, b] = P(p.X, p.Y); i ? x.lineTo(a, b) : x.moveTo(a, b); }); x.stroke(); x.setLineDash([]);
-    x.font = `700 ${11 * u}px sans-serif`; x.textAlign = 'left'; c.pts.forEach((p, i) => { const [a, b] = P(p.X, p.Y); x.fillStyle = '#ff8a2a'; x.beginPath(); x.arc(a, b, 4 * u, 0, 7); x.fill(); x.fillStyle = '#fff'; x.strokeStyle = 'rgba(0,0,0,.6)'; x.lineWidth = 3 * u; const t = i ? `Д${i} · ${p.n}` : p.n; x.strokeText(t, a + 6 * u, b - 4 * u); x.fillText(t, a + 6 * u, b - 4 * u); });
-    if (c.last.kind === 'ping') { const [a, b] = P(c.last.X, c.last.Y); x.strokeStyle = '#4ab0ff'; x.lineWidth = 2 * u; x.beginPath(); x.arc(a, b, 200 / (B.x1 - B.x0) * N, 0, 7); x.stroke(); x.fillStyle = '#4ab0ff'; x.fillText('SOS трекера', a + 6 * u, b + 14 * u); }
-    if (c.last.kind === 'radio') { const [a, b] = P(c.last.X, c.last.Y); x.strokeStyle = '#4ab0ff'; x.lineWidth = 2 * u; x.beginPath(); x.arc(a, b, 9 * u, 0, 7); x.stroke(); x.fillStyle = '#4ab0ff'; x.fillText('последняя связь', a + 8 * u, b + 14 * u); }
-    if (S.area) { const [a, b] = P(S.area.X, S.area.Y), r = S.area.R / (B.x1 - B.x0) * N; x.fillStyle = 'rgba(255,210,74,.16)'; x.strokeStyle = '#ffd24a'; x.lineWidth = 2.5 * u; x.setLineDash([6 * u, 5 * u]); x.beginPath(); x.arc(a, b, r, 0, 7); x.fill(); x.stroke(); x.setLineDash([]); x.fillStyle = '#ffd24a'; x.font = `700 ${11 * u}px sans-serif`; x.textAlign = 'center'; x.fillText('искать здесь', a, b - r - 4 * u); }
+    x.font = `700 ${11 * u}px sans-serif`; x.textAlign = 'left'; c.pts.forEach((p, i) => { const [a, b] = P(p.X, p.Y); x.fillStyle = '#ff8a2a'; x.beginPath(); x.arc(a, b, 4 * u, 0, 7); x.fill(); if (mini) return; x.fillStyle = '#fff'; x.strokeStyle = 'rgba(0,0,0,.6)'; x.lineWidth = 3 * u; const t = i ? `Д${i} · ${p.n}` : p.n; x.strokeText(t, a + 6 * u, b - 4 * u); x.fillText(t, a + 6 * u, b - 4 * u); });
+    if (c.last.kind === 'ping') { const [a, b] = P(c.last.X, c.last.Y); x.strokeStyle = '#4ab0ff'; x.lineWidth = 2 * u; x.beginPath(); x.arc(a, b, Math.max(4 * u, 200 * m2p), 0, 7); x.stroke(); if (!mini) { x.fillStyle = '#4ab0ff'; x.fillText('SOS трекера', a + 6 * u, b + 14 * u); } }
+    if (c.last.kind === 'radio' && !mini) { const [a, b] = P(c.last.X, c.last.Y); x.strokeStyle = '#4ab0ff'; x.lineWidth = 2 * u; x.beginPath(); x.arc(a, b, 9 * u, 0, 7); x.stroke(); x.fillStyle = '#4ab0ff'; x.fillText('последняя связь', a + 8 * u, b + 14 * u); }
+    if (S.area) { const [a, b] = P(S.area.X, S.area.Y), r = Math.max(5 * u, S.area.R * m2p); x.fillStyle = 'rgba(255,210,74,.18)'; x.strokeStyle = '#ffd24a'; x.lineWidth = 2.5 * u; x.setLineDash([6 * u, 5 * u]); x.beginPath(); x.arc(a, b, r, 0, 7); x.fill(); x.stroke(); x.setLineDash([]); if (!mini) { x.fillStyle = '#ffd24a'; x.font = `700 ${11 * u}px sans-serif`; x.textAlign = 'center'; x.fillText('искать здесь', a, b - r - 4 * u); } }
+    else if (S.goalTxt && K.goal()) { const g = K.goal(), [a, b] = P(g.X, g.Y); x.fillStyle = '#ff8a2a'; x.beginPath(); x.arc(a, b, 6 * u, 0, 7); x.fill(); x.strokeStyle = '#fff'; x.lineWidth = 2 * u; x.stroke(); }
     x.font = `${14 * u}px serif`; x.textAlign = 'center'; for (const q of c.clues) if (S.found.has(q.id)) { const [a, b] = P(q.X, q.Y); x.globalAlpha = q.fake ? 0.45 : 1; x.fillText(CLUEICON[q.k] || '•', a, b + 5 * u); x.globalAlpha = 1; }
-    for (const v of c.victims) if (v.foundT !== undefined) { const [a, b] = P(v.X, v.Y); x.fillStyle = v.saved ? '#9fe0a0' : v.dead ? '#8a96a8' : '#3cff6a'; x.beginPath(); x.arc(a, b, 6 * u, 0, 7); x.fill(); x.fillStyle = '#fff'; x.font = `700 ${11 * u}px sans-serif`; x.fillText(v.name + (v.dead ? ' ✖' : v.saved ? ' ✓' : ''), a, b - 9 * u); x.font = `${14 * u}px serif`; }
-    for (const n of S.notes) { const [a, b] = P(n.X, n.Y); x.fillStyle = '#ffe14a'; x.beginPath(); x.moveTo(a, b); x.lineTo(a - 5 * u, b - 12 * u); x.lineTo(a + 5 * u, b - 12 * u); x.fill(); x.font = `600 ${10 * u}px sans-serif`; x.fillText((n.n ? n.n + ': ' : '') + n.txt.slice(0, 24), a, b - 15 * u); }
-    for (const t of S.teams) if (t.n > 0 && !t.onboard) { const [a, b] = P(t.X, t.Y); if (t.tgt) { const [e, f] = P(t.tgt[0], t.tgt[1]); x.strokeStyle = 'rgba(100,200,255,.8)'; x.setLineDash([4 * u, 4 * u]); x.beginPath(); x.moveTo(a, b); x.lineTo(e, f); x.stroke(); x.setLineDash([]); }
-      x.fillStyle = S.selTeam === t.id ? '#fff' : '#6cf'; x.fillRect(a - 5 * u, b - 5 * u, 10 * u, 10 * u); x.fillStyle = '#fff'; x.font = `700 ${10 * u}px sans-serif`; x.fillText(`О${t.id}·${t.n}`, a, b + 16 * u); }
-    for (const [n, p] of S.peers) if (performance.now() - p.t < 8000) { const [a, b] = P(p.X, p.Y); x.fillStyle = '#c78bff'; x.beginPath(); x.arc(a, b, 5 * u, 0, 7); x.fill(); x.fillText(n, a, b - 8 * u); }
-    const h = K.heli(), [a, b] = P(h.X, h.Y); x.save(); x.translate(a, b); x.rotate(h.th); x.fillStyle = '#ff6a1a'; x.beginPath(); x.moveTo(0, -9 * u); x.lineTo(6 * u, 7 * u); x.lineTo(-6 * u, 7 * u); x.fill(); x.restore();
-    if (S.dr) { const [e, f] = P(S.dr.X, S.dr.Y), [g0, g1] = P(S.dr.L.X, S.dr.L.Y); x.strokeStyle = 'rgba(80,220,255,.5)'; x.beginPath(); x.arc(g0, g1, 6000 / (B.x1 - B.x0) * N, 0, 7); x.stroke(); x.fillStyle = '#5df'; x.beginPath(); x.arc(e, f, 4 * u, 0, 7); x.fill(); } }
+    for (const v of c.victims) if (v.foundT !== undefined) { const [a, b] = P(v.X, v.Y); x.fillStyle = v.saved ? '#9fe0a0' : v.dead ? '#8a96a8' : '#3cff6a'; x.beginPath(); x.arc(a, b, 6 * u, 0, 7); x.fill(); if (!mini) { x.fillStyle = '#fff'; x.font = `700 ${11 * u}px sans-serif`; x.fillText(v.name + (v.dead ? ' ✖' : v.saved ? ' ✓' : ''), a, b - 9 * u); x.font = `${14 * u}px serif`; } }
+    for (const n of S.notes) { const [a, b] = P(n.X, n.Y); x.fillStyle = '#ffe14a'; x.strokeStyle = '#3a2a00'; x.lineWidth = 1.5 * u; x.beginPath(); x.moveTo(a, b); x.lineTo(a - 6 * u, b - 14 * u); x.lineTo(a + 6 * u, b - 14 * u); x.closePath(); x.fill(); x.stroke();
+      if (!mini) { x.font = `700 ${11 * u}px sans-serif`; const t = (n.n && n.n !== 'вы' ? n.n + ': ' : '') + n.txt.slice(0, 28); x.lineWidth = 3 * u; x.strokeStyle = 'rgba(0,0,0,.7)'; x.strokeText(t, a, b - 18 * u); x.fillText(t, a, b - 18 * u); } }
+    for (const t of S.teams) if (t.n > 0 && !t.onboard) { const [a, b] = P(t.X, t.Y); if (t.tgt) { const [e, f] = P(t.tgt[0], t.tgt[1]); x.strokeStyle = 'rgba(100,200,255,.9)'; x.lineWidth = 2 * u; x.setLineDash([4 * u, 4 * u]); x.beginPath(); x.moveTo(a, b); x.lineTo(e, f); x.stroke(); x.setLineDash([]); }
+      x.fillStyle = S.selTeam === t.id ? '#fff' : '#6cf'; x.fillRect(a - 5 * u, b - 5 * u, 10 * u, 10 * u); if (!mini) { x.fillStyle = '#fff'; x.font = `700 ${10 * u}px sans-serif`; x.fillText(`О${t.id}·${t.n}`, a, b + 16 * u); } }
+    for (const [n, p] of S.peers) if (performance.now() - p.t < 8000) { const [a, b] = P(p.X, p.Y); x.fillStyle = '#c78bff'; x.beginPath(); x.arc(a, b, 5 * u, 0, 7); x.fill(); if (!mini) x.fillText(n, a, b - 8 * u); }
+    if (S.dr) { const [e, f] = P(S.dr.X, S.dr.Y), [g0, g1] = P(S.dr.L.X, S.dr.L.Y); x.strokeStyle = 'rgba(80,220,255,.5)'; x.lineWidth = 1.5 * u; x.beginPath(); x.arc(g0, g1, 6000 * m2p, 0, 7); x.stroke(); x.fillStyle = '#5df'; x.beginPath(); x.arc(e, f, 5 * u, 0, 7); x.fill(); if (!mini) { x.fillStyle = '#5df'; x.fillText('дрон', e, f - 9 * u); } }
+    // вы: вертолёт -- оранжевая стрелка по курсу с пульсом; вне карты -- стрелка у края
+    const h = K.heli(); let [a, b] = P(h.X, h.Y); const out = a < 0 || b < 0 || a > N || b > N; if (out) { a = Math.max(10 * u, Math.min(N - 10 * u, a)); b = Math.max(10 * u, Math.min(N - 10 * u, b)); }
+    const pr = (performance.now() / 1000 % 1.2) / 1.2; x.strokeStyle = `rgba(255,106,26,${1 - pr})`; x.lineWidth = 3 * u; x.beginPath(); x.arc(a, b, (8 + pr * 18) * u, 0, 7); x.stroke();
+    x.save(); x.translate(a, b); x.rotate(h.th); x.fillStyle = '#ff6a1a'; x.strokeStyle = '#fff'; x.lineWidth = 2 * u; x.beginPath(); x.moveTo(0, -11 * u); x.lineTo(7 * u, 8 * u); x.lineTo(0, 4 * u); x.lineTo(-7 * u, 8 * u); x.closePath(); x.fill(); x.stroke(); x.restore();
+    x.font = `900 ${11 * u}px sans-serif`; x.textAlign = 'center'; x.lineWidth = 3 * u; x.strokeStyle = 'rgba(0,0,0,.8)'; x.fillStyle = '#ffb07a'; const lab = out ? 'ВЫ ↗' : 'ВЫ'; x.strokeText(lab, a, b + 22 * u); x.fillText(lab, a, b + 22 * u);
+    if (mini) { x.strokeStyle = 'rgba(255,255,255,.6)'; x.lineWidth = 2; x.strokeRect(1, 1, N - 2, N - 2); x.fillStyle = '#fff'; x.font = `700 ${10 * u}px sans-serif`; x.textAlign = 'left'; x.fillText('С ↑', 5 * u, 13 * u); x.textAlign = 'right'; x.fillText(`${(view.R * 2 / 1000).toFixed(0)} км`, N - 5 * u, N - 6 * u); } }
   function course() { const c = S.c, tr = traces(), got = tr.filter((q) => S.found.has(q.id)).length, keyF = c.clues.some((q) => q.key && S.found.has(q.id)), fv = c.victims.filter((v) => v.foundT !== undefined).length, n = c.victims.length;
     const li = (ok, t) => `<div>${ok ? '✅' : '⬜'} ${t}</div>`, g = S.goalTxt;
     return `<h3>Курс дела</h3>${g ? `<p style="background:rgba(255,138,42,.18);border-radius:10px;padding:6px 10px"><b>Сейчас: ${g.t}</b><br>${g.d}</p>` : ''}
       ${li(true, `Известно: ${c.last.kind === 'ping' ? 'точка SOS трекера' : c.last.kind === 'radio' ? `связь была из «${c.pts[c.last.camp].n}»` : 'только план маршрута'}`)}${li(got === tr.length && tr.length > 0, `След группы по маршруту: найдено меток ${got} из ${tr.length}`)}${li(keyF, 'Место происшествия: что случилось?')}${li(fv === n, `Люди найдены: ${fv} из ${n}`)}${li(S.saved > 0 && c.victims.every((v) => v.saved || v.dead), `Живые доставлены на базу: ${S.saved}`)}`; }
-  function journal(open) { if (!S) return; const el = $('sjour'); if (!open) { el.hidden = true; return; } const c = S.c; el.hidden = false;
-    const clues = c.clues.filter((q) => S.found.has(q.id)).map((q) => `<div>${CLUEICON[q.k] || ''} ${q.fake ? '<small>' : ''}${q.t}${q.fake ? '</small>' : ''}</div>`).join('') || '<small>Пока ничего. Снимайте (📷) низко над маршрутом — вешки, палатки, следы</small>';
+  // дело: курс, карта (масштаб щипком/колесом, сдвиг перетаскиванием, касание -- заметка или цель отряда), улики, заметки, журнал
+  function parts() { const c = S.c;
+    const clues = c.clues.filter((q) => S.found.has(q.id)).map((q) => `<div>${CLUEICON[q.k] || ''} ${q.fake ? '<small>' : ''}${q.t}${q.fake ? '</small>' : ''}</div>`).join('') || '<small>Пока ничего. Снимайте 📷 низко над маршрутом — вешки, палатки, следы</small>';
+    const notes = S.notes.map((n, i) => `<div data-n="${i}" style="cursor:pointer">📌 ${n.txt} <small>${n.n && n.n !== 'вы' ? '— ' + n.n : ''}</small></div>`).join('') || '<small>Нет заметок. Включите «📌 Заметка» и коснитесь карты</small>';
     const log = S.log.slice(0, 14).map((l) => `<div><i>Т+${fmtT(l.t)}</i> ${l.txt}</div>`).join('');
+    return { course: course(), clues, notes, log }; }
+  function refreshJournal() { if (!S || $('sjour').hidden) return; const p = parts(); for (const [id, k] of [['scourse', 'course'], ['sclues', 'clues'], ['snotes', 'notes'], ['slog', 'log']]) { const el = $(id); if (el && el.innerHTML !== p[k]) el.innerHTML = p[k]; } bindNotes(); }
+  function bindNotes() { for (const d of document.querySelectorAll('#snotes [data-n]')) d.onclick = () => { const n = S.notes[+d.dataset.n]; if (n) { S.view.cx = n.X; S.view.cy = n.Y; S.view.R = Math.min(S.view.R, 1500); drawMap(); } }; }
+  function modeHint() { return S.selTeam > 0 ? `Касание карты — <b>отряд ${S.selTeam} пойдёт туда</b>` : 'Касание карты — <b>поставить заметку</b> (видят все участники). Двумя пальцами или колесом — масштаб, перетаскиванием — сдвиг'; }
+  function journal(open) { if (!S) return; const el = $('sjour'); if (!open) { el.hidden = true; return; } const c = S.c; el.hidden = false; if (!S.view) S.view = homeView(); const p = parts();
     el.innerHTML = `<button class="x" id="sjx">✕</button><h2>Дело № ${c.code}</h2><p><small>${c.routeName} · ${c.comm.name}. ${c.last.txt}</small></p>
-      ${course()}<canvas id="smap"></canvas><div id="steams">${S.teams.map((t) => `<button data-t="${t.id}" class="${S.selTeam === t.id ? 'on' : ''}">Отряд ${t.id} · ${t.n} чел${t.onboard ? ' · на борту' : t.carry ? ' · несут' : ''}</button>`).join('')}<button data-t="0" class="${S.selTeam === -1 ? 'on' : ''}">📌 Заметка</button></div>
-      <p><small>${S.selTeam > 0 ? 'Коснитесь карты — отряд пойдёт туда' : 'Коснитесь карты — оставить заметку для всех'}</small></p><div id="snoteb" hidden><input id="snote" maxlength="80" placeholder="что здесь?"><button class="ch" id="snoteok" style="flex:none">OK</button></div>
-      <h3>Улики</h3><div id="sclues">${clues}</div><h3>Журнал операции</h3><div id="slog">${log}</div>
+      <div id="scourse">${p.course}</div>
+      <div class="row" id="smode" style="margin-top:8px"><button class="ch" data-t="0" aria-pressed="${S.selTeam <= 0}">📌 Заметка</button>${S.teams.map((t) => `<button class="ch" data-t="${t.id}" aria-pressed="${S.selTeam === t.id}">🧗 Отряд ${t.id}<small>${t.n} чел${t.onboard ? ' · на борту' : t.carry ? ' · несут' : t.tgt ? ' · в пути' : ' · ждёт'}</small></button>`).join('')}</div>
+      <p style="margin:6px 0 0"><small id="smodeh">${modeHint()}</small></p>
+      <div style="position:relative"><canvas id="smap"></canvas>
+        <div style="position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:6px">${['＋', '－', '⊙', '⤢'].map((t, i) => `<button class="ch" data-z="${i}" style="flex:none;min-width:0;width:40px;height:40px;padding:0;font-size:20px" title="${['ближе', 'дальше', 'ко мне', 'весь маршрут'][i]}">${t}</button>`).join('')}</div>
+        <div id="snoteb" hidden style="position:absolute;left:8px;right:56px;top:8px;background:rgba(8,22,48,.95);border:2px solid #ffd24a;border-radius:12px;padding:8px;display:flex;gap:6px"><input id="snote" maxlength="80" placeholder="заметка: что здесь?" style="flex:1;width:auto;text-transform:none" enterkeyhint="done"><button class="ch" id="snoteok" style="flex:none">OK</button><button class="ch" id="snotex" style="flex:none">✕</button></div></div>
+      <h3>Заметки</h3><div id="snotes">${p.notes}</div><h3>Улики</h3><div id="sclues">${p.clues}</div><h3>Журнал операции</h3><div id="slog">${p.log}</div>
       <button class="ch" id="stoon2" style="width:100%;margin-top:12px">🎬 Как это работает — ролик с Дымком</button><button class="go" id="send" style="background:#3a4a66;color:#fff;font-size:15px">Завершить операцию</button>`;
-    $('sjx').onclick = () => journal(false); $('stoon2').onclick = () => film(); for (const b of el.querySelectorAll('#steams button')) b.onclick = () => { S.selTeam = +b.dataset.t || -1; journal(true); };
+    $('sjx').onclick = () => journal(false); $('stoon2').onclick = () => film(); bindNotes();
+    for (const b of el.querySelectorAll('#smode button')) b.onclick = () => { S.selTeam = +b.dataset.t || -1; for (const q of el.querySelectorAll('#smode button')) q.setAttribute('aria-pressed', q === b); $('smodeh').innerHTML = modeHint(); drawMap(); };
     $('send').onclick = () => { if (S.confirmEnd) end(); else { S.confirmEnd = 1; $('send').textContent = 'Точно свернуть поиск? Нажмите ещё раз'; } };
-    const cv = $('smap'); cv.onpointerdown = (e) => { const r = cv.getBoundingClientRect(), B = bbox(), X = B.x0 + (e.clientX - r.left) / r.width * (B.x1 - B.x0), Y = B.y1 - (e.clientY - r.top) / r.height * (B.y1 - B.y0);
-      if (S.selTeam > 0) { const t = S.teams.find((q) => q.id === S.selTeam); if (t && t.n > 0 && !t.onboard) { t.tgt = [X, Y]; say(`Отряд ${t.id} выходит к точке (${(Math.hypot(X - t.X, Y - t.Y) / 1000).toFixed(1)} км)`, false); drawMap(); } else toast('Отряд на борту — высадите его (🧗)'); return; }
-      const nb = $('snoteb'); nb.hidden = false; $('snote').focus(); $('snoteok').onclick = () => { const txt = $('snote').value.trim(); if (txt) { S.notes.push({ X, Y, txt, n: 'вы' }); share({ k: 'note', X: Math.round(X), Y: Math.round(Y), txt }); } nb.hidden = true; drawMap(); }; };
-    requestAnimationFrame(drawMap); }
+    const zoom = (k, fx = 0.5, fy = 0.5) => { const v = S.view, hv = homeView(), R = Math.max(250, Math.min(hv.R * 1.3, v.R * k)), X = v.cx + (fx - 0.5) * 2 * v.R, Y = v.cy - (fy - 0.5) * 2 * v.R; v.cx = X - (fx - 0.5) * 2 * R; v.cy = Y + (fy - 0.5) * 2 * R; v.R = R; drawMap(); };
+    for (const b of el.querySelectorAll('[data-z]')) b.onclick = () => { const i = +b.dataset.z; if (i === 0) zoom(0.6); else if (i === 1) zoom(1.6); else if (i === 2) { const h = S.dr || K.heli(); S.view.cx = h.X; S.view.cy = h.Y; S.view.R = Math.min(S.view.R, 2500); drawMap(); } else { S.view = homeView(); drawMap(); } };
+    const cv = $('smap'), pts = new Map(); let moved = false, pin = null;
+    const at = (e) => { const r = cv.getBoundingClientRect(), v = S.view; return { fx: (e.clientX - r.left) / r.width, fy: (e.clientY - r.top) / r.height, X: v.cx + ((e.clientX - r.left) / r.width - 0.5) * 2 * v.R, Y: v.cy - ((e.clientY - r.top) / r.height - 0.5) * 2 * v.R }; };
+    cv.onpointerdown = (e) => { e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (er) { /* без захвата */ } pts.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY }); if (pts.size === 1) moved = false;
+      if (pts.size === 2) { const [p1, p2] = [...pts.values()]; pin = { d: Math.hypot(p1.x - p2.x, p1.y - p2.y), R: S.view.R }; moved = true; } };
+    cv.onpointermove = (e) => { const p = pts.get(e.pointerId); if (!p) return; const r = cv.getBoundingClientRect(), mpp = 2 * S.view.R / r.width;
+      if (pts.size === 1) { if (Math.hypot(e.clientX - p.x0, e.clientY - p.y0) > 8) moved = true; if (moved) { S.view.cx -= (e.clientX - p.x) * mpp; S.view.cy += (e.clientY - p.y) * mpp; drawMap(); } }
+      p.x = e.clientX; p.y = e.clientY; if (pts.size === 2 && pin) { const [p1, p2] = [...pts.values()], d = Math.hypot(p1.x - p2.x, p1.y - p2.y), hv = homeView(); S.view.R = Math.max(250, Math.min(hv.R * 1.3, pin.R * pin.d / Math.max(20, d))); drawMap(); } };
+    const upf = (e) => { const was = pts.size, p = pts.get(e.pointerId); pts.delete(e.pointerId); if (pts.size < 2) pin = null; if (was === 1 && p && !moved && e.type === 'pointerup') tapMap(at(e)); };
+    cv.onpointerup = upf; cv.onpointercancel = upf;
+    cv.onwheel = (e) => { e.preventDefault(); const q = at(e); zoom(Math.exp(e.deltaY * 0.0015), q.fx, q.fy); };
+    requestAnimationFrame(() => drawMap()); }
+  function tapMap({ X, Y }) {
+    if (S.selTeam > 0) { const t = S.teams.find((q) => q.id === S.selTeam); if (t && t.n > 0 && !t.onboard) { t.tgt = [X, Y]; say(`Отряд ${t.id} выходит к точке (${(Math.hypot(X - t.X, Y - t.Y) / 1000).toFixed(1)} км)`, false); drawMap(); } else toast(t && t.onboard ? 'Отряд на борту — сядьте и высадите его (🧗)' : 'Отряда нет'); return; }
+    const nb = $('snoteb'), inp = $('snote'); nb.hidden = false; inp.value = ''; S.pendNote = { X, Y }; drawMap(); setTimeout(() => inp.focus(), 30);
+    const ok = () => { const txt = inp.value.trim(), q = S.pendNote; if (txt && q) { S.notes.push({ X: q.X, Y: q.Y, txt, n: 'вы' }); share({ k: 'note', X: Math.round(q.X), Y: Math.round(q.Y), txt }); toast('Заметка на карте — её видят все участники'); } S.pendNote = null; nb.hidden = true; refreshJournal(); drawMap(); };
+    $('snoteok').onclick = ok; $('snotex').onclick = () => { S.pendNote = null; nb.hidden = true; drawMap(); }; inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') ok(); }; }
 
   // ---- итог: правда о происшествии, очки ----
   function tally() { const c = S.c; return { saved: S.saved, alive: c.victims.filter((v) => v.alive0).length, aliveFound: c.victims.filter((v) => v.foundT !== undefined && !v.dead && !v.saved).length, dead: c.victims.filter((v) => v.foundT !== undefined && v.dead).length,
     clues: [...S.found].filter((i) => !c.clues[i].fake).length, minutes: S.t, rescuerLost: S.rescuerLost, droneLost: S.droneLost, heliCrash: !!K.heli().crash, comm: c.comm,
     extra: [[`горячий след`, S.hot || 0], ['ночные полёты', -(S.nightPen || 0)]] }; }
-  function end() { if (!S || S.ended) return; S.ended = true; S.run = false; journal(false); if (S.dr) { S.dr = null; drone.g.visible = false; } $('sframe').hidden = true; document.body.classList.remove('sardr'); $('sbtns').hidden = true; $('sclock').hidden = true; const c = S.c;
+  function end() { if (!S || S.ended) return; S.ended = true; S.run = false; journal(false); if (S.dr) { S.dr = null; drone.g.visible = false; } $('sframe').hidden = true; document.body.classList.remove('sardr'); $('sbtns').hidden = true; $('sclock').hidden = true; $('smini').hidden = true; const c = S.c;
     const o = tally();
     const sc = scoreOf(o), rec = sc.total > (store.get('sarBest') || 0); if (rec) store.set('sarBest', sc.total); store.set('sarDone', 1); const rc = store.get('sarRecent') || []; rc.push(c.scen); store.set('sarRecent', rc.slice(-6));
     const truth = c.victims.map((v) => `${v.name}: ${v.saved ? gw(v, 'спасён', 'спасена') : v.foundT !== undefined ? (v.dead ? gw(v, 'найден погибшим', 'найдена погибшей') : gw(v, 'найден живым, но не эвакуирован', 'найдена живой, но не эвакуирована')) : v.alive0 && !v.dead ? gw(v, 'не найден — а был ещё жив…', 'не найдена — а была ещё жива…') : gw(v, 'не найден', 'не найдена')}`).join(' · ');
