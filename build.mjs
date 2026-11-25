@@ -13,7 +13,7 @@ const r = await build({ entryPoints: ['src/main.js'], bundle: true, minify: true
 const js = r.outputFiles[0].text.replace(/<\/script/g, '<\\/script');
 const page = fs.readFileSync('src/page.html', 'utf8').replace('__LOADIMG__', `url(data:image/jpeg;base64,${fs.readFileSync('src/loading.jpg').toString('base64')})`);
 fs.mkdirSync('dist', { recursive: true });
-fs.copyFileSync('src/landcover.png', 'dist/landcover.png'); // маска природных зон: грузится по требованию (подзорная труба)
+fs.copyFileSync('src/landcover.png', 'dist/landcover.png'); fs.copyFileSync('src/khan.png', 'dist/khan.png'); // рельеф района Хан-Тенгри: грузится при входе в район // маска природных зон: грузится по требованию (подзорная труба)
 fs.writeFileSync('dist/artifact.html', `<meta name="claude:viewport-fit-sides" content="cover">\n${page}\n<script>${js}</script>\n`);
 // код игры -- отдельным файлом с хэшем; старые сборки убираем
 const hash = crypto.createHash('sha1').update(js).digest('hex').slice(0, 10), name = `game.${hash}.js`, size = Buffer.byteLength(js);

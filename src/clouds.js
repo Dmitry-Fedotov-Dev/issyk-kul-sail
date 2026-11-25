@@ -178,7 +178,7 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
       // Каракол, Тамга): ясное утро 1-2 балла над горами, днём над хребтами 4-6 баллов кучевых, к вечеру оседают,
       // ночью над горами 2-3 балла остатков; даже в «ясный» день хребты не бывают пустыми. Погода (cover) -- поверх нормы.
       const cov = 0.45 + 0.55 * w.cover, A = Math.max(cov * (0.45 + 0.55 * Math.max(conv, eve)), storm);
-      const Zb = (1700 + 900 * conv) * (1 - storm) + 1300 * storm;                     // основание над озером: 3300 -> 4200 м н.у.м., в грозу ~2900
+      const up = w.baseUp || 0, Zb = (1700 + 900 * conv) * (1 - storm) + 1300 * storm + up;                     // основание над озером: 3300 -> 4200 м н.у.м., в грозу ~2900
       const thr = 1 - Math.min(0.66, 0.24 + A * 0.62);                                   // выше порог -- больше чистого неба
       if (api.demo) { const D = api.demo; if (D.x === undefined || D.follow) { camera.getWorldDirection(fwd); const th = Math.atan2(fwd.x, -fwd.z); if (D.th === undefined || Math.abs(th - D.th) > 0.02 || Math.hypot(cx - D.x, cy - D.y) > 500) D.pk = null; Object.assign(D, { x: cx, y: cy, th }); } demo(cx, cy, D, Zb, w); } else {
       // ---- где непогода -- по климату котловины ----
@@ -222,9 +222,9 @@ export function makeSpriteClouds(scene, h = () => 1000, B = null) { // B -- ра
         // над склонами гуще (прогретые склоны, подъём воздуха), над прибрежной равниной -- редко, на берегу без непогоды -- ясно
         const mf = sm(500, 2200, g), F = field(X - ox, Y - oy, T) + 0.4 * mf * pfx * (0.4 + 0.6 * conv) - 0.4 * (1 - mf) * (1 - sl) + 0.45 * sl * (storm > 0.3 ? 1 : mf) - 0.25 * storm * (1 - sl) + 0.35 * cl + (overcast ? 0.3 * sl * water : 0) + (rg(3) - 0.5) * 0.14, m = (F - thr) / 0.2; if (m <= 0) return;
         const grow = Math.sin(Math.PI * ph), I = Math.min(1, m) * (0.35 + 0.8 * Math.max(conv, sl)) - eve * (1 - conv) * 0.4; // мощность облака (вечером -- плоские)
-        const ZbL = ((1700 + 900 * conv) * (1 - sl) + 1300 * sl) - 600 * cl;                               // основание -- уровень конденсации; в непогоду ниже
+        const ZbL = ((1700 + 900 * conv) * (1 - sl) + 1300 * sl) - 600 * cl + up;                               // основание -- уровень конденсации; в непогоду ниже
         let life = Math.max(1 - Math.min(1, m * 1.5) * sm(0, 0.35, grow), ring ? Math.max(1 - sm(R0, R0 + 8000, d), sm(R1 - 10000, R1, d)) : sm(R1 - 8000, R1, d)); // вблизи не растворяется: подлетаешь -- облако на месте, внутри -- мгла (api.inside)
-        const Z0 = Math.max(ZbL + 0.2 * Math.max(0, g - 1500), g + 150) + (rg(7) - 0.5) * 500, Zg = Z0 + (Math.min(Z0, g + 160 + rg(7) * 420) - Z0) * sm(250, 1400, g);
+        const Z0 = Math.max(ZbL + 0.2 * Math.max(0, g - 1500), g + 150) + (rg(7) - 0.5) * 500, Zg = Z0 + (Math.min(Z0, g + 160 + rg(7) * 420) - Z0) * sm(250 + up, 1400 + up, g);
         // над горами облако садится на склон (воздух упирается в хребет и конденсируется у земли): ближний гребень закрывает низ -- облако встаёт из-за гор
         // прямо над головой спрайт снизу не нарисовать -- такое облако уходит в мягкий «потолок» неба
         const el = (Zg - cz) / Math.max(d, 1), lifeO = sm(0.35, 0.75, el) * sm(250, 700, Zg - cz); // «потолок» -- только когда смотришь снизу, из-под облака if (lifeO >= 0.97) return; life = Math.max(life, lifeO);

@@ -97,7 +97,7 @@ float cloudLo(){ return 0.60-uCover*0.2; }
 // у кучевых резкий край: узкий переход от неба к облаку
 float cloudCov(float n){ float lo=cloudLo(); return smoothstep(lo, lo+0.075, n); }
 // дымка: густая у воды, редкая на высоте -- поэтому снежные вершины за 80 км видны над маревом
-vec3 applyFog(vec3 c, float dist, float y){ float f=min((1.-exp(-dist/mix(42000.,16000.,uStorm)))*mix(1.,0.34,smoothstep(150.,2600.,y)), mix(0.70,0.93,uStorm));
+vec3 applyFog(vec3 c, float dist, float y){ float f=min((1.-exp(-dist/mix(42000.,16000.,uStorm)))*mix(1.,0.34,smoothstep(150.,2600.,y))*mix(1.,0.45,smoothstep(2600.,4500.,y)), mix(0.70,0.93,uStorm)); // выше 4 км воздух прозрачный
   // цвет дали задан в линейном пространстве: после тональной обработки он заметно светлеет
   return mix(c, mix(HOR, mix(vec3(0.13,0.26,0.60)*mix(0.04,1.,uDay),HOR*0.8,uStorm), smoothstep(12000.,60000.,dist)), f); }
 `;
@@ -231,6 +231,23 @@ function chunked(attrs, lists, matLand, matShore = matLand) {
   g.userData.tris = tris; return g;
 }
 
+// Рельеф по сетке высот (hs -- над озером, шаг STEP, X0 -- запад, Y1 -- север): тот же живописный материал, что у гор
+// котловины, куски для отсечения по экрану. Для отдельных районов (Хан-Тенгри): heightAt -- высота поверхности
+export function gridTerrain(hs, W, H, X0, Y1, STEP, extra = null) { // extra: { aG } -- атрибуты высокогорья (ледник, течение)
+  const pos = new Float32Array(W * H * 3), nor = new Float32Array(W * H * 3), at = (i, j) => hs[Math.min(H - 1, Math.max(0, j)) * W + Math.min(W - 1, Math.max(0, i))];
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const k = j * W + i, edge = i === 0 || j === 0 || i === W - 1 || j === H - 1;
+    pos[k * 3] = X0 + i * STEP; pos[k * 3 + 1] = hs[k] - (edge ? 600 : 0); pos[k * 3 + 2] = -(Y1 - j * STEP); // край -- «юбка» вниз: за районом не видно щели
+    const nx = at(i - 1, j) - at(i + 1, j), nz = at(i, j - 1) - at(i, j + 1), l = Math.hypot(nx, 2 * STEP, nz); nor[k * 3] = nx / l; nor[k * 3 + 1] = (2 * STEP) / l; nor[k * 3 + 2] = nz / l; }
+  const lists = new Map(), CW = Math.ceil((W - 1) / 16), CHh = Math.ceil((H - 1) / 10);
+  for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) { const a = j * W + i, b = a + 1, e = a + W, f = e + 1; chunkList(lists, ((j / CHh) | 0) * 64 + ((i / CW) | 0)).push(a, e, b, b, e, f); }
+  const mat = terrainMaterial(false, !!extra); mat.side = THREE.DoubleSide;
+  const attrs = { position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }; if (extra) for (const k in extra) attrs[k] = new THREE.BufferAttribute(extra[k], 3);
+  const m = chunked(attrs, lists, mat);
+  m.userData.heightAt = (X, Y) => { const fx = clamp((X - X0) / STEP, 0, W - 1.001), fy = clamp((Y1 - Y) / STEP, 0, H - 1.001), i = fx | 0, j = fy | 0, u = fx - i, v = fy - j;
+    return (hs[j * W + i] * (1 - u) + hs[j * W + i + 1] * u) * (1 - v) + (hs[(j + 1) * W + i] * (1 - u) + hs[(j + 1) * W + i + 1] * u) * v; };
+  return m;
+}
+
 // Геометрия гор -- строго по карте высот, без растяжения. Всё «монструозное» делает свет и фактура: рёбра и кулуары
 // в нормали, тёмные скальные стены, рваная граница снега, тени облаков, туман на хребтах.
 // маска природных зон OSM (лес, ледники, кустарник): грузится один раз, по требованию -- когда открывают подзорную трубу
@@ -280,13 +297,25 @@ export function makeDemTerrain(dem, touch) {
     return fv <= fu ? a * (1 - fu) + b * (fu - fv) + d * fv : a * (1 - fv) + c * (fv - fu) + d * fu; };
   return obj;
 }
-export function terrainMaterial(shore = true) {
-  const defs = shore ? { FDEPTH: 1 } : {};
+export function terrainMaterial(shore = true, zone = false) {
+  const defs = { ...(shore ? { FDEPTH: 1 } : {}), ...(zone ? { ZONE: 1 } : {}) };
   const tm = new THREE.ShaderMaterial({ defines: { ...QUALITY_DEFS[2], ...defs },
     uniforms: { ...ENV }, extensions: { derivatives: true },
-    vertexShader: CURVE + `attribute float aH; varying vec3 vP; varying vec3 vN; varying float vH; void main(){ vP=position; vN=normal; vH=aH; vec3 q=position; q.y-=curve(q); gl_Position=projectionMatrix*modelViewMatrix*vec4(q,1.); }`,
+    vertexShader: CURVE + `attribute float aH; varying vec3 vP; varying vec3 vN; varying float vH;
+#ifdef ZONE
+attribute vec3 aG; varying vec3 vG;
+#endif
+void main(){ vP=position; vN=normal; vH=aH;
+#ifdef ZONE
+  vG=aG;
+#endif
+  vec3 q=position; q.y-=curve(q); gl_Position=projectionMatrix*modelViewMatrix*vec4(q,1.); }`,
     fragmentShader: GLSL_COMMON + /* glsl */`
-varying vec3 vP; varying vec3 vN; varying float vH; uniform float uMap; uniform vec3 uMapDeep; uniform sampler2D uLakeM; uniform vec4 uLakeT; uniform sampler2D uLC; uniform float uLCOn, uPaint; uniform vec4 uLCT;
+varying vec3 vP; varying vec3 vN; varying float vH;
+#ifdef ZONE
+varying vec3 vG;
+#endif
+uniform float uMap; uniform vec3 uMapDeep; uniform sampler2D uLakeM; uniform vec4 uLakeT; uniform sampler2D uLC; uniform float uLCOn, uPaint; uniform vec4 uLCT;
 // гребневой шум: острые хребты и кулуары, которых нет в карте высот с её шагом в десятки метров
 float ridged(vec2 p){ float a=0.5, s=0., w=1.; for(int i=0;i<FBM_OCT;i++){ float r=1.-abs(2.*vnoise(p)-1.); r*=r*w; s+=a*r; w=clamp(r*1.6,0.,1.); p=mat2(1.6,1.2,-1.2,1.6)*p+7.; a*=0.5; } return s; }
 #ifdef DEMN
@@ -330,7 +359,20 @@ void main(){ vec3 N=normalize(vN); float h=vH;
   // снег держится на пологом и в кулуарах, с крутых стен осыпается -- граница рваная, языками
   // узор границы -- только от места, не от камеры: шум крупный (не рябит вдали) и не зависит от размера пикселя -- граница не моргает
   float nS=vnoise(vP.xz*0.0035)*0.7+vnoise(vP.xz*0.0013+7.)*0.3, nT=vnoise(vP.xz*0.009+3.)-0.5;
-  float snowM=smoothstep(1850.,2200.,h+nS*380.+nT*300.)*(1.-smoothstep(0.50,0.80,slS)*0.85); c=mix(c, snow, snowM);
+  float snowM=smoothstep(1850.,2200.,h+nS*380.+nT*300.)*(1.-smoothstep(0.50,0.80,slS)*0.85);
+#ifdef ZONE
+  // высокогорье Центрального Тянь-Шаня: летом снег с ~4200 м (на северных склонах ниже), крутые стены голые -- тёмный
+  // гранит и мрамор; ледники -- открытый лёд с полосами срединных морен вдоль течения, нижние языки завалены
+  // серым обломочным материалом (нижний Иныльчек -- почти сплошь под щебнем)
+  float glc=vG.x, deb=1.-smoothstep(1950.,2650.,h+nT*400.), nth=max(0.,-normalize(vN).z);
+  c=mix(vec3(0.34,0.31,0.31), vec3(0.46,0.41,0.37), n2)*(0.85+0.3*r0); c=mix(c, vec3(0.17,0.16,0.19), smoothstep(0.26,0.55,slS)*0.85);
+  snowM=smoothstep(2550.,2850.,h+nS*320.+nT*260.+nth*300.)*(1.-smoothstep(0.30,0.52,slS+(nT+0.5)*0.12)*0.95); // с крутых стен снег сдувает -- тёмные рёбра гребней
+  { vec2 fl=normalize(vG.yz+1e-4), pp=vec2(-fl.y,fl.x); float st=vnoise(vec2(dot(vP.xz,vec2(fl.x,-fl.y))*0.0007, dot(vP.xz,vec2(pp.x,-pp.y))*0.011)), mor=smoothstep(0.60,0.70,st);
+    vec3 ice=mix(vec3(0.70,0.80,0.88), vec3(0.60,0.70,0.80), n2); ice=mix(ice, vec3(0.38,0.36,0.35), mor*0.85);  // срединные морены -- тёмные полосы
+    ice=mix(ice, mix(vec3(0.44,0.41,0.38),vec3(0.55,0.51,0.46),n2), deb*0.9);                                // обломочный чехол языка
+    c=mix(c, ice, smoothstep(0.25,0.6,glc)); snowM*=1.-smoothstep(0.3,0.7,glc)*(1.-smoothstep(2650.,2950.,h)); }
+#endif
+  c=mix(c, snow, snowM);
   if(h<0.) c=mix(sand*vec3(0.62,0.93,0.88), vec3(0.03,0.30,0.42), smoothstep(0.,7.,-h));
   else c=mix(c*0.72, c, smoothstep(0.,0.9,h));
   // застройка и сады читаются издалека как фактура: тёмные кроны и светлые пятна крыш
@@ -393,6 +435,10 @@ void main(){ vec3 N=normalize(vN); float h=vH;
     float fwF=max(fwidth(fzw)*1.2,0.015), fM=smoothstep(0.5-fwF,0.5+fwF,fzw);
     float gz=lc.g+wv*0.5*smoothstep(0.02,0.3,lc.g), fwG=max(fwidth(gz)*1.2,0.015), gM=smoothstep(0.5-fwG,0.5+fwG,gz);
     float bz=lc.b+wv*smoothstep(0.02,0.3,lc.b), bM=smoothstep(0.45,0.55,bz);
+#ifdef ZONE
+    pc=mix(vec3(0.46,0.42,0.44), vec3(0.58,0.53,0.49), strk*0.6)*mix(1.,0.62,smoothstep(0.45,0.7,sl0)); bM=0.; fM=0.; gM=smoothstep(0.25,0.6,vG.x)*(1.-deb)*(1.-snowM); // даль высокогорья: камень и лёд, без лугов и леса
+    pc=mix(pc, mix(vec3(0.44,0.41,0.38),vec3(0.36,0.34,0.33),strk), smoothstep(0.25,0.6,vG.x)*deb);
+#endif
     pc=mix(pc, vec3(0.45,0.50,0.22), bM*0.7); pc=mix(pc, vec3(0.12,0.29,0.16), fM); float wh=max(snowM,gM); pc=mix(pc, mix(vec3(0.97,0.95,0.92),vec3(0.86,0.93,0.99),gM), wh);
     float L=dot(Ns,uSun)*uSunI, aw=max(fwidth(L)*1.5,0.03), tone=0.45*smoothstep(0.08-aw,0.08+aw,L)+0.55*smoothstep(0.5-aw,0.5+aw,L);
     vec3 shd=mix(vec3(0.50,0.48,0.66), vec3(0.34,0.35,0.41), uStorm), pcol=pc*mix(shd, sunC*1.12, tone)*(0.94+0.12*strk);

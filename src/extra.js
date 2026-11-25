@@ -225,15 +225,20 @@ export function installExtra(A) {
   // ---------- меню ----------
   function refreshMenu() { for (const c of $('crafts').children) c.setAttribute('aria-pressed', c.dataset.id === sel);
     $('brace').innerHTML = `${COMPETE[sel][0]}<small>${COMPETE[sel][1]}</small>`; $('briver').hidden = sel !== 'kayak';
-    siteUI(); $('bfree').innerHTML = sel === 'jet' ? 'Свободный полёт<small>взлёт с полосы старого аэродрома</small>' : sel === 'para' ? `Свободный полёт<small>старт: ${({ winch: 'лебёдка на полосе аэродрома', airport: 'склон над аэродромом', kurgak: 'пик Кургак-Сай', kalitka: 'гора Калитка' })[store.get('paraSite') || 'airport']}</small>` : 'Свободное плавание<small>бухта, мыс, открытая вода</small>';
+    siteUI(); $('bfree').innerHTML = sel === 'jet' ? (store.get('jetSite') === 'khan' ? 'Свободный полёт<small>над Иныльчеком: Хан-Тенгри, пик Победы</small>' : 'Свободный полёт<small>взлёт с полосы старого аэродрома</small>') : sel === 'para' ? `Свободный полёт<small>старт: ${({ winch: 'лебёдка на полосе аэродрома', airport: 'склон над аэродромом', kurgak: 'пик Кургак-Сай', kalitka: 'гора Калитка' })[store.get('paraSite') || 'airport']}</small>` : 'Свободное плавание<small>бухта, мыс, открытая вода</small>';
     $('how').innerHTML = sel === 'yacht' ? yachtHow : HOW[sel].replace(/<b>Пробел<\/b>/g, TOUCH ? `кнопка <b>«${info(sel).key}»</b>` : '<b>Пробел</b>').replace(/<b>← →<\/b>/g, TOUCH ? '<b>касание слева и справа</b>' : '<b>← →</b>');
     $('bmap').textContent = startAt ? `Место: ${startAt.label}` : 'Место: Чолпон-Ата';
     const br = brokenStored(sel); $('brace').classList.toggle('pulse', br); $('brace').title = br ? 'Ресурс 0% — финиш в гонке восстановит его' : ''; }
   // места старта параплана -- ряд кнопок под снарядами (виден, только когда выбран параплан)
+  // места старта -- ряд кнопок под снарядами (виден, только когда у снаряда есть выбор): параплан -- склоны, самолёт -- районы
+  const SITES = { para: ['paraSite', 'airport', [['winch', 'Буксир', 'лебёдка на полосе'], ['airport', 'Аэродром', 'склон над городом'], ['kurgak', 'Кургак-Сай', 'вершина ≈4100 м'], ['kalitka', 'Калитка', 'гора ≈2600 м']]],
+    jet: ['jetSite', 'rwy', [['rwy', 'Аэродром', 'полоса у Чолпон-Аты'], ['khan', 'Хан-Тенгри', 'Иныльчек · 7010 м']]] };
   function siteUI() { let box = $('psites'); if (!box) { const lbl = document.createElement('p'); lbl.className = 'lbl'; lbl.id = 'psitesl'; lbl.textContent = 'Старт';
-      box = document.createElement('div'); box.className = 'chips'; box.id = 'psites'; $('crafts').after(lbl, box);
-      for (const [id, n, sub] of [['winch', 'Буксир', 'лебёдка на полосе'], ['airport', 'Аэродром', 'склон над городом'], ['kurgak', 'Кургак-Сай', 'вершина ≈4100 м'], ['kalitka', 'Калитка', 'гора ≈2600 м']]) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${n}</b><small>${sub}</small>`; b.onclick = () => { store.set('paraSite', id); refreshMenu(); }; box.appendChild(b); } }
-    const on = sel === 'para'; box.hidden = !on; $('psitesl').hidden = !on; for (const c of box.children) c.setAttribute('aria-pressed', c.dataset.id === (store.get('paraSite') || 'airport')); }
+      box = document.createElement('div'); box.className = 'chips'; box.id = 'psites'; $('crafts').after(lbl, box); }
+    const S = SITES[sel]; box.hidden = !S; $('psitesl').hidden = !S; if (!S) return;
+    if (box.dataset.for !== sel) { box.dataset.for = sel; box.innerHTML = '';
+      for (const [id, n, sub] of S[2]) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${n}</b><small>${sub}</small>`; b.onclick = () => { store.set(S[0], id); refreshMenu(); }; box.appendChild(b); } }
+    for (const c of box.children) c.setAttribute('aria-pressed', c.dataset.id === (store.get(S[0]) || S[1])); }
   function buildMenu() { yachtHow = $('how').innerHTML;
     for (const id of [...CRAFT_ORDER, 'para', 'jet']) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); refreshMenu(); }; $('crafts').appendChild(b); }
     $('briver').onclick = () => { audio.start(); startRiver(); }; $('bjournal').onclick = () => { journal(); $('journal').hidden = false; }; $('jclose').onclick = () => { $('journal').hidden = true; };

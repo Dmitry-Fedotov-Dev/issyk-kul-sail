@@ -23,6 +23,7 @@ import { FAR_PX } from './corridorart.js';
 import { makeSpriteClouds } from './clouds.js';
 import { analyzeBasinAsync } from './cloudgeo.js';
 import { makeStars, sunDir as astroSun } from './stars.js';
+import { loadKhan, khanInside } from './khan.js';
 import { makeRidges, setRidgeRes } from './ridges.js';
 
 const $ = (id) => document.getElementById(id);
@@ -117,7 +118,7 @@ async function init() {
   const rivals = [], ensureRivals = () => { if (!rivals.length) rivals.push(mk({ hull: 0xf4f3ee, accent: '#1f6fd0', text: 'KGZ 21' }, 'Ала-Тоо', 0.95), mk({ hull: 0xe9c33c, accent: '#20242b', text: 'KGZ 4' }, 'Манас', 0.9), mk({ hull: 0x2f8f5a, accent: '#f4f3ee', text: 'KGZ 33' }, 'Чайка', 0.86)); };
   const marks = { W: makeMark(0xff7a1a), L: makeMark(0xffd21f), pin: makeMark(0xff3b30), com: makeMark(0x2f7de2) };
   for (const k in marks) { marks[k].visible = false; scene.add(marks[k]); }
-  G = { stars, shoreArt, corridor: null, lake, mapObjs: [nearT, demT, far, ...shoreObjs], ensureRivals, ridges, h: hA, hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
+  G = { stars, shoreArt, corridor: null, lake, mapObjs: [nearT, demT, far, ...shoreObjs], ensureRivals, ridges, h: (x, y) => (G.khan && khanInside(x, y) ? G.khan.h(x, y) : hA(x, y)), /* в районе Хан-Тенгри -- его рельеф */ hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
     cam: 0, camYaw: 0, orbit: 0, orbitP: 0, zoom: 1, orbitV: 0, shake: 0, hintT: 0, free: null, toastT: 0, frame: 0, slow: 0 };
   if (!PRESETS[G.preset]) G.preset = 'santash';
   X = installExtra({ mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
@@ -255,7 +256,7 @@ function buildMenu() {
     if (G.mode === 'menu') { G.clock = TOD[G.tod][1]; dayCycle(0); updateEnv(G.sky); } }; // меню сразу показывает выбранное время суток -- как выбор погоды
   for (const id in TOD) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${TOD[id][0]}</b>`; b.onclick = () => setTod(id); $('tod').appendChild(b); }
   setTod(store.get('tod') || 'day'); G.todHour = () => TOD[G.tod][1];
-  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if ((X.sel === 'para' && !PG) || (X.sel === 'jet' && !JM)) { toast('Этот снаряд не загрузился — выберите другой'); return; } if (X.sel === 'para') PG.startFree(X.startAt); else if (X.sel === 'jet') JM.startFree(); else startFree(); };
+  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if ((X.sel === 'para' && !PG) || (X.sel === 'jet' && !JM)) { toast('Этот снаряд не загрузился — выберите другой'); return; } if (X.sel === 'para') PG.startFree(X.startAt); else if (X.sel === 'jet' && store.get('jetSite') === 'khan') startKhan('jet'); else if (X.sel === 'jet') JM.startFree(); else startFree(); };
   $('brace').onclick = () => { audio.start(); X.compete(); };
   $('ragain').onclick = () => { if (JM && JM.on) JM.again(); else if (PG && PG.on) PG.again(); else if (G.mode === 'river') { $('result').hidden = true; $('briver').click(); } else X.compete(); }; $('rmenu').onclick = () => toMenu();
 }
@@ -519,6 +520,10 @@ function sunTint(sinEl, eve, storm) { const hD = Math.max(-0.6, Math.asin(clamp(
   let cr = r / mx, cg = Math.max(g / mx, 0.16), cb = Math.max(b / mx, eve ? 0.03 : 0.07); // у горизонта -- алый, не «чистый» красный
   if (!eve) { cb += 0.06 * (1 - cg); } // утренний свет розовее
   const w = storm * 0.8; ENV.uSunCol.value.set(cr + (0.9 - cr) * w, cg + (0.9 - cg) * w, cb + (0.92 - cb) * w); ENV.uSunX.value = clamp(r * 1.06, 0, 1); ENV.uEve.value = eve ? 1 : 0; }
+// район Хан-Тенгри: рельеф грузится при первом входе (отдельный файл), дальше -- сразу
+async function startKhan(craft) { const b = $('bfree'); b.classList.add('wait');
+  try { if (!G.khan) { toast('Летим на Хан-Тенгри… грузим рельеф Иныльчека'); G.khan = await loadKhan(scene); } } catch (e) { toast(e.message); return; } finally { b.classList.remove('wait'); }
+  if (craft === 'jet') JM.startZone(G.khan); }
 function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; { const c = G.clock + (G.mode === 'menu' ? 0 : dt / 60 * (G.clockK || 1)); if (c >= 24) G.day = (G.day || 0) + 1; G.clock = c % 24; } const k = G.wx; if (!k) return; // G.day -- игровые сутки от 23 июля: идут сезоны; в меню время стоит на выбранном
   astroSun(G.day || 0, G.clock, SUN); const sinEl = SUN.y; // Солнце -- по эфемериде на игровую дату (astro.js): долгота дня и заря меняются с сезоном
   sunTint(sinEl, G.clock > 12, k.storm);
@@ -577,7 +582,8 @@ function loop(now) {
   G.stars.update(camera.position.x, -camera.position.z, G.clock ?? 13, renderer.getPixelRatio(), now / 1000, G.day || 0); G.stars.showLines(G.cLines || (SPY && SPY.on)); // звёзды -- для той точки карты, где камера
   { const k = PG && PG.on ? 0 : Math.min(0.88, G.clouds.inside * 1.05), el = $('cfog'); if (Math.abs(k - (G.cfogK || 0)) > 0.01) { G.cfogK = k; el.style.opacity = k.toFixed(2); // внутри облака -- мгла (у параплана своя)
     el.style.background = ENV.uDay.value > 0.3 ? 'rgba(236,241,248,1)' : 'rgba(40,46,70,1)'; } }
-  lodTick(dt);   if (G.jailoo) G.jailoo.update(dt, G.t); G.clouds.update(dt, camera, { cover: Math.min(1, Math.max(0, (ENV.uCover.value + 0.62) / 1.48)), storm: ENV.uStorm.value, cirrus: ENV.uCirrus.value, wind: G.wind, clock: G.clock, preset: G.preset }); // облачность погоды (-0.62..0.86) -> 0..1; пресет -- какой ветер (улан, санташ, бриз)
+  G.inKhan = !!(G.khan && khanInside(camera.position.x, -camera.position.z)); // камера в районе Хан-Тенгри: облака выше и реже
+  lodTick(dt);   if (G.jailoo) G.jailoo.update(dt, G.t); G.clouds.update(dt, camera, { cover: Math.min(1, Math.max(0, (ENV.uCover.value + 0.62) / 1.48)) * (G.inKhan ? 0.55 : 1), storm: ENV.uStorm.value, cirrus: ENV.uCirrus.value, wind: G.wind, clock: G.clock, preset: G.preset, baseUp: G.inKhan ? 2300 : 0 }); // облачность погоды (-0.62..0.86) -> 0..1; пресет -- какой ветер (улан, санташ, бриз)
   if (G.beach) G.beachHint = G.beach.update(dt, FT && FT.on ? FT.state : null);
   if (G.finds && G.mode !== 'menu') G.finds.update(dt, FT && FT.on && !FT.state.swim && FT.state.st !== 'dis' ? FT.state : null, G.beach.dayN, FT ? FT.magnet : 1.2);
   beachSound(dt, b);
@@ -595,7 +601,7 @@ function loop(now) {
     camera.updateMatrixWorld(); tmpV.copy(camera.position).addScaledVector(SUN, 1e5).project(camera); camera.getWorldDirection(sunDir); const f = sunDir.dot(SUN), sx = tmpV.x * 0.5 + 0.5, sy = tmpV.y * 0.5 + 0.5;
     const off = Math.max(0, Math.max(Math.abs(sx - 0.5), Math.abs(sy - 0.5)) - 0.5), a = f > 0.05 ? ENV.uSunI.value * (1 - ENV.uStorm.value) * smooth(0.05, 0.35, f) * Math.exp(-off * 3.5) : 0;
     // блик объектива -- по силе солнца: в зените ярче, к горизонту, когда свет проходит толщу воздуха, почти гаснет
-    const X = ENV.uSunX.value; post.setSun(sx, sy, (G.mode === 'menu' ? a * 0.6 : a) * X * X * 0.42, ENV.uSunCol.value);
+    const X = ENV.uSunX.value; post.setSun(sx, sy, (G.mode === 'menu' ? a * 0.6 : a) * X * X * 0.25, ENV.uSunCol.value);
   }
   if (post) post.render(scene, camera); else renderer.render(scene, camera);
   G.frame++;

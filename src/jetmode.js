@@ -68,7 +68,7 @@ export function makeJetMode(A) {
   function makeBoom() { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0, depthWrite: false })); m.visible = false; scene.add(m);
     const smoke = Array.from({ length: 10 }, () => { const s = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshLambertMaterial({ color: 0x55504a, transparent: true, opacity: 0, depthWrite: false })); s.visible = false; scene.add(s); return s; }); return { m, smoke, t: 0 }; }
   // ---- инверсионные следы с законцовок при большой перегрузке ----
-  function makeTrails() { const N = 50, mk = () => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3)); const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 })); l.frustumCulled = false; scene.add(l); return l; };
+  function makeTrails() { const N = 50, mk = () => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3)); const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false })); l.frustumCulled = false; scene.add(l); return l; };
     return { L: mk(), R: mk(), N, n: 0, on: 0 }; }
 
   function build() { if (built) return; built = true;
@@ -89,6 +89,10 @@ export function makeJetMode(A) {
     F = { t: 0, loop: { s: 0, t: 0 }, roll: { a: 0, t: 0 }, lowT: 0, ended: false, ejT: -1, landT: 0, msg: {}, gearK: 1, apprMsg: false }; R = null; showGame(true); resetView(); G.cam = G.cam === 2 ? 0 : G.cam; trails.n = 0; }
   function startFree() { begin(); const s = -rwy.L / 2 + 80, X = rwy.X + Math.sin(rwy.th) * s, Y = rwy.Y + Math.cos(rwy.th) * s; J.reset(X, Y, Math.max(0, HG(X, Y)), rwy.th, 'ground'); J.gear = true;
     toast(TOUCH ? 'Як-130 на полосе. Потяните джойстик на себя — взлёт' : 'Як-130 на полосе. Пробел — максимал, на 210 км/ч — ↓ на себя'); F.free = true; }
+  // район Хан-Тенгри: старт в воздухе над озером Мерцбахера, курс -- вверх по Южному Иныльчеку на Хан-Тенгри и пик Победы
+  function startZone(z) { begin(); F.zone = z; const m = z.poi.merz, k = z.poi.khan, th = Math.atan2(k.X - m.X, k.Y - m.Y) + 0.35, X = m.X - Math.sin(th) * 6000, Y = m.Y - Math.cos(th) * 6000;
+    J.reset(X, Y, Math.max(z.h(X, Y), m.h) + 1500, th, 'air', 200); J.gear = false; F.free = true; F.airT = 30;
+    toast('Иныльчек: впереди Хан-Тенгри и пик Победы'); }
   function startRace() { begin(); const r0 = rings[0], r1 = rings[1], th = Math.atan2(r1.X - r0.X, r1.Y - r0.Y), X = r0.X - Math.sin(th) * 4500, Y = r0.Y - Math.cos(th) * 4500;
     J.reset(X, Y, 450, th, 'air', 185); J.gear = false; F.gearK = 0; R = { next: 0, t: 0, miss: 0, best: store.get('jetBest') };
     for (const r of rings) { r.m.visible = true; r.prev = undefined; r.m.material.color.setHex(0xff8a2a); r.m.material.opacity = 0.9; } toast('Пилотажная зона: пройдите 10 колец. Шестое — высоко, за ним — пике к воде'); }
@@ -101,8 +105,8 @@ export function makeJetMode(A) {
     if (input.joy) { const j = input.joy, ex = (v) => (Math.abs(v) < 0.06 ? 0 : Math.sign(v) * Math.pow((Math.abs(v) - 0.06) / 0.94, 1.5)); roll = ex(j.x); pitch = ex(j.y); }
     if (input.joyTap && input.joyTap !== F.tap) { F.tap = input.joyTap; F.hold = true; } if (!input.joy) F.hold = false; // двойной тап -- максимал, пока палец на джойстике
     // граница зоны полётов: автоматика уводит в разворот к озеру
-    const m = 4000, out = J.X < FAR.X0 + m || J.X > FAR.X0 + (FAR.W - 1) * FAR.STEP - m || J.Y > FAR.Y1 - m || J.Y < FAR.Y1 - (FAR.H - 1) * FAR.STEP + m;
-    if (out && J.mode === 'air') { const want = Math.atan2(-J.X, -12000 - J.Y), d = wrapPi(want - J.th); roll = clamp(d * 2 - J.phi, -1, 1); if (!F.msg.out) { F.msg.out = 1; toast('Граница зоны полётов — разворот к озеру'); } } else F.msg.out = 0;
+    const zn = F.zone, zg = zn && zn.grid, m = zn ? 3000 : 4000, A = zg || FAR, out = J.X < A.X0 + m || J.X > A.X0 + (A.W - 1) * A.STEP - m || J.Y > A.Y1 - m || J.Y < A.Y1 - (A.H - 1) * A.STEP + m;
+    if (out && J.mode === 'air') { const cX = zn ? zg.X0 + zg.W * zg.STEP / 2 : 0, cY = zn ? zg.Y1 - zg.H * zg.STEP / 2 : -12000, want = Math.atan2(cX - J.X, cY - J.Y), d = wrapPi(want - J.th); roll = clamp(d * 2 - J.phi, -1, 1); if (!F.msg.out) { F.msg.out = 1; toast(zn ? 'Граница района — разворот к Иныльчеку' : 'Граница зоны полётов — разворот к озеру'); } } else F.msg.out = 0;
     // заход: снижаемся к полосе, курс вдоль неё и на неё, после взлёта прошло время -- автоматика выпускает шасси
     const dR = Math.hypot(J.X - rwy.X, J.Y - rwy.Y), da = Math.abs(wrapPi(J.th - rwy.th)), al = Math.min(da, Math.PI - da), to = Math.abs(wrapPi(Math.atan2(rwy.X - J.X, rwy.Y - J.Y) - J.th));
     const appr = J.mode === 'air' && F.airT > 25 && dR < 9000 && (J.agl || 0) < 500 && J.vz < -1 && al < 0.5 && (to < 0.5 || dR < 1200);
@@ -223,6 +227,6 @@ export function makeJetMode(A) {
 
   function sound() { if (!on) return; audio.jet && audio.jet(J.mode === 'crash' ? 0 : J.thr, J.V, J.mode !== 'crash'); audio.airflow(Math.min(60, J.V * 0.12), Math.min(1, (J.n > 5 ? 0.4 : 0) + (J.buf || 0) * 0.8), 0, J.mode === 'air'); }
 
-  return { _F: () => F, get on() { return on; }, get jet() { return J; }, get runway() { return rwy; }, get rings() { return rings; }, startFree, startRace, stop, tick, camera: cam, hud, sound, resetCam,
+  return { _F: () => F, get on() { return on; }, get jet() { return J; }, get runway() { return rwy; }, get rings() { return rings; }, startFree, startZone, startRace, stop, tick, camera: cam, hud, sound, resetCam,
     restart() { if (R) startRace(); else startFree(); }, again() { $('result').hidden = true; if (R) startRace(); else startFree(); } };
 }

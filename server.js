@@ -23,7 +23,8 @@ try { const m = /"(game\.[0-9a-f]+\.js)"/.exec(fs.readFileSync(file, 'utf8')); i
 const server = http.createServer((req, res) => {
   if (req.url === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ online: clients.size })); return; }
   // маска природных зон (лес, ледники, кустарник) -- игра берёт её, только когда открывают подзорную трубу
-  if (req.url === '/landcover.png') { fs.readFile(path.join(__dirname, 'dist', 'landcover.png'), (err, data) => { if (err) { res.writeHead(404); res.end(); return; }
+  // рельеф района Хан-Тенгри -- при входе в район
+  if (req.url === '/landcover.png' || req.url === '/khan.png') { fs.readFile(path.join(__dirname, 'dist', req.url.slice(1)), (err, data) => { if (err) { res.writeHead(404); res.end(); return; }
     res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' }); res.end(data); }); return; }
   // код игры: имя с хэшем содержимого -- новая сборка получает новое имя, поэтому файл можно кэшировать навсегда
   // отдаём заранее сжатым: сжать 6 МБ на лету на каждый заход -- это секунды процессора на загруженном сервере
