@@ -102,17 +102,25 @@ export function makeHeliMode(A) {
       Hc.reset(X, Y, Math.max(H(X, Y), G.merz.top) + 150, a + Math.PI, false); Hc.load = 0; F.mi = 0; toast('Озеро Мерцбахера. Слышите? Это лёд'); return; }
     Hc.reset(b.X + 4, b.Y - 6, H(b.X + 4, b.Y - 6), G.khan ? Math.atan2(G.khan.poi.khan.X - b.X, G.khan.poi.khan.Y - b.Y) : 0, true); Hc.load = 0; F.mi = 0;
     const m0 = F.mis[0]; if (m0 && m0.load > 0) Hc.load = m0.load;
-    const cl = hoverCeiling(Hc.mass); toast(G.khan ? `База на ${Math.round(b.z + 1607)} м. Потолок висения с грузом — ${Math.round(cl)} м. ${TOUCH ? '▲ — шаг вверх' : 'Пробел — шаг вверх'}` : 'Ми-8 на площадке. Пробел — шаг вверх, стрелки — куда лететь');
+    const cl = hoverCeiling(Hc.mass); toast(G.khan ? `База ${Math.round(b.z + 1607)} м · висеть можно до ${Math.round(cl)} м` : 'Ми-8 на площадке. Пробел — шаг вверх, стрелки — куда лететь');
     setTimeout(() => { if (on) announce(); }, 4500); }
   function stop() { if (!on) return; on = false; M.root.visible = false; marks.visible = false; boom.m.visible = false; document.body.classList.remove('heli'); $('hwrap').hidden = true; camera.up.set(0, 1, 0);
     $('hint').hidden = true; $('mark').hidden = true; audio.jet && audio.jet(0, 0, false); audio.airflow(0, 0, 0, false); input.hu = input.hd = false; if (prev) G.player = prev; F = null; }
 
   // ---- ветер: общий поток растёт с высотой, на гребнях сильнее; у склонов -- подъём на наветренной стороне,
   //      спуск и роторная болтанка -- на подветренной ----
-  function wind(X, Y, Z) { const W = G.wind || { sx: 0, sy: 0 }, asl = Z + 1607, k = 1 + Math.min(2.2, Math.max(0, asl - 2500) / 1800), wx = W.sx * k, wy = W.sy * k, U = Math.hypot(wx, wy) || 1e-3;
+  // Погода Хан-Тенгри -- по выбору в меню: «бриз» -- ясно (на гребнях ~10 м/с), «санташ» -- ветрено (~22), «улан» --
+  // буран: западный ураган до 40 м/с на 6-7 км (струйное течение садится на хребты), метель, снег срывает с гребней.
+  // Порывы -- волнами по 20-40 с.
+  const KW = { breeze: 10, santash: 22, ulan: 40 };
+  function wind(X, Y, Z) { const asl = Z + 1607, zone = G.khan && G.inKhan;
+    let wx, wy; if (zone) { const U0 = KW[G.preset] || 12, t = G.t || 0, gust = 0.75 + 0.25 * Math.sin(t * 0.21) + 0.15 * Math.sin(t * 0.67 + 1.3), Uh = U0 * (0.35 + 0.65 * Math.min(1, Math.max(0, asl - 3000) / 3500)) * gust, d = (265 + 15 * Math.sin(t * 0.05)) * Math.PI / 180;
+      wx = -Math.sin(d) * Uh; wy = -Math.cos(d) * Uh; F && (F.wU = Uh); } // ветер «с запада» дует на восток
+    else { const W = G.wind || { sx: 0, sy: 0 }, k = 1 + Math.min(2.2, Math.max(0, asl - 2500) / 1800); wx = W.sx * k; wy = W.sy * k; }
+    const U = Math.hypot(wx, wy) || 1e-3;
     const e = 250, gx = (H(X + e, Y) - H(X - e, Y)) / (2 * e), gy = (H(X, Y + e) - H(X, Y - e)) / (2 * e), agl = Z - H(X, Y), near = Math.exp(-Math.max(0, agl) / 400);
     const up = (wx * gx + wy * gy) * near; // наветренный склон -- вверх, подветренный -- вниз
-    const lee = Math.max(0, -(wx * gx + wy * gy) / U), tb = Math.min(1.2, U * 0.02 * (0.3 + near) + lee * 0.5 * near);
+    const lee = Math.max(0, -(wx * gx + wy * gy) / U), tb = Math.min(1.6, U * 0.02 * (0.3 + near) + lee * 0.5 * near + (U > 25 ? (U - 25) * 0.02 : 0));
     return { x: wx, y: wy, z: clamp(up * 0.6, -3, 3), tb }; }
 
   function ctl() { let fwd = (input.sin ? 1 : 0) - (input.flare ? 1 : 0), side = (input.right ? 1 : 0) - (input.left ? 1 : 0);
@@ -161,7 +169,7 @@ export function makeHeliMode(A) {
     $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>км/ч</small></div><div class="r"><b>${alt}</b> м над морем · ${agl} м над землёй · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)} м/с</div>
       <div class="r">шаг<span class="bar"><i class="${cls}" style="width:${Math.round(Math.min(1, pw) * 100)}%"></i></span>${Math.round(pw * 100)}% · обороты ${Math.round(Hc.rpm * 95)}%</div>
       <div class="r">масса <b>${(m / 1000).toFixed(1)}</b> т · тяга/вес <b>${tw.toFixed(2)}</b>${Hc.ige > 0.03 ? ' · подушка' : ''} · топливо ${Math.round(Hc.fuel)} кг</div>`;
-    const w = Hc.crash ? '' : Hc.warn === 'rpm' ? 'ОБОРОТЫ! СБРОСЬ ШАГ' : Hc.warn === 'vrs' ? 'ВИХРЕВОЕ КОЛЬЦО — СКОРОСТЬ ВПЕРЁД' : Hc.warn === 'power' ? 'МОЩНОСТИ НЕ ХВАТАЕТ' : '';
+    const w = Hc.crash ? '' : (F.wU || 0) > 30 && G.frame % 120 < 60 ? `ВЕТЕР ${Math.round(F.wU)} М/С` : Hc.warn === 'rpm' ? 'ОБОРОТЫ! СБРОСЬ ШАГ' : Hc.warn === 'vrs' ? 'ВИХРЕВОЕ КОЛЬЦО — СКОРОСТЬ ВПЕРЁД' : Hc.warn === 'power' ? 'МОЩНОСТИ НЕ ХВАТАЕТ' : '';
     const wl = $('hwarn'); if (wl.textContent !== w) wl.textContent = w; wl.hidden = !w; if (w && audio.beep && G.frame % 18 === 0) audio.beep(true);
     const mi = F.mis[F.mi], me = $('hmis'); if (mi) { me.hidden = false; const t = `<b>${mi.t}</b><br>${mi.d}${F.hold > 0.2 ? ` · ${mi.how === 'winch' ? 'лебёдка' : mi.how === 'watch' ? 'съёмка' : 'выгрузка'} ${Math.min(100, Math.round(F.hold / (mi.how === 'winch' ? 5 : mi.how === 'watch' ? 15 : 2) * 100))}%` : ''}`; if (me.innerHTML !== t) me.innerHTML = t; } else me.hidden = true;
     const hint = F.t < 30 && Hc.ground && !F.mi ? (TOUCH ? '▲ — шаг вверх · джойстик — куда лететь · отпустил — висит' : 'Пробел — вверх, Shift — вниз · стрелки — куда лететь · отпустил — висит') : '';

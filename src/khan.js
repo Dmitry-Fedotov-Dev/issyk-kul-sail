@@ -3,6 +3,7 @@
 // грузится отдельным файлом khan.png, только когда в район летят (основная загрузка игры не растёт).
 // Здесь: ледники Северный и Южный Иныльчек, Хан-Тенгри (7010), пик Победы (7439), озеро Мерцбахера в устье Северного
 // Иныльчека, базовые лагеря на леднике.
+import * as THREE from 'three';
 import { KHAN, KHAN_POI } from './khandata.js';
 import { gridTerrain } from './world.js';
 
@@ -38,4 +39,18 @@ export function loadKhan(scene, url = 'khan.png') {
     res({ mesh, h, hs, grid: { hs, W, H, X0, Y1, STEP }, inside: khanInside, poi }); };
     img.onerror = () => { loading = null; rej(new Error('не загрузился рельеф района Хан-Тенгри')); }; img.src = url; });
   return loading;
+}
+
+// Метель: снег вокруг камеры несётся по ветру (куб 240 м, частицы перескакивают на другую сторону).
+// amount 0..1 -- сила (буран -- 1); wind -- {x, y} м/с в мире
+export function makeSnow(scene, N = 2600) {
+  const pos = new Float32Array(N * 3), S = 240; for (let i = 0; i < N * 3; i++) pos[i] = (Math.random() - 0.5) * S;
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({ color: 0xf4f8ff, size: 1.9, sizeAttenuation: true, transparent: true, opacity: 0, depthWrite: false, fog: false });
+  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; pts.visible = false; scene.add(pts); let t = 0;
+  return { update(dt, cam, wind, amount) { pts.visible = amount > 0.02; mat.opacity = Math.min(0.9, amount); if (!pts.visible) return; t += dt;
+    const a = geo.attributes.position.array, vx = wind.x, vz = -wind.y, hs = S / 2;
+    for (let i = 0; i < N; i++) { const k = i * 3; a[k] += (vx + Math.sin(t * 2 + i) * 2) * dt; a[k + 1] += (-1.5 + Math.sin(t * 3 + i * 0.7) * 1.5) * dt; a[k + 2] += (vz + Math.cos(t * 2.3 + i) * 2) * dt;
+      for (let c = 0; c < 3; c++) { if (a[k + c] > hs) a[k + c] -= S; else if (a[k + c] < -hs) a[k + c] += S; } }
+    geo.attributes.position.needsUpdate = true; pts.position.copy(cam); } };
 }
