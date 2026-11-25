@@ -28,12 +28,16 @@ body.touchdev.heli #hint{bottom:calc(206px + env(safe-area-inset-bottom,0px))}
 #hcoach{left:50%;bottom:calc(210px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);width:min(520px,86vw);background:rgba(8,24,52,.72);border:2px solid #ff8a2a;border-radius:16px;padding:12px 16px;font-size:17px;line-height:1.3;text-align:center;pointer-events:none}
 #hcoach small{display:block;color:#ffb07a;font-size:12px;letter-spacing:.12em;margin-bottom:4px}body:not(.touchdev) #hcoach{bottom:40px}
 #harr{left:50%;top:96px;transform:translateX(-50%);text-align:center;font-size:14px}#harr i{display:inline-block;font-style:normal;font-size:58px;line-height:58px;color:#ff8a2a;-webkit-text-stroke:2px #3a1a00;text-shadow:0 2px 10px rgba(0,0,0,.6)}#harr div{font-weight:700;background:rgba(8,22,48,.55);border-radius:8px;padding:1px 8px;display:inline-block}
+#hpop{left:50%;top:30%;transform:translate(-50%,-50%);text-align:center;font:900 clamp(26px,6vmin,46px) var(--ui);color:#ffd24a;-webkit-text-stroke:2px #3a1a00;text-shadow:0 4px 18px rgba(0,0,0,.55);transition:none}
+#hpop small{display:block;font-size:.42em;color:#fff;-webkit-text-stroke:0}#hpop.go{animation:hpop .9s cubic-bezier(.2,1.6,.4,1) both}@keyframes hpop{0%{transform:translate(-50%,-50%) scale(.3);opacity:0}25%{transform:translate(-50%,-50%) scale(1.15);opacity:1}70%{transform:translate(-50%,-60%) scale(1);opacity:1}100%{transform:translate(-50%,-90%) scale(.95);opacity:0}}
+#hscore{right:calc(max(16px,env(safe-area-inset-right,0px)) + 0px);top:62px;text-align:right;background:rgba(8,22,48,.55);border-radius:12px;padding:4px 10px}#hscore b{font-size:24px}#hscore i{font-style:normal;color:#ffd24a;font-weight:800;margin-left:6px}
+#hcr{left:max(10px,env(safe-area-inset-left,0px));top:118px;width:150px;font-size:12px;background:rgba(8,22,48,.55);border-radius:10px;padding:4px 8px}#hcr .bar{width:100%;margin:3px 0 0}
 #hland{left:50%;top:40%;transform:translateX(-50%);background:rgba(8,22,48,.5);border-radius:10px;padding:4px 12px;font:800 clamp(18px,4vmin,28px) var(--ui);letter-spacing:.05em;text-shadow:0 2px 10px rgba(0,0,0,.7)}#hland.ok{color:#9fe0a0}#hland.go{color:#ffd27a}#hland.bad{color:#ff5a3a}
 `;
 
 export function makeHeliMode(A) {
   const { G, scene, camera, $, store, toast, audio, TOUCH, input, ach, showGame, resetView, fmt } = A;
-  let on = false, built = false, Hc = null, M = null, P = null, prev = null, F = null, boom = null, marks = null, people = null, beacon = null;
+  let on = false, built = false, Hc = null, M = null, P = null, prev = null, F = null, boom = null, marks = null, people = null, beacon = null, reticle = null;
   const v3 = new THREE.Vector3(), cpos = new THREE.Vector3(), clook = new THREE.Vector3(0, 0, -1);
   const H = (x, y) => G.h(x, y);
 
@@ -65,15 +69,19 @@ export function makeHeliMode(A) {
   // снежный вихрь от винта: у земли поток разгоняет снег кольцом из-под вертолёта
   function washTick(dt) { if (!G.spray || Hc.agl > 28 || Hc.crash || F.rpm < 0.6) return; const k = (1 - Hc.agl / 28) * Math.min(1, Hc.power + 0.2), n = Math.round(k * 10 * dt * 60 / 2), gz = H(Hc.X, Hc.Y);
     for (let i = 0; i < n; i++) { const a = Math.random() * 6.283, r = 6 + Math.random() * 10, v = 10 + 14 * k; G.spray.emit(Hc.X + Math.cos(a) * r, gz + 0.5, -(Hc.Y + Math.sin(a) * r), Math.cos(a) * v, 1.5 + Math.random() * 4, -Math.sin(a) * v, 3.5, 1, 1); } }
+  // прицел посадки: тень-кольцо на земле под вертолётом -- видно, куда сядешь; над центром «Н» зеленеет
+  function makeReticle() { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); x.strokeStyle = '#fff'; x.lineWidth = 6; x.beginPath(); x.arc(64, 64, 54, 0, 7); x.stroke(); x.lineWidth = 4;
+    for (let a = 0; a < 4; a++) { const q = a * Math.PI / 2; x.beginPath(); x.moveTo(64 + Math.cos(q) * 40, 64 + Math.sin(q) * 40); x.lineTo(64 + Math.cos(q) * 62, 64 + Math.sin(q) * 62); x.stroke(); } x.fillStyle = 'rgba(0,0,0,.35)'; x.beginPath(); x.arc(64, 64, 30, 0, 7); x.fill();
+    const t = new THREE.CanvasTexture(c), m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, color: 0xffffff })); m.rotation.x = -Math.PI / 2; scene.add(m); m.visible = false; return m; }
   function makeBoom() { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0, depthWrite: false })); m.visible = false; scene.add(m); return { m, t: 0 }; }
 
   function build() { if (built) return; built = true;
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    const w = document.createElement('div'); w.id = 'hwrap'; w.hidden = true; w.innerHTML = '<div id="hhud" class="hud"></div><div id="hwarn" class="hud" hidden></div><div id="hmis" class="hud" hidden></div><div id="harr" class="hud" hidden><i>⬆</i><div></div></div><div id="hland" class="hud" hidden></div><div id="hcoach" class="hud" hidden></div><div id="hcol"><button id="hup">▲</button><button id="hdn">▼</button></div>'; $('game').appendChild(w);
+    const w = document.createElement('div'); w.id = 'hwrap'; w.hidden = true; w.innerHTML = '<div id="hhud" class="hud"></div><div id="hwarn" class="hud" hidden></div><div id="hmis" class="hud" hidden></div><div id="harr" class="hud" hidden><i>⬆</i><div></div></div><div id="hland" class="hud" hidden></div><div id="hcoach" class="hud" hidden></div><div id="hpop" class="hud" hidden></div><div id="hscore" class="hud"></div><div id="hcr" class="hud" hidden></div><div id="hcol"><button id="hup">▲</button><button id="hdn">▼</button></div>'; $('game').appendChild(w);
     for (const [id, k] of [['hup', 'hu'], ['hdn', 'hd']]) { const b = $(id); const set = (v) => (e) => { e.preventDefault(); e.stopPropagation(); input[k] = v; b.classList.toggle('on', v); };
       b.addEventListener('pointerdown', set(true)); b.addEventListener('pointerup', set(false)); b.addEventListener('pointercancel', set(false)); b.addEventListener('pointerleave', set(false)); }
     Hc = new Heli(); M = makeHeli(); scene.add(M.root); M.root.visible = false; boom = makeBoom();
-    marks = new THREE.Group(); scene.add(marks); people = []; beacon = makeBeacon();
+    marks = new THREE.Group(); scene.add(marks); people = []; beacon = makeBeacon(); reticle = makeReticle();
     P = { id: 'heli', name: 'Вы', b: { X: 0, Y: 0, th: 0, speed: 0, base: 0, y: 0, tws: 0, vx: 0, vy: 0 }, model: { root: M.root }, wake: { pts: [], mesh: { visible: false }, reset() {}, update() {} }, time: 0, leg: 0 }; }
 
   // ---- места: площадка (база), лагерь на леднике, люди на склоне ----
@@ -131,11 +139,23 @@ export function makeHeliMode(A) {
     let ok = false; if (m.how === 'land') ok = Hc.ground && d < 45; else if (m.how === 'watch') ok = !Hc.ground && d < 900 && Hc.speed < 8; else ok = !Hc.ground && d < 25 && Hc.agl < 16 && Hc.speed < 4;
     F.hold = ok ? F.hold + dt : Math.max(0, F.hold - dt * 2); M.setWinch(m.how === 'winch' && ok ? Math.min(Hc.agl, F.hold * 6) : 0);
     if (F.hold >= (m.how === 'land' ? 2 : m.how === 'watch' ? 15 : 5)) { F.hold = 0; if (m.load > 0) Hc.load = Math.max(0, Hc.load - m.load); if (m.add) Hc.load += m.add;
+      { const tb = Math.max(0, Math.round(200 - (F.t - (F.legT || 0)) * 0.8)); F.legT = F.t; setTimeout(() => { if (on && tb > 0) score(tb, 'СКОРОСТЬ', 'бонус за время'); }, 1300); }
       for (const s of m.to.folks) s.visible = m.how !== 'winch'; toast(m.done); F.banner = { t: 2.6, txt: m.how === 'winch' ? 'НА БОРТУ ✓' : m.how === 'watch' ? 'СНЯТО ✓' : F.mi === F.mis.length - 1 ? 'ДОМА ✓' : 'ДОСТАВЛЕНО ✓' }; audio.chime && audio.chime(); G.shake = Math.max(G.shake, 0.25); F.mi++;
       if (F.mis[F.mi] && F.mis[F.mi].timer) F.pt = 100;
       if (F.mi >= F.mis.length) { finish('rescue'); } else announce(); } }
   function announce() { const m = F.mis[F.mi]; if (!m) return; audio.chime && audio.chime(); } // текст задания -- в верхней строке (#hmis)
 
+  // ---- очки экипажа: точность, мягкость, бреющий; комбо растёт с чистыми действиями, сгорает на жёсткой посадке ----
+  function score(pts, txt, sub = '') { const k = F.combo; F.score += Math.round(pts * k); F.combo = Math.min(4, +(F.combo + 0.25).toFixed(2)); pop(`+${Math.round(pts * k)} ${txt}`, sub || (k > 1 ? `комбо ×${k.toFixed(2).replace(/\.?0+$/, '')}` : ''));
+    audio.chime && audio.chime(); buzz(25); }
+  function pop(txt, sub = '') { const el = $('hpop'); el.innerHTML = `${txt}${sub ? `<small>${sub}</small>` : ''}`; el.hidden = false; el.classList.remove('go'); void el.offsetWidth; el.classList.add('go'); clearTimeout(pop.t); pop.t = setTimeout(() => { el.hidden = true; }, 950); }
+  const buzz = (ms) => { try { if (TOUCH && navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* нет вибрации -- не страшно */ } };
+  function landingScore(t, mi) { if (!mi || mi.how !== 'land') return; const d = Math.hypot(Hc.X - mi.to.X, Hc.Y - mi.to.Y); if (d > 45) return;
+    if (d < 5) score(300, 'В ЯБЛОЧКО!', `${d.toFixed(1)} м от центра`); else if (d < 15) score(150, 'ТОЧНО', `${Math.round(d)} м от центра`); else score(50, 'В КРУГЕ');
+    if (t.vz < 0.8) setTimeout(() => { if (on) score(120, 'ПЁРЫШКО', `${t.vz.toFixed(1)} м/с`); }, 700); else if (t.vz < 1.6) setTimeout(() => { if (on) score(50, 'МЯГКО'); }, 700); }
+  function skillTick(dt) { // бреющий: ниже 30 м над землёй на скорости -- очки капают, пока не трусишь
+    const low = !Hc.ground && Hc.agl < 30 && Hc.speed > 25; F.lowT = low ? (F.lowT || 0) + dt : 0;
+    if (low && F.lowT > 2 && (F.lowAcc = (F.lowAcc || 0) + dt) >= 2) { F.lowAcc = 0; score(25, 'БРЕЮЩИЙ', `${Math.round(Hc.agl)} м над землёй`); } }
   // ---- инструктаж (первые вылеты): шаг -- текст и условие, засчитывается по факту ----
   const COACH = [
     { t: () => TOUCH ? 'Зажмите <b>▲</b> справа — шаг вверх: вертолёт оторвётся от льда' : 'Зажмите <b>Пробел</b> — шаг вверх: вертолёт оторвётся от льда', ok: () => !Hc.ground && Hc.agl > 12 },
@@ -150,7 +170,7 @@ export function makeHeliMode(A) {
     if (prev && prev.model && prev.model.root) prev.model.root.visible = false; if (prev && prev.wake && prev.wake.mesh) prev.wake.mesh.visible = false;
     G.player = P; G.race = null; G.mode = 'heli'; M.root.visible = true; boom.m.visible = false; marks.visible = true;
     document.body.classList.add('heli'); document.body.classList.remove('motor', 'para', 'jet'); $('hwrap').hidden = false; $('mark').hidden = true; $('result').hidden = true; $('brief').hidden = true;
-    F = { t: 0, ended: false, msg: {}, mis: [], mi: 0, hold: 0, crashT: 0, rpm: 0, camD: 34, coach: store.get('heliCoach') ? undefined : 0, cam: null, touches: 0, hard: 0, soft: 0, wasGround: true }; showGame(true); resetView(); G.cam = 0; camInit = false; }
+    F = { t: 0, ended: false, msg: {}, mis: [], mi: 0, hold: 0, crashT: 0, rpm: 0, camD: 34, coach: store.get('heliCoach') ? undefined : 0, cam: null, score: 0, combo: 1, lowT: 0, touches: 0, hard: 0, soft: 0, wasGround: true }; showGame(true); resetView(); G.cam = 0; camInit = false; }
   function startFree(mode = '') { begin(); F.mis = missions(mode); const b = F.base;
     if (mode === 'merz' && G.merz) { const o = G.merz.out, c = G.merz.center, a = Math.atan2(c.X - o.X, c.Y - o.Y), X = c.X + Math.sin(a) * 600, Y = c.Y + Math.cos(a) * 600;
       Hc.reset(X, Y, Math.max(H(X, Y), G.merz.top) + 150, a + Math.PI, false); Hc.load = 0; F.mi = 0; toast('Озеро Мерцбахера. Слышите? Это лёд'); return; }
@@ -159,7 +179,7 @@ export function makeHeliMode(A) {
     { let px = b.X, py = b.Y, L = 0; for (const m of F.mis) { L += Math.hypot(m.to.X - px, m.to.Y - py); px = m.to.X; py = m.to.Y; } F.par = Math.round(L / 45 + 75 * F.mis.length); } // норматив: 160 км/ч по прямой + минута с четвертью на каждую точку
     const cl = hoverCeiling(Hc.mass); toast(G.khan ? `База ${Math.round(b.z + 1607)} м · висеть можно до ${Math.round(cl)} м` : 'Ми-8 на площадке. Пробел — шаг вверх, стрелки — куда лететь');
     setTimeout(() => { if (on) announce(); }, 4500); }
-  function stop() { if (!on) return; on = false; M.root.visible = false; marks.visible = false; beacon.g.visible = false; boom.m.visible = false; document.body.classList.remove('heli'); $('hwrap').hidden = true; camera.up.set(0, 1, 0);
+  function stop() { if (!on) return; on = false; M.root.visible = false; marks.visible = false; beacon.g.visible = false; reticle.visible = false; boom.m.visible = false; document.body.classList.remove('heli'); $('hwrap').hidden = true; camera.up.set(0, 1, 0);
     $('hint').hidden = true; $('mark').hidden = true; audio.jet && audio.jet(0, 0, false); audio.airflow(0, 0, 0, false); input.hu = input.hd = false; if (prev) G.player = prev; F = null; }
 
   // ---- ветер: общий поток растёт с высотой, на гребнях сильнее; у склонов -- подъём на наветренной стороне,
@@ -196,7 +216,11 @@ export function makeHeliMode(A) {
     const c = ctl(), steps = Math.max(1, Math.ceil(dt / (1 / 120))); for (let i = 0; i < steps; i++) Hc.step(dt / steps, c, H, wind);
     Hc.fuel = Math.max(200, Hc.fuel - dt * (0.12 + 0.18 * Hc.power)); // ~800 кг/ч на висении
     if (Hc.crash) { startCrash(); return; }
-    if (Hc.touch) { const t = Hc.touch; Hc.touch = null; F.touches = (F.touches || 0) + 1; if (t.vz > 2.5) { F.hard = (F.hard || 0) + 1; G.shake = 0.8; toast('Жёстко! Аккуратнее с шагом'); } else if (t.vz < 1) { F.soft = (F.soft || 0) + 1; toast('Мягко, как пёрышко'); } }
+    if (Hc.touch) { const t = Hc.touch; Hc.touch = null; F.touches = (F.touches || 0) + 1; buzz(t.vz > 2.5 ? [60, 40, 60] : 35);
+      if (t.vz > 2.5) { F.hard = (F.hard || 0) + 1; F.combo = 1; G.shake = 0.8; pop('ЖЁСТКО!', 'комбо сгорело'); } else { if (t.vz < 1) F.soft = (F.soft || 0) + 1; landingScore(t, F.mis[F.mi]); G.shake = Math.max(G.shake, 0.18); } }
+    if (Hc.heatHit) { Hc.heatHit = false; pop('ПЕРЕГРЕВ!', 'мощность −20% на 15 с'); buzz([80, 50, 80, 50, 80]); }
+    if (Hc.crOn && !F.crWas) { pop('ЧР', 'чрезвычайный режим · +12% тяги'); buzz(40); } F.crWas = Hc.crOn;
+    skillTick(dt);
     if (F.wasGround && !Hc.ground) { G.shake = Math.max(G.shake, 0.45); audio.thump && audio.thump(0.35); } F.wasGround = Hc.ground; // отрыв -- вздрогнул и пошёл
     missionTick(dt); coachTick(dt); washTick(dt);
     { const mi = F.mis[F.mi]; beaconTick(dt, mi ? mi.to : null, mi ? Math.hypot(Hc.X - mi.to.X, Hc.Y - mi.to.Y) : 0); if (mi) F.wv = wind(mi.to.X, mi.to.Y, mi.to.z + 50); }
@@ -208,7 +232,8 @@ export function makeHeliMode(A) {
   function finish(kind) { if (F.ended) return; F.ended = true; let h = '', s = '';
     if (kind === 'rescue') { // звёзды: время против норматива, мягкость посадок, состояние пострадавших
       const par = F.par || 600, st = 1 + (F.t < par ? 1 : 0) + ((F.hard || 0) === 0 && (F.pt === undefined || F.pt > 40) ? 1 : 0), best = store.get('heliBest') || 0; if (st > best) store.set('heliBest', st);
-      h = `${'★'.repeat(st)}${'☆'.repeat(3 - st)} Спасательная операция`; s = `Время ${fmt(F.t)} (норматив ${fmt(par)}) · жёстких посадок ${F.hard || 0}${F.pt !== undefined ? ` · состояние пострадавших ${Math.round(F.pt)}%` : ''} · топливо ${Math.round(Hc.fuel)} кг`; }
+      const sc = F.score + Math.round((F.pt ?? 100) * 3), rec = sc > (store.get('heliScore') || 0); if (rec) store.set('heliScore', sc);
+      h = `${'★'.repeat(st)}${'☆'.repeat(3 - st)} ${sc} очков${rec ? ' · рекорд!' : ''}`; s = `Время ${fmt(F.t)} (норматив ${fmt(par)}) · жёстких посадок ${F.hard || 0}${F.pt !== undefined ? ` · состояние пострадавших ${Math.round(F.pt)}%` : ''} · топливо ${Math.round(Hc.fuel)} кг`; }
     else { h = 'Авария'; s = 'Горы не прощают ошибок шага. Ещё раз?'; }
     $('rh').textContent = h; $('rs').textContent = s; $('rt').innerHTML = ''; $('ragain').textContent = 'Ещё вылет'; setTimeout(() => { if (on) $('result').hidden = false; }, 1200); }
 
@@ -227,7 +252,12 @@ export function makeHeliMode(A) {
     // камера на пружине: тяжёлая машина «уезжает» при разгоне и наклоняет горизонт в вираже -- масса чувствуется
     if (!F.cam) F.cam = v3.clone(); else { const k = Math.min(1, dt * 3.2); F.cam.lerp(v3, k); } if (F.cam.distanceTo(v3) > d * 1.5) F.cam.copy(v3);
     camera.position.copy(F.cam); camera.position.x += jx; camera.position.y += jy; camera.up.set(-Math.sin(Hc.roll) * 0.22 * Math.cos(Hc.th), 1, -Math.sin(Hc.roll) * 0.22 * Math.sin(Hc.th)).normalize(); camera.lookAt(cpos.set(Hc.X, Hc.Z + 3, -Hc.Y).addScaledVector(clook, 12));
-    camera.fov += (58 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
+    // FOV: скорость и рывок разгона растягивают кадр -- чувство мощи; ЧР -- ещё шире
+    const acc = Math.hypot(Hc.vx - (F.pvx ?? Hc.vx), Hc.vy - (F.pvy ?? Hc.vy)) / Math.max(dt, 1e-3); F.pvx = Hc.vx; F.pvy = Hc.vy; F.kick = Math.max((F.kick || 0) - dt * 1.5, Math.min(1, acc / 6));
+    camera.fov += (56 + Math.min(10, Hc.speed * 0.13) + F.kick * 5 + Hc.cr * 4 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix();
+    // прицел посадки на земле
+    if (reticle) { const show = !Hc.crash && Hc.agl < 120 && Hc.agl > 0.8; reticle.visible = show; if (show) { const gz = H(Hc.X, Hc.Y), mi = F.mis[F.mi], d = mi ? Math.hypot(Hc.X - mi.to.X, Hc.Y - mi.to.Y) : 99, sc = 14 + Hc.agl * 0.12;
+      reticle.position.set(Hc.X, gz + 0.4, -Hc.Y); reticle.scale.set(sc, sc, 1); reticle.material.color.setHex(d < 5 ? 0x6cff7a : d < 15 ? 0xffe14a : 0xffffff); reticle.material.opacity = 0.35 + 0.5 * (1 - Hc.agl / 120); } } }
   function resetCam() { camInit = false; camera.up.set(0, 1, 0); }
 
   // ---- приборы: скорость, высоты, вертикальная, масса и запас тяги, обороты, топливо ----
@@ -239,7 +269,9 @@ export function makeHeliMode(A) {
     $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>км/ч</small></div><div class="r"><b>${alt}</b> м над морем · ${agl} м над землёй · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)} м/с</div>
       <div class="r">шаг<span class="bar"><i class="${cls}" style="width:${Math.round(Math.min(1, pw) * 100)}%"></i></span>${Math.round(pw * 100)}% · обороты ${Math.round(Hc.rpm * 95)}%</div>
       <div class="r">масса <b>${(m / 1000).toFixed(1)}</b> т · тяга/вес <b>${tw.toFixed(2)}</b>${Hc.ige > 0.03 ? ' · подушка' : ''} · топливо ${Math.round(Hc.fuel)} кг</div>`;
-    const w = Hc.crash ? '' : (F.wU || 0) > 30 && G.frame % 120 < 60 ? `ВЕТЕР ${Math.round(F.wU)} М/С` : Hc.gpws ? 'ЗЕМЛЯ! ВВЕРХ ▲' : Hc.warn === 'rpm' ? 'ОБОРОТЫ! СБРОСЬ ШАГ' : Hc.warn === 'vrs' ? 'ВИХРЕВОЕ КОЛЬЦО — СКОРОСТЬ ВПЕРЁД' : Hc.warn === 'power' ? 'МОЩНОСТИ НЕ ХВАТАЕТ' : '';
+    $('hscore').innerHTML = `<b>${F.score}</b>${F.combo > 1 ? `<i>×${F.combo.toFixed(2).replace(/\.?0+$/, '')}</i>` : ''}<br><small>рекорд ${store.get('heliScore') || 0}</small>`;
+    { const cr = $('hcr'), show = Hc.cr > 0.05 || Hc.heat > 0.02 || Hc.hot > 0; cr.hidden = !show; if (show) cr.innerHTML = `${Hc.hot > 0 ? `ПЕРЕГРЕВ · ${Math.ceil(Hc.hot)} с` : Hc.crOn ? '<b style="color:#ff8a2a">ЧР</b> · +12% тяги' : 'двигатели остывают'}<span class="bar"><i class="${Hc.heat > 0.75 ? 'red' : Hc.heat > 0.45 ? 'hot' : ''}" style="width:${Math.round(Hc.heat * 100)}%"></i></span>`; }
+    const w = Hc.crash ? '' : (F.wU || 0) > 30 && G.frame % 120 < 60 ? `ВЕТЕР ${Math.round(F.wU)} М/С` : Hc.gpws ? 'ЗЕМЛЯ! ВВЕРХ ▲' : Hc.warn === 'hot' ? '' : Hc.warn === 'rpm' ? 'ОБОРОТЫ! СБРОСЬ ШАГ' : Hc.warn === 'vrs' ? 'ВИХРЕВОЕ КОЛЬЦО — СКОРОСТЬ ВПЕРЁД' : Hc.warn === 'power' ? 'МОЩНОСТИ НЕ ХВАТАЕТ' : '';
     const wl = $('hwarn'); if (wl.textContent !== w) wl.textContent = w; wl.hidden = !w; if (w && audio.beep && G.frame % 18 === 0) audio.beep(true);
     const mi = F.mis[F.mi], me = $('hmis'); guide(mi); if (mi) { me.hidden = false; const t = `<b>${mi.t}</b>${mi.timer && F.pt !== undefined ? ` · <span style="color:${F.pt > 50 ? '#9fe0a0' : F.pt > 25 ? '#ffd27a' : '#ff5a3a'}">состояние ${Math.round(F.pt)}%</span>` : ''}<br>${mi.d}${F.hold > 0.2 ? ` · ${mi.how === 'winch' ? 'лебёдка' : mi.how === 'watch' ? 'съёмка' : 'выгрузка'} ${Math.min(100, Math.round(F.hold / (mi.how === 'winch' ? 5 : mi.how === 'watch' ? 15 : 2) * 100))}%` : ''}`; if (me.innerHTML !== t) me.innerHTML = t; } else me.hidden = true;
     const hint = F.coach === undefined && F.t < 30 && Hc.ground && !F.mi ? (TOUCH ? '▲ — шаг вверх · джойстик — куда лететь · отпустил — висит' : 'Пробел — вверх, Shift — вниз · стрелки — куда лететь · отпустил — висит') : '';

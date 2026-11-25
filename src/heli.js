@@ -25,7 +25,7 @@ export const MI8 = {
   Vmax: 70, Vcr: 64,                               // м/с: 250 и 230 км/ч
   cd: 0.00065,                                     // вредное сопротивление на массу, 1/м: на наклоне 18° -- ~250 км/ч
   pitchMax: 0.32, rollMax: 0.55, yawRate: 0.7,     // рад, рад, рад/с
-  tau: 0.55,                                       // с -- запаздывание ориентации (тяжёлая машина)
+  tau: 0.38,                                       // с -- запаздывание ориентации: тяжёлая, но отвечает сразу
 };
 const g = 9.81, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 export const sigma = (asl) => Math.pow(Math.max(0.05, 1 - 2.2558e-5 * asl), 4.2559); // плотность по МСА (доля от уровня моря)
@@ -34,7 +34,7 @@ export class Heli {
   constructor() { this.reset(0, 0, 0, 0); this.load = 0; }
   // th -- курс (0 -- север, по часовой)
   reset(X, Y, Z, th, ground = true) {
-    Object.assign(this, { floor: -1e9, gpws: false, X, Y, Z, th, vx: 0, vy: 0, vz: 0, pitch: 0, roll: 0, yr: 0, col: ground ? 0 : 0.85, rpm: 1, T: 0, Tmax: 0, power: 0, ground, crash: null,
+    Object.assign(this, { cr: 0, heat: 0, hot: 0, crOn: false, floor: -1e9, gpws: false, X, Y, Z, th, vx: 0, vy: 0, vz: 0, pitch: 0, roll: 0, yr: 0, col: ground ? 0 : 0.85, rpm: 1, T: 0, Tmax: 0, power: 0, ground, crash: null,
       vrs: 0, ige: 0, etl: 0, agl: 0, sig: 1, t: 0, fuel: MI8.fuel, warn: '', shake: 0, touch: null, hold: Z, tb: 0 });
     if (!ground) { this.hold = Z; } return this; }
   get mass() { return MI8.empty + MI8.crew + this.fuel + this.load; }
@@ -54,13 +54,19 @@ export class Heli {
     // на скорости ручка вбок -- вираж: крен и разворот по курсу; на месте -- педали (разворот на месте)
     const fast = strafe ? 0 : sm(8, 22, Vair); rT = rT * (1 - fast) + s * P.rollMax * fast;
     const yr = (strafe ? 0 : s * P.yawRate * (1 - fast)) + (fast > 0 ? g * Math.tan(this.roll) / Math.max(Vair, 12) * fast : 0);
-    const k = Math.min(1, dt / P.tau); this.pitch += (pT - this.pitch) * k; this.roll += (rT - this.roll) * k; this.yr += (yr - this.yr) * Math.min(1, dt * 2.5);
+    // ориентация -- пружина с лёгким перехлёстом (ζ 0.62): рванул ручку -- нос клюнул чуть дальше и вернулся
+    const om = 1.9 / P.tau, ze = 0.62; this.pv = (this.pv || 0) + ((pT - this.pitch) * om * om - 2 * ze * om * (this.pv || 0)) * dt; this.rv = (this.rv || 0) + ((rT - this.roll) * om * om - 2 * ze * om * (this.rv || 0)) * dt;
+    this.pitch += this.pv * dt; this.roll += this.rv * dt; this.yr += (yr - this.yr) * Math.min(1, dt * 2.5);
     if (!this.ground) this.th += this.yr * dt;
     // ---- тяга: что может винт здесь и сейчас ----
     const D = P.D, ige = this.agl < D ? 0.18 * Math.exp(-Math.max(0, this.agl) / (0.45 * D)) : 0;                      // влияние земли
     const etl = 0.16 * sm(8, 22, Vair) - 0.10 * sm(55, 75, Vair);                                                        // косая обдувка
     const vrs = sm(3.5, 7, -az) * (1 - sm(9, 16, Vair)) * sm(0.35, 0.7, this.col); this.vrs += (vrs - this.vrs) * Math.min(1, dt * 1.5); // вихревое кольцо
-    const Tcap = P.T0 * g * sig * (1 + ige + etl) * (1 - 0.42 * this.vrs);                                               // Н
+    // ЧР -- чрезвычайный режим двигателей (как у настоящего ТВ3-117): ▲ до упора на пределе мощности -- +12% тяги,
+    // но растёт перегрев; перегрел -- 15 с мощность на 20% меньше. Риск по выбору лётчика
+    const wantCR = up > 0.6 && (this.col > 0.97 || this.ground) && this.hot <= 0; this.crOn = wantCR; this.cr += ((wantCR ? 1 : 0) - this.cr) * Math.min(1, dt * 3);
+    this.heat = clamp(this.heat + (wantCR ? dt / 9 : -dt / 14), 0, 1); if (this.heat >= 1 && this.hot <= 0) { this.hot = 15; this.heatHit = true; } this.hot = Math.max(0, this.hot - dt);
+    const Tcap = P.T0 * g * sig * (1 + ige + etl) * (1 - 0.42 * this.vrs) * (1 + 0.12 * this.cr) * (this.hot > 0 ? 0.8 : 1);                                               // Н
     this.ige = ige; this.etl = etl;
     // шаг-газ: автомат держит вертикальную скорость (отпустил -- высоту); тяга, нужная для этого
     const cz = Math.cos(this.pitch) * Math.cos(this.roll);
@@ -79,7 +85,7 @@ export class Heli {
     // предел мощности: просим больше, чем есть, -- обороты падают, тяга не растёт
     const over = clamp((this.overT - 1.5) / 2, 0, 1); this.rpm += ((1 - over * 0.12) - this.rpm) * Math.min(1, dt * 1.2); this.rpm = clamp(this.rpm, 0.85, 1);
     const T = Math.min(this.col, 1) * Tcap * Math.min(1, this.rpm * this.rpm / 0.94 + 0.06 * (this.rpm > 0.97)); this.T = T; this.Tmax = Tcap; this.power = this.col;
-    this.warn = this.rpm < 0.96 ? 'rpm' : this.vrs > 0.4 ? 'vrs' : demand > 0.97 && !this.ground ? 'power' : '';
+    this.warn = this.hot > 0 ? 'hot' : this.rpm < 0.96 ? 'rpm' : this.vrs > 0.4 ? 'vrs' : demand > 0.97 && !this.ground ? 'power' : '';
     // ---- силы ----
     // ось винта: тангаж наклоняет вперёд (pitch < 0 -- нос вниз, тяга вперёд), крен -- вбок
     const tx = -Math.sin(this.pitch) * fx + Math.sin(this.roll) * fy, ty = -Math.sin(this.pitch) * fy - Math.sin(this.roll) * fx, tz = cz;
