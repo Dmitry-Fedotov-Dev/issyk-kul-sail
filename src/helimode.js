@@ -1,11 +1,9 @@
 // Режим «Ми-8 МЧС»: спасатели высокогорья. Район Хан-Тенгри -- база на леднике Южный Иныльчек; у Иссык-Куля --
 // площадка старого аэродрома Чолпон-Аты.
-// Управление -- как у самолёта: намерение у лётчика, рутина у автоматики (heli.js):
-//   ← → / ↑ ↓ (джойстик) -- ручка: куда лететь; отпустил -- зависание. Пробел (▲) -- вверх, Shift (▼) -- вниз,
-//   отпустил -- держит высоту, если хватает мощности.
-// Спасработы: задание -- в лагерь или к людям на склоне. Сесть рядом (до 40 м) или зависнуть над ними низко (до 15 м
-// над землёй, до 25 м в сторону) -- лебёдка: 5 секунд держать место. Груз и люди -- это масса: на высоте
-// вертолёту её может не хватить.
+// Управление -- аркадное, как в San Andreas, только проще (heli.js): ручка наклоняет машину (вперёд -- разгон, на себя --
+// тормоз, вбок -- вираж), Пробел/▲ -- вверх, Shift/▼ -- вниз; отпустил -- висит, но катится по инерции.
+// Ветер -- слоями по высоте (западный перенос, ледниковый сток), порывы видно по снежным струям и позёмке.
+// Спасработы: сесть в круг «Н» -- или лебёдка: трос-маятник, крюк навести на человека, поднять ровно, не ударив о склон.
 import * as THREE from 'three';
 import { Heli, MI8, hoverCeiling } from './heli.js';
 import { makeHeli } from './helimodel.js';
@@ -13,6 +11,7 @@ import { NPCART } from './npcart.js';
 import { KCAMPS } from './khanosm.js';
 import { clamp, wrapPi } from './sim.js';
 
+const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const AIRPORT = { X: -4385, Y: 1809 };
 const CSS = `
 body.heli #speed>b,body.heli #speed>small,body.heli #pos,body.heli #wear,body.heli #dialwrap,body.heli #race,body.heli #bpro,body.heli #bfoot{display:none!important}body.heli #tools{position:fixed;right:max(16px,env(safe-area-inset-right,0px));top:12px}
@@ -135,14 +134,49 @@ export function makeHeliMode(A) {
     pts.push({ t: 'Эвакуация', d: 'Две туристки замерзают в лагере 2 на 5200 м — сесть нельзя, лебёдкой на борт', timer: true, to: c2, add: 2 * 60, how: 'winch', done: 'Обе на борту! Тяжелее на 120 кг — на высоте это чувствуется' });
     pts.push({ t: 'На базу', d: 'В базовый лагерь Южный Иныльчек — врачи ждут', to: b, how: 'land', done: 'Спасены. Экипаж МЧС — благодарность' });
     return pts; }
-  function missionTick(dt) { const m = F.mis[F.mi]; if (!m) return; const dx = Hc.X - m.to.X, dy = Hc.Y - m.to.Y, d = Math.hypot(dx, dy);
-    let ok = false; if (m.how === 'land') ok = Hc.ground && d < 45; else if (m.how === 'watch') ok = !Hc.ground && d < 900 && Hc.speed < 8; else ok = !Hc.ground && d < 25 && Hc.agl < 16 && Hc.speed < 4;
-    F.hold = ok ? F.hold + dt : Math.max(0, F.hold - dt * 2); M.setWinch(m.how === 'winch' && ok ? Math.min(Hc.agl, F.hold * 6) : 0);
-    if (F.hold >= (m.how === 'land' ? 2 : m.how === 'watch' ? 15 : 5)) { F.hold = 0; if (m.load > 0) Hc.load = Math.max(0, Hc.load - m.load); if (m.add) Hc.load += m.add;
-      { const tb = Math.max(0, Math.round(200 - (F.t - (F.legT || 0)) * 0.8)); F.legT = F.t; setTimeout(() => { if (on && tb > 0) score(tb, 'СКОРОСТЬ', 'бонус за время'); }, 1300); }
-      for (const s of m.to.folks) s.visible = m.how !== 'winch'; toast(m.done); F.banner = { t: 2.6, txt: m.how === 'winch' ? 'НА БОРТУ ✓' : m.how === 'watch' ? 'СНЯТО ✓' : F.mi === F.mis.length - 1 ? 'ДОМА ✓' : 'ДОСТАВЛЕНО ✓' }; audio.chime && audio.chime(); G.shake = Math.max(G.shake, 0.25); F.mi++;
-      if (F.mis[F.mi] && F.mis[F.mi].timer) F.pt = 100;
-      if (F.mi >= F.mis.length) { finish('rescue'); } else announce(); } }
+  function missionTick(dt) { const m = F.mis[F.mi]; M.setWinch(0); if (!m) { winchDraw(null); return; } const dx = Hc.X - m.to.X, dy = Hc.Y - m.to.Y, d = Math.hypot(dx, dy);
+    if (m.how === 'winch') { winchTick(dt, m, d); return; } winchDraw(null);
+    let ok = false; if (m.how === 'land') ok = Hc.ground && d < 45; else if (m.how === 'watch') ok = !Hc.ground && d < 900 && Hc.speed < 8;
+    F.hold = ok ? F.hold + dt : Math.max(0, F.hold - dt * 2);
+    if (F.hold >= (m.how === 'land' ? 2 : 15)) complete(m); }
+  function complete(m) { F.hold = 0; F.w = null; if (m.load > 0) Hc.load = Math.max(0, Hc.load - m.load); if (m.add && m.how !== 'winch') Hc.load += m.add;
+    { const tb = Math.max(0, Math.round(200 - (F.t - (F.legT || 0)) * 0.8)); F.legT = F.t; setTimeout(() => { if (on && tb > 0) score(tb, 'СКОРОСТЬ', 'бонус за время'); }, 1300); }
+    toast(m.done); F.banner = { t: 2.6, txt: m.how === 'winch' ? 'ВСЕ НА БОРТУ ✓' : m.how === 'watch' ? 'СНЯТО ✓' : F.mi === F.mis.length - 1 ? 'ДОМА ✓' : 'ДОСТАВЛЕНО ✓' }; audio.chime && audio.chime(); G.shake = Math.max(G.shake, 0.25); F.mi++;
+    if (F.mis[F.mi] && F.mis[F.mi].timer) F.pt = 100;
+    if (F.mi >= F.mis.length) { finish('rescue'); } else announce(); }
+  // ---- лебёдка: трос -- маятник. Порыв и резкие движения вертолёта раскачивают человека; крюк надо навести на него,
+  // поднимать ровно (ровно -- быстрее), не бить о склон. Каждый человек -- отдельный подъём ----
+  const wA = new THREE.Vector3(), wUp = new THREE.Vector3(0, 1, 0);
+  let rope = null;
+  function winchDraw(W, A) { if (!rope) { const mat = new THREE.MeshBasicMaterial({ color: 0x1c1c22 }); rope = { r: new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 5), mat), h: new THREE.Mesh(new THREE.SphereGeometry(0.4, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff7a1a })) }; rope.r.geometry.translate(0, 0.5, 0); scene.add(rope.r, rope.h); }
+    const show = !!(W && W.L > 0.4 && A); rope.r.visible = rope.h.visible = show; if (!show) return;
+    const bx = W.p[0], by = W.p[2], bz = -W.p[1]; rope.h.position.set(bx, by, bz); rope.r.position.set(bx, by, bz); v3.set(A.x - bx, A.y - by, A.z - bz); const L = v3.length(); rope.r.scale.set(1, Math.max(0.01, L), 1); rope.r.quaternion.setFromUnitVectors(wUp, v3.normalize()); }
+  function winchTick(dt, m, d) { const W = F.w || (F.w = { L: 0, ph: 'idle', p: [0, 0, 0], v: [0, 0, 0], sw: 0, maxSw: 0, hitT: 0, init: false });
+    M.root.updateMatrixWorld(true); M.winch.getWorldPosition(wA); const AX = wA.x, AY = -wA.z, AZ = wA.y;
+    const g = m.to.g.position, left = m.to.folks.filter((f) => !f.userData.up), wpos = (f) => [g.x + f.position.x, -(g.z + f.position.z), g.y + f.position.y];
+    const T = W.who || left[0], tp = T ? wpos(T) : null, inRange = !Hc.ground && d < 70 && Hc.agl < 50;
+    if (W.ph === 'idle' && inRange && left.length) W.ph = 'lower';
+    if (W.ph === 'lower') { if (!inRange) W.ph = 'idle'; W.L = Math.min(W.L + dt * 6, Math.max(2, Hc.agl + 3), 52); }
+    if (W.ph === 'idle') W.L = Math.max(0, W.L - dt * 8);
+    if (W.L <= 0.4) { W.init = false; winchDraw(null); return; }
+    if (!W.init) { W.p = [AX, AY, AZ - W.L]; W.v = [Hc.vx, Hc.vy, 0]; W.init = true; }
+    // маятник: тяжесть, ветер (человек парусит сильнее пустого крюка), трос не растягивается
+    const b = WB, n = 4, h = dt / n, kd = W.who ? 0.2 : 0.07; let gzB = 0;
+    for (let k = 0; k < n; k++) { gustAt(W.p[0], W.p[1], W.p[2], gq); const wx = b.x + gq.x, wy = b.y + gq.y;
+      W.v[0] += kd * (wx - W.v[0]) * h; W.v[1] += kd * (wy - W.v[1]) * h; W.v[2] += (-9.81 - kd * W.v[2]) * h; for (let j = 0; j < 3; j++) W.p[j] += W.v[j] * h;
+      const rx = W.p[0] - AX, ry = W.p[1] - AY, rz = W.p[2] - AZ, r = Math.hypot(rx, ry, rz);
+      if (r > W.L) { const ux = rx / r, uy = ry / r, uz = rz / r, vr = W.v[0] * ux + W.v[1] * uy + W.v[2] * uz; W.p[0] = AX + ux * W.L; W.p[1] = AY + uy * W.L; W.p[2] = AZ + uz * W.L; if (vr > 0) { W.v[0] -= vr * ux; W.v[1] -= vr * uy; W.v[2] -= vr * uz; } }
+      gzB = H(W.p[0], W.p[1]) + 0.3; if (W.p[2] < gzB) { const vh = Math.hypot(W.v[0], W.v[1], W.v[2]);
+        if (W.ph === 'raise' && vh > 4 && W.hitT <= 0 && W.L > 5) { W.hitT = 1.2; F.pt = Math.max(0, (F.pt ?? 100) - 8); F.combo = 1; pop('УДАР О СКЛОН!', 'держи ровнее · −8% состояния'); buzz([60, 40, 60]); G.shake = Math.max(G.shake, 0.35); }
+        W.p[2] = gzB; if (W.v[2] < 0) W.v[2] = 0; W.v[0] *= 0.85; W.v[1] *= 0.85; } }
+    W.hitT -= dt; { const rx = W.p[0] - AX, ry = W.p[1] - AY; W.sw = Math.atan2(Math.hypot(rx, ry), Math.max(0.1, AZ - W.p[2])); }
+    if (W.ph === 'lower' && tp && Math.hypot(W.p[0] - tp[0], W.p[1] - tp[1]) < 4.5 && W.p[2] - tp[2] < 3) { W.ph = 'raise'; W.who = T; W.maxSw = 0; W.first = W.first ?? true; score(W.first ? 120 : 60, 'ЗАЦЕП!', W.first ? 'с первого захода' : ''); buzz([30, 30, 30]); audio.thump && audio.thump(0.2); }
+    if (W.ph === 'raise') { W.maxSw = Math.max(W.maxSw, W.sw); const steady = W.sw < 0.17; W.L = Math.max(0, W.L - dt * (steady ? 2.8 : 1.3));
+      W.who.position.set(W.p[0] - g.x, W.p[2] - 1.75 - g.y, -W.p[1] - g.z);
+      if (W.L <= 2.2) { const who = W.who; who.userData.up = true; who.visible = false; Hc.load += (m.add || 0) / m.to.folks.length; const rest = left.length - 1; W.who = null; W.ph = rest ? 'lower' : 'idle'; W.first = false;
+        if (W.maxSw < 0.26) score(250, 'ЧИСТЫЙ ПОДЪЁМ', rest ? `ещё ${rest} внизу` : 'без раскачки'); else score(100, 'НА БОРТУ', rest ? `ещё ${rest} внизу` : '');
+        if (!rest) { W.L = 0; winchDraw(null); complete(m); return; } } }
+    wA.set(AX, AZ, -AY); winchDraw(W, wA); }
   function announce() { const m = F.mis[F.mi]; if (!m) return; audio.chime && audio.chime(); } // текст задания -- в верхней строке (#hmis)
 
   // ---- очки экипажа: точность, мягкость, бреющий; комбо растёт с чистыми действиями, сгорает на жёсткой посадке ----
@@ -160,9 +194,10 @@ export function makeHeliMode(A) {
   const COACH = [
     { t: () => TOUCH ? 'Зажмите <b>▲</b> справа — шаг вверх: вертолёт оторвётся от льда' : 'Зажмите <b>Пробел</b> — шаг вверх: вертолёт оторвётся от льда', ok: () => !Hc.ground && Hc.agl > 12 },
     { t: () => 'Отпустите — автомат <b>держит высоту</b> и висит на месте', ok: () => !(input.bar || input.hu) && Math.abs(Hc.vz) < 1 && Hc.agl > 8, hold: 1.5 },
-    { t: () => `Оранжевый <b>столб дыма</b> — цель. ${TOUCH ? 'Джойстик вперёд' : 'Стрелка ↑'} — летим к ней`, ok: () => Hc.speed > 15 },
-    { t: () => `${TOUCH ? 'Джойстик' : 'Стрелки'} в сторону — <b>поворот</b>. Куда тянете — туда и летит`, ok: () => Math.abs(wrapPi(Hc.th - (F.c0 ?? Hc.th))) > 0.4 },
-    { t: () => `У цели <b>отпустите</b> — затормозит сам. ${TOUCH ? '<b>▼</b>' : '<b>Shift</b>'} — вниз, садитесь в круг «Н»`, ok: () => F.mi >= 1 } ];
+    { t: () => `${TOUCH ? 'Джойстик вперёд' : 'Стрелка ↑'} — <b>наклон носа</b>: машина поехала. Цель — оранжевый столб дыма`, ok: () => Hc.speed > 18 },
+    { t: () => `${TOUCH ? 'Джойстик' : 'Стрелки'} в сторону — <b>вираж</b>: машина ложится в поворот`, ok: () => Math.abs(wrapPi(Hc.th - (F.c0 ?? Hc.th))) > 0.5 },
+    { t: () => `${TOUCH ? 'Джойстик на себя' : 'Стрелка ↓'} — <b>тормоз</b>: нос вверх, машину тянет назад. Отпустите — покатится по инерции`, ok: () => (F.cv = Math.max(F.cv || 0, Hc.speed)) > 15 && Hc.speed < 5 },
+    { t: () => `Видите <b>белые струи</b>? Это ветер. Плотная полоса — <b>порыв</b>: бросает машину. ${TOUCH ? '<b>▼</b>' : '<b>Shift</b>'} — вниз, садитесь в круг «Н»`, ok: () => F.mi >= 1 } ];
   function coachTick(dt) { const el = $('hcoach'); if (F.coach === undefined || F.coach >= COACH.length) { el.hidden = true; return; }
     const st = COACH[F.coach]; if (F.cStep !== F.coach) { F.cStep = F.coach; F.cT = 0; F.c0 = Hc.th; el.innerHTML = `<small>ИНСТРУКТАЖ · ${F.coach + 1} ИЗ ${COACH.length}</small>${st.t()}`; el.hidden = false; }
     F.cT = st.ok() ? F.cT + dt : 0; if (F.cT >= (st.hold || 0.2)) { F.coach++; audio.chime && audio.chime(); if (F.coach >= COACH.length) { store.set('heliCoach', 1); toast('Отлично! Дальше — сами'); } } }
@@ -170,46 +205,88 @@ export function makeHeliMode(A) {
     if (prev && prev.model && prev.model.root) prev.model.root.visible = false; if (prev && prev.wake && prev.wake.mesh) prev.wake.mesh.visible = false;
     G.player = P; G.race = null; G.mode = 'heli'; M.root.visible = true; boom.m.visible = false; marks.visible = true;
     document.body.classList.add('heli'); document.body.classList.remove('motor', 'para', 'jet'); $('hwrap').hidden = false; $('mark').hidden = true; $('result').hidden = true; $('brief').hidden = true;
-    F = { t: 0, ended: false, msg: {}, mis: [], mi: 0, hold: 0, crashT: 0, rpm: 0, camD: 34, coach: store.get('heliCoach') ? undefined : 0, cam: null, score: 0, combo: 1, lowT: 0, touches: 0, hard: 0, soft: 0, wasGround: true }; showGame(true); resetView(); G.cam = 0; camInit = false; }
+    F = { t: 0, ended: false, msg: {}, mis: [], mi: 0, hold: 0, crashT: 0, rpm: 0, camD: 34, coach: store.get('heliCoach') ? undefined : 0, cam: null, score: 0, combo: 1, lowT: 0, touches: 0, hard: 0, soft: 0, wasGround: true }; showGame(true); resetView(); G.cam = 0; camInit = false; WB.t = -1; }
   function startFree(mode = '') { begin(); F.mis = missions(mode); const b = F.base;
     if (mode === 'merz' && G.merz) { const o = G.merz.out, c = G.merz.center, a = Math.atan2(c.X - o.X, c.Y - o.Y), X = c.X + Math.sin(a) * 600, Y = c.Y + Math.cos(a) * 600;
       Hc.reset(X, Y, Math.max(H(X, Y), G.merz.top) + 150, a + Math.PI, false); Hc.load = 0; F.mi = 0; toast('Озеро Мерцбахера. Слышите? Это лёд'); return; }
     Hc.reset(b.X + 4, b.Y - 6, H(b.X + 4, b.Y - 6), G.khan ? Math.atan2(G.khan.poi.khan.X - b.X, G.khan.poi.khan.Y - b.Y) : 0, true); Hc.load = 0; F.mi = 0;
     const m0 = F.mis[0]; if (m0 && m0.load > 0) Hc.load = m0.load;
     { let px = b.X, py = b.Y, L = 0; for (const m of F.mis) { L += Math.hypot(m.to.X - px, m.to.Y - py); px = m.to.X; py = m.to.Y; } F.par = Math.round(L / 45 + 75 * F.mis.length); } // норматив: 160 км/ч по прямой + минута с четвертью на каждую точку
-    const cl = hoverCeiling(Hc.mass); toast(G.khan ? `База ${Math.round(b.z + 1607)} м · висеть можно до ${Math.round(cl)} м` : 'Ми-8 на площадке. Пробел — шаг вверх, стрелки — куда лететь');
+    const cl = hoverCeiling(Hc.mass); toast(G.khan ? `База ${Math.round(b.z + 1607)} м · висеть можно до ${Math.round(cl)} м` : 'Ми-8 на площадке. Пробел — вверх, стрелки — наклон и поворот');
     setTimeout(() => { if (on) announce(); }, 4500); }
-  function stop() { if (!on) return; on = false; M.root.visible = false; marks.visible = false; beacon.g.visible = false; reticle.visible = false; boom.m.visible = false; document.body.classList.remove('heli'); $('hwrap').hidden = true; camera.up.set(0, 1, 0);
+  function stop() { if (!on) return; on = false; if (streak) streak.m.visible = false; winchDraw(null); M.root.visible = false; marks.visible = false; beacon.g.visible = false; reticle.visible = false; boom.m.visible = false; document.body.classList.remove('heli'); $('hwrap').hidden = true; camera.up.set(0, 1, 0);
     $('hint').hidden = true; $('mark').hidden = true; audio.jet && audio.jet(0, 0, false); audio.airflow(0, 0, 0, false); input.hu = input.hd = false; if (prev) G.player = prev; F = null; }
 
-  // ---- ветер: общий поток растёт с высотой, на гребнях сильнее; у склонов -- подъём на наветренной стороне,
-  //      спуск и роторная болтанка -- на подветренной ----
-  // Погода Хан-Тенгри -- по выбору в меню: «бриз» -- ясно (на гребнях ~10 м/с), «санташ» -- ветрено (~22), «улан» --
-  // буран: западный ураган до 40 м/с на 6-7 км (струйное течение садится на хребты), метель, снег срывает с гребней.
-  // Порывы -- волнами по 20-40 с.
-  const KW = { breeze: 10, santash: 22, ulan: 40 };
-  function wind(X, Y, Z) { const asl = Z + 1607, zone = G.khan && G.inKhan;
-    let wx, wy; if (zone) { const U0 = KW[G.preset] || 12, t = G.t || 0, gust = 0.75 + 0.25 * Math.sin(t * 0.21) + 0.15 * Math.sin(t * 0.67 + 1.3), Uh = U0 * (0.35 + 0.65 * Math.min(1, Math.max(0, asl - 3000) / 3500)) * gust, d = (265 + 15 * Math.sin(t * 0.05)) * Math.PI / 180;
-      wx = -Math.sin(d) * Uh; wy = -Math.cos(d) * Uh; F && (F.wU = Uh); } // ветер «с запада» дует на восток
-    else { const W = G.wind || { sx: 0, sy: 0 }, k = 1 + Math.min(2.2, Math.max(0, asl - 2500) / 1800); wx = W.sx * k; wy = W.sy * k; }
-    const U = Math.hypot(wx, wy) || 1e-3;
-    const e = 250, gx = (H(X + e, Y) - H(X - e, Y)) / (2 * e), gy = (H(X, Y + e) - H(X, Y - e)) / (2 * e), agl = Z - H(X, Y), near = Math.exp(-Math.max(0, agl) / 400);
-    const up = (wx * gx + wy * gy) * near; // наветренный склон -- вверх, подветренный -- вниз
-    const lee = Math.max(0, -(wx * gx + wy * gy) / U), tb = Math.min(1.6, U * 0.02 * (0.3 + near) + lee * 0.5 * near + (U > 25 ? (U - 25) * 0.02 : 0));
-    return { x: wx, y: wy, z: clamp(up * 0.6, -3, 3), tb }; }
+  // ---- ветер Центрального Тянь-Шаня: слоями по высоте, как в настоящих горах ----
+  //  * Свободная атмосфера -- западный перенос (с 260°): у дна долин ~3 м/с, на 5 км ~13, на 6-7 км -- 20-30 м/с
+  //    (струйное течение садится на хребты; в «улан» -- в 1.6 раза сильнее). В глубокой долине он прикрыт хребтами.
+  //  * Ледниковый (стоковый) ветер: холодный воздух стекает вниз по Иныльчеку, сильнее всего в 20-150 м над льдом,
+  //    ночью и утром ~6 м/с, днём слабее.
+  //  * У склонов: наветренный -- подъём, подветренный -- спуск и роторная болтанка.
+  //  * Порывы -- отдельные «стены» ветра, идут по потоку; видно по снежным струям и позёмке.
+  const KW = { breeze: 0.6, santash: 1, ulan: 1.6 }, PROF = [[2500, 3], [4000, 7], [5000, 13], [6000, 21], [7000, 30], [8000, 34]];
+  const prof = (asl) => { if (asl <= PROF[0][0]) return PROF[0][1]; for (let i = 1; i < PROF.length; i++) if (asl < PROF[i][0]) { const [a0, u0] = PROF[i - 1], [a1, u1] = PROF[i]; return u0 + (u1 - u0) * (asl - a0) / (a1 - a0); } return PROF[PROF.length - 1][1]; };
+  const WB = { t: -1, x: 0, y: 0, z: 0, tb: 0, X: 0, Y: 0, Z: 0, dx: 1, dy: 0, U: 0 };
+  // медленная часть (раз в 0.15 с, у вертолёта): слои, укрытие хребтами, ледниковый сток, склоны
+  function windBase(X, Y, Z) { const now = G.t || 0; if (Math.abs(now - WB.t) < 0.15 && Math.abs(X - WB.X) + Math.abs(Y - WB.Y) < 60 && Math.abs(Z - WB.Z) < 30) return WB;
+    Object.assign(WB, { t: now, X, Y, Z }); const asl = Z + 1607, zone = G.khan && G.inKhan, gz = H(X, Y), agl = Z - gz; let wx, wy;
+    if (zone) { const K = KW[G.preset] ?? 0.8, swell = 0.85 + 0.15 * Math.sin(now * 0.05), d = (260 + 12 * Math.sin(now * 0.03)) * Math.PI / 180;
+      let crest = gz; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; crest = Math.max(crest, H(X + Math.cos(a) * 1500, Y + Math.sin(a) * 1500)); }
+      const open = 0.5 + 0.5 * sm(-700, 150, Z - crest), U = prof(asl) * K * swell * open; wx = -Math.sin(d) * U; wy = -Math.cos(d) * U; // «с запада» -- дует на восток
+      // ледниковый сток вниз по склону долины
+      const e = 400, sx = (H(X + e, Y) - H(X - e, Y)) / (2 * e), sy = (H(X, Y + e) - H(X, Y - e)) / (2 * e), sl = Math.hypot(sx, sy) || 1e-4, hr = G.clock ?? 12, day = hr > 10 && hr < 17 ? 0.5 : 1;
+      const kat = 7 * day * sm(0.004, 0.05, sl) * Math.min(1, Math.max(0, agl) / 20 + 0.3) * Math.exp(-Math.max(0, agl - 60) / 250); wx -= sx / sl * kat; wy -= sy / sl * kat; WB.kat = kat; }
+    else { const W = G.wind || { sx: 0, sy: 0 }, k = 1 + Math.min(2.2, Math.max(0, asl - 2500) / 1800); wx = W.sx * k; wy = W.sy * k; WB.kat = 0; }
+    const U = Math.hypot(wx, wy) || 1e-3, e = 250, gx = (H(X + e, Y) - H(X - e, Y)) / (2 * e), gy = (H(X, Y + e) - H(X, Y - e)) / (2 * e), near = Math.exp(-Math.max(0, agl) / 400);
+    const upw = (wx * gx + wy * gy) * near, lee = Math.max(0, -(wx * gx + wy * gy) / U);
+    Object.assign(WB, { x: wx, y: wy, z: clamp(upw * 0.6, -3, 3), U, dx: wx / U, dy: wy / U, tb: Math.min(1.6, U * 0.02 * (0.3 + near) + lee * 0.5 * near + (U > 25 ? (U - 25) * 0.02 : 0)) }); if (F) F.wU = U; return WB; }
+  // порывы: ячейки 150-250 м, бегут по ветру чуть быстрее потока; спереди -- резкий фронт, сзади -- плавный хвост
+  const gustAt = (X, Y, Z, out) => { out.x = 0; out.y = 0; out.f = 0; if (!F || !F.gusts) return out;
+    for (const c of F.gusts) { const rx = X - c.X, ry = Y - c.Y, a = (rx * c.dx + ry * c.dy) / c.R, q = (rx * c.dy - ry * c.dx) / c.R, dz = (Z - c.Z) / 160; if (a > 0.35 || a < -3 || Math.abs(q) > 2.2 || Math.abs(dz) > 2.5) continue;
+      const f = (a > 0 ? 1 - a / 0.35 : Math.exp(-(a / 1.4) * (a / 1.4))) * Math.exp(-q * q) * Math.exp(-dz * dz) * c.k; out.x += c.dx * c.S * f; out.y += c.dy * c.S * f; out.f = Math.max(out.f, f); } return out; };
+  const gq = { x: 0, y: 0, f: 0 };
+  function wind(X, Y, Z) { const b = windBase(X, Y, Z), q = gustAt(X, Y, Z, gq); return { x: b.x + q.x, y: b.y + q.y, z: b.z, tb: b.tb + q.f * 0.7, gx: q.x, gy: q.y }; }
+  function gustTick(dt) { const b = windBase(Hc.X, Hc.Y, Hc.Z), gs = F.gusts || (F.gusts = []);
+    for (const c of gs) { c.X += c.dx * c.V * dt; c.Y += c.dy * c.V * dt; c.k = Math.min(1, c.k + dt * 0.8); c.life -= dt; }
+    for (let i = gs.length - 1; i >= 0; i--) if (gs[i].life <= 0) gs.splice(i, 1);
+    // чем сильнее ветер, тем чаще порывы; в штиль -- редкие слабые
+    F.gT = (F.gT ?? 3) - dt; if (F.gT <= 0 && gs.length < 6) { const U = Math.max(b.U, 5), r = Math.random(), off = (Math.random() - 0.5) * 500, d = 650 + Math.random() * 250, tw = (Math.random() - 0.5) * 0.5, dx = b.dx * Math.cos(tw) - b.dy * Math.sin(tw), dy = b.dx * Math.sin(tw) + b.dy * Math.cos(tw);
+      gs.push({ X: Hc.X - dx * d + dy * off, Y: Hc.Y - dy * d - dx * off, Z: Hc.Z + (Math.random() - 0.4) * 120, dx, dy, V: U * 1.1 + 4, S: U * (0.45 + 0.5 * r) + 5, R: 150 + Math.random() * 110, k: 0, life: (d + 900) / (U * 1.1 + 4) });
+      F.gT = (9 + Math.random() * 8) * clamp(14 / U, 0.35, 1.6); }
+    // предупреждение: фронт порыва в 120-450 м и идёт на нас
+    let warn = null; for (const c of gs) { const rx = Hc.X - c.X, ry = Hc.Y - c.Y, a = rx * c.dx + ry * c.dy, q = Math.abs(rx * c.dy - ry * c.dx); if (a > 60 && a < 450 && q < c.R * 1.4 && c.S > Math.max(10, b.U + 3)) { const rel = wrapPi(Math.atan2(-c.dx, -c.dy) - Hc.th); warn = { side: Math.abs(rel) < 0.8 ? 'СПЕРЕДИ' : Math.abs(rel) > 2.4 ? 'СЗАДИ' : rel > 0 ? 'СПРАВА' : 'СЛЕВА', S: c.S }; break; } }
+    if (warn && !F.gWarn) audio.airflow && G.shake < 0.1 && (G.shake = 0.08); F.gWarn = warn;
+    // позёмка: порыв у земли срывает снег со льда -- видно, как он бежит по леднику
+    if (G.spray && G.inKhan) for (const c of gs) { const n = Math.round(c.k * c.S * dt * 1.6); for (let i = 0; i < n; i++) { const a = -Math.random() * 2.2 * c.R, q = (Math.random() - 0.5) * 2 * c.R, X = c.X + c.dx * a + c.dy * q, Y = c.Y + c.dy * a - c.dx * q, gz = H(X, Y);
+      if (gz < 0 || c.Z - gz > 220 || Math.hypot(X - Hc.X, Y - Hc.Y) > 700) continue; const v = c.S * 0.8; G.spray.emit(X, gz + 0.6, -Y, c.dx * v, 1 + Math.random() * 2.5, -c.dy * v, 5 + Math.random() * 4, 1, 1); } } }
+  // снежные струи: короткие штрихи вокруг вертолёта летят с ветром -- длина и яркость по силе, в порыве -- ярче и гуще
+  const NS = 520; let streak = null;
+  function makeStreaks() { const g = new THREE.BufferGeometry(), pos = new Float32Array(NS * 12), col = new Float32Array(NS * 16), idx = new Uint16Array(NS * 6);
+    for (let i = 0; i < NS; i++) { const v = i * 4; idx.set([v, v + 1, v + 2, v + 2, v + 1, v + 3], i * 6); }
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 4)); g.setIndex(new THREE.BufferAttribute(idx, 1));
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide })); m.frustumCulled = false; scene.add(m); m.visible = false;
+    const p = new Float32Array(NS * 4); for (let i = 0; i < NS; i++) p[i * 4 + 3] = -Math.random(); return { m, g, pos, col, p }; }
+  const BX = 115, BZ0 = -50, BZ1 = 70;
+  function streakTick(dt) { if (!streak) streak = makeStreaks(); const S = streak; S.m.visible = !Hc.crash; const b = windBase(Hc.X, Hc.Y, Hc.Z);
+    for (let i = 0; i < NS; i++) { const o = i * 4; let x = S.p[o], y = S.p[o + 1], z = S.p[o + 2], life = S.p[o + 3];
+      if (life <= 0 || Math.abs(x - Hc.X) > BX || Math.abs(y - Hc.Y) > BX || z - Hc.Z < BZ0 || z - Hc.Z > BZ1) { if (life < 0) { S.p[o + 3] = life + dt; } else { x = Hc.X + (Math.random() * 2 - 1) * BX; y = Hc.Y + (Math.random() * 2 - 1) * BX; z = Hc.Z + BZ0 + Math.random() * (BZ1 - BZ0); S.p[o + 3] = 0.001; life = 0.001; } }
+      gustAt(x, y, z, gq); const wx = b.x + gq.x, wy = b.y + gq.y, wz = b.z, U = Math.hypot(wx, wy), gz = H(x, y); if (z < gz + 1) z = gz + 1 + Math.random() * 3;
+      x += wx * dt; y += wy * dt; z += wz * dt * 0.5; if (life > 0) { life = Math.min(1, life + dt * 1.5); S.p[o + 3] = life; } S.p[o] = x; S.p[o + 1] = y; S.p[o + 2] = z;
+      const L = 2 + U * 0.3 * (1 + gq.f), dd = Math.hypot(x - Hc.X, y - Hc.Y, z - Hc.Z), a = Math.max(0, life) * clamp((U - 2) / 10, 0, 1) * (0.5 + 0.5 * gq.f) * (1 - sm(80, BX, dd)) * (U > 0.1 ? 1 : 0), ux = wx / (U || 1), uy = wy / (U || 1);
+      // лента к камере: ширина растёт с расстоянием (~2 пикселя на любом удалении)
+      const hx = x, hy = z, hz = -y, tx = x - ux * L, ty = z - wz / (U || 1) * L * 0.3, tz = -(y - uy * L), cx = camera.position.x - hx, cy = camera.position.y - hy, cz = camera.position.z - hz, dc = Math.hypot(cx, cy, cz) || 1;
+      let sx = (ty - hy) * cz - (tz - hz) * cy, sy = (tz - hz) * cx - (tx - hx) * cz, sz = (tx - hx) * cy - (ty - hy) * cx; const sl = Math.hypot(sx, sy, sz) || 1, wd = clamp(dc * 0.0035, 0.05, 1.2) / sl; sx *= wd; sy *= wd; sz *= wd;
+      const v = i * 12; S.pos[v] = hx + sx; S.pos[v + 1] = hy + sy; S.pos[v + 2] = hz + sz; S.pos[v + 3] = hx - sx; S.pos[v + 4] = hy - sy; S.pos[v + 5] = hz - sz;
+      S.pos[v + 6] = tx + sx; S.pos[v + 7] = ty + sy; S.pos[v + 8] = tz + sz; S.pos[v + 9] = tx - sx; S.pos[v + 10] = ty - sy; S.pos[v + 11] = tz - sz;
+      const c = i * 16; for (let k = 0; k < 4; k++) { S.col[c + k * 4] = 0.6; S.col[c + k * 4 + 1] = 0.68; S.col[c + k * 4 + 2] = 0.82; S.col[c + k * 4 + 3] = k < 2 ? Math.min(0.85, a) : 0; } }
+    S.g.attributes.position.needsUpdate = true; S.g.attributes.color.needsUpdate = true; }
 
-  // Ручка -- «куда тянешь, туда и летит» относительно экрана: вперёд -- от камеры, вбок -- в ту сторону экрана.
-  // Автомат сам доворачивает нос в сторону полёта и наклоняет машину; на себя -- тормоз и назад, не разворачиваясь.
+  // Ручка -- как в San Andreas: вперёд -- наклон носа и разгон, на себя -- торможение, в стороны -- поворот (на скорости --
+  // вираж с креном). Пробел/▲ -- вверх, Shift/▼ -- вниз. Отпустил всё -- висит, но по инерции ещё катится.
   function ctl() { let x = (input.right ? 1 : 0) - (input.left ? 1 : 0), y = (input.sin ? 1 : 0) - (input.flare ? 1 : 0);
-    if (input.joy) { const j = input.joy, ex = (v) => (Math.abs(v) < 0.08 ? 0 : Math.sign(v) * Math.pow((Math.abs(v) - 0.08) / 0.92, 1.3)); x = ex(j.x); y = -ex(j.y); }
-    const up = (input.bar || input.hu ? 1 : 0) - (input.shift || input.hd ? 1 : 0), mag = Math.min(1, Math.hypot(x, y)); let fwd = 0, side = 0;
-    const mi = F.mis[F.mi], near = mi && Math.hypot(mi.to.X - Hc.X, mi.to.Y - Hc.Y) < 220 && Hc.speed < 14;
-    // у цели на малой скорости -- точное зависание: ручка сдвигает вертолёт (вперёд, вбок), нос не разворачивается
-    if (mag > 0.05 && near) { const camYaw = Math.atan2(clook.x, -clook.z), rel = wrapPi(camYaw + Math.atan2(x, y) - Hc.th); return { fwd: Math.cos(rel) * mag, side: Math.sin(rel) * mag, up, strafe: true }; }
-    if (mag > 0.05) { if (y < -0.3 && Math.abs(x) < 0.6) { fwd = y; side = x * 0.5; } // на себя -- тормоз и назад
-      else { const camYaw = Math.atan2(clook.x, -clook.z) + G.orbit * 0, want = camYaw + Math.atan2(x, Math.max(0.05, y)), err = wrapPi(want - Hc.th);
-        side = clamp(err * 1.6, -1, 1); fwd = mag * Math.max(0, Math.cos(err)) * (Math.abs(err) > 1.2 ? 0.3 : 1); F.want = want; } }
-    return { fwd, side, up }; }
+    if (input.joy) { const j = input.joy, ex = (v) => (Math.abs(v) < 0.08 ? 0 : Math.sign(v) * Math.pow((Math.abs(v) - 0.08) / 0.92, 1.25)); x = ex(j.x); y = -ex(j.y); }
+    const up = (input.bar || input.hu ? 1 : 0) - (input.shift || input.hd ? 1 : 0);
+    return { fwd: y, side: x, up }; }
 
   function tick(dt) { if (!on) return; F.t += dt;
     if (Hc.crash) { crashTick(dt); return; }
@@ -222,8 +299,10 @@ export function makeHeliMode(A) {
     if (Hc.crOn && !F.crWas) { pop('ЧР', 'чрезвычайный режим · +12% тяги'); buzz(40); } F.crWas = Hc.crOn;
     skillTick(dt);
     if (F.wasGround && !Hc.ground) { G.shake = Math.max(G.shake, 0.45); audio.thump && audio.thump(0.35); } F.wasGround = Hc.ground; // отрыв -- вздрогнул и пошёл
-    missionTick(dt); coachTick(dt); washTick(dt);
-    { const mi = F.mis[F.mi]; beaconTick(dt, mi ? mi.to : null, mi ? Math.hypot(Hc.X - mi.to.X, Hc.Y - mi.to.Y) : 0); if (mi) F.wv = wind(mi.to.X, mi.to.Y, mi.to.z + 50); }
+    missionTick(dt); coachTick(dt); washTick(dt); gustTick(dt); streakTick(dt);
+    if (Hc.hit) { const h = Hc.hit; Hc.hit = null; F.combo = 1; F.hits = (F.hits || 0) + 1; G.shake = Math.max(G.shake, Math.min(1.2, 0.3 + h.imp * 0.05)); audio.thump && audio.thump(Math.min(1.4, 0.4 + h.imp * 0.05)); buzz([70, 30, 90]);
+      pop('УДАР!', `корпус ${Math.round(Hc.hp)}% · комбо сгорело`); for (let i = 0; i < 24 && G.spray; i++) G.spray.emit(Hc.X, Hc.Z + 1, -Hc.Y, (Math.random() - 0.5) * 14, 2 + Math.random() * 6, (Math.random() - 0.5) * 14, 4, 1, 1); }
+    { const mi = F.mis[F.mi]; beaconTick(dt, mi ? mi.to : null, mi ? Math.hypot(Hc.X - mi.to.X, Hc.Y - mi.to.Y) : 0); if (mi) F.wv = WB; }
     if (F.pt !== undefined && F.mis[F.mi] && F.mis[F.mi].timer) F.pt = Math.max(0, F.pt - dt / 4.5); // состояние пострадавших тает: спешите, но без риска
     const b = P.b; b.X = Hc.X; b.Y = Hc.Y; b.th = Hc.th; b.speed = Hc.speed; b.base = Hc.Z; b.y = Hc.Z; }
   function startCrash() { boom.t = 0; boom.m.visible = true; boom.m.position.set(Hc.X, Hc.Z + 2, -Hc.Y); M.root.visible = false; audio.thump && audio.thump(1.6); G.shake = 1.4;
@@ -246,12 +325,13 @@ export function makeHeliMode(A) {
     const fx = Math.sin(Hc.th), fy = Math.cos(Hc.th), want = new THREE.Vector3(fx, 0, -fy);
     if (!camInit) { clook.copy(want); camInit = true; } else clook.lerp(want, Math.min(1, dt * 1.6)).normalize();
     F.camD += ((26 + Hc.speed * 0.25) * G.zoom - F.camD) * Math.min(1, dt * 1.5); const d = F.camD, back = clook.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), G.orbit).negate();
-    v3.set(Hc.X, Hc.Z + 3, -Hc.Y).addScaledVector(back, d); v3.y += d * (0.32 + G.orbitP);
+    const wl = F.w && F.w.L > 1 && F.w.init ? (F.wl = Math.min(1, (F.wl || 0) + dt)) : (F.wl = Math.max(0, (F.wl || 0) - dt)); // лебёдка: камера выше, видно крюк и людей
+    v3.set(Hc.X, Hc.Z + 3, -Hc.Y).addScaledVector(back, d * (1 + 0.1 * wl)); v3.y += d * (0.32 + G.orbitP + 0.22 * wl);
     const gy = Math.max(0, H(v3.x, -v3.z)) + 3; if (v3.y < gy) v3.y = gy;
     const sh = Hc.shake * 0.25 + Math.max(0, G.shake - 0) * 0.5, jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh; G.shake = Math.max(0, G.shake - dt * 1.4);
     // камера на пружине: тяжёлая машина «уезжает» при разгоне и наклоняет горизонт в вираже -- масса чувствуется
     if (!F.cam) F.cam = v3.clone(); else { const k = Math.min(1, dt * 3.2); F.cam.lerp(v3, k); } if (F.cam.distanceTo(v3) > d * 1.5) F.cam.copy(v3);
-    camera.position.copy(F.cam); camera.position.x += jx; camera.position.y += jy; camera.up.set(-Math.sin(Hc.roll) * 0.22 * Math.cos(Hc.th), 1, -Math.sin(Hc.roll) * 0.22 * Math.sin(Hc.th)).normalize(); camera.lookAt(cpos.set(Hc.X, Hc.Z + 3, -Hc.Y).addScaledVector(clook, 12));
+    camera.position.copy(F.cam); camera.position.x += jx; camera.position.y += jy; camera.up.set(-Math.sin(Hc.roll) * 0.22 * Math.cos(Hc.th), 1, -Math.sin(Hc.roll) * 0.22 * Math.sin(Hc.th)).normalize(); cpos.set(Hc.X, Hc.Z + 3, -Hc.Y).addScaledVector(clook, 12); if (wl > 0 && F.w) cpos.lerp(v3.set(F.w.p[0], F.w.p[2], -F.w.p[1]), 0.4 * wl); camera.lookAt(cpos);
     // FOV: скорость и рывок разгона растягивают кадр -- чувство мощи; ЧР -- ещё шире
     const acc = Math.hypot(Hc.vx - (F.pvx ?? Hc.vx), Hc.vy - (F.pvy ?? Hc.vy)) / Math.max(dt, 1e-3); F.pvx = Hc.vx; F.pvy = Hc.vy; F.kick = Math.max((F.kick || 0) - dt * 1.5, Math.min(1, acc / 6));
     camera.fov += (56 + Math.min(10, Hc.speed * 0.13) + F.kick * 5 + Hc.cr * 4 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix();
@@ -268,23 +348,26 @@ export function makeHeliMode(A) {
     const cls = pw > 1 ? 'red' : pw > 0.92 ? 'hot' : '';
     $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>км/ч</small></div><div class="r"><b>${alt}</b> м над морем · ${agl} м над землёй · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)} м/с</div>
       <div class="r">шаг<span class="bar"><i class="${cls}" style="width:${Math.round(Math.min(1, pw) * 100)}%"></i></span>${Math.round(pw * 100)}% · обороты ${Math.round(Hc.rpm * 95)}%</div>
+      <div class="r">ветер <b>${Math.round(WB.U || 0)}</b> м/с <i style="display:inline-block;font-style:normal;transform:rotate(${(wrapPi(Math.atan2(WB.x, WB.y) - Math.atan2(clook.x, -clook.z) - G.orbit)).toFixed(2)}rad)">⬆</i>${WB.kat > 2 ? ' · ледниковый сток' : ''} · корпус <b style="color:${Hc.hp > 60 ? '#9fe0a0' : Hc.hp > 30 ? '#ffd27a' : '#ff5a3a'}">${Math.round(Hc.hp)}%</b></div>
       <div class="r">масса <b>${(m / 1000).toFixed(1)}</b> т · тяга/вес <b>${tw.toFixed(2)}</b>${Hc.ige > 0.03 ? ' · подушка' : ''} · топливо ${Math.round(Hc.fuel)} кг</div>`;
     $('hscore').innerHTML = `<b>${F.score}</b>${F.combo > 1 ? `<i>×${F.combo.toFixed(2).replace(/\.?0+$/, '')}</i>` : ''}<br><small>рекорд ${store.get('heliScore') || 0}</small>`;
     { const cr = $('hcr'), show = Hc.cr > 0.05 || Hc.heat > 0.02 || Hc.hot > 0; cr.hidden = !show; if (show) cr.innerHTML = `${Hc.hot > 0 ? `ПЕРЕГРЕВ · ${Math.ceil(Hc.hot)} с` : Hc.crOn ? '<b style="color:#ff8a2a">ЧР</b> · +12% тяги' : 'двигатели остывают'}<span class="bar"><i class="${Hc.heat > 0.75 ? 'red' : Hc.heat > 0.45 ? 'hot' : ''}" style="width:${Math.round(Hc.heat * 100)}%"></i></span>`; }
-    const w = Hc.crash ? '' : (F.wU || 0) > 30 && G.frame % 120 < 60 ? `ВЕТЕР ${Math.round(F.wU)} М/С` : Hc.gpws ? 'ЗЕМЛЯ! ВВЕРХ ▲' : Hc.warn === 'hot' ? '' : Hc.warn === 'rpm' ? 'ОБОРОТЫ! СБРОСЬ ШАГ' : Hc.warn === 'vrs' ? 'ВИХРЕВОЕ КОЛЬЦО — СКОРОСТЬ ВПЕРЁД' : Hc.warn === 'power' ? 'МОЩНОСТИ НЕ ХВАТАЕТ' : '';
+    const w = Hc.crash ? '' : Hc.gpws ? 'ЗЕМЛЯ! ВВЕРХ ▲' : F.gWarn ? `ПОРЫВ ${F.gWarn.side}! ${Math.round(F.gWarn.S)} М/С` : (F.wU || 0) > 30 && G.frame % 120 < 60 ? `ВЕТЕР ${Math.round(F.wU)} М/С` : Hc.warn === 'hot' ? '' : Hc.warn === 'rpm' ? 'ОБОРОТЫ! СБРОСЬ ШАГ' : Hc.warn === 'vrs' ? 'ВИХРЕВОЕ КОЛЬЦО — СКОРОСТЬ ВПЕРЁД' : Hc.warn === 'power' ? 'МОЩНОСТИ НЕ ХВАТАЕТ' : '';
     const wl = $('hwarn'); if (wl.textContent !== w) wl.textContent = w; wl.hidden = !w; if (w && audio.beep && G.frame % 18 === 0) audio.beep(true);
-    const mi = F.mis[F.mi], me = $('hmis'); guide(mi); if (mi) { me.hidden = false; const t = `<b>${mi.t}</b>${mi.timer && F.pt !== undefined ? ` · <span style="color:${F.pt > 50 ? '#9fe0a0' : F.pt > 25 ? '#ffd27a' : '#ff5a3a'}">состояние ${Math.round(F.pt)}%</span>` : ''}<br>${mi.d}${F.hold > 0.2 ? ` · ${mi.how === 'winch' ? 'лебёдка' : mi.how === 'watch' ? 'съёмка' : 'выгрузка'} ${Math.min(100, Math.round(F.hold / (mi.how === 'winch' ? 5 : mi.how === 'watch' ? 15 : 2) * 100))}%` : ''}`; if (me.innerHTML !== t) me.innerHTML = t; } else me.hidden = true;
-    const hint = F.coach === undefined && F.t < 30 && Hc.ground && !F.mi ? (TOUCH ? '▲ — шаг вверх · джойстик — куда лететь · отпустил — висит' : 'Пробел — вверх, Shift — вниз · стрелки — куда лететь · отпустил — висит') : '';
+    const mi = F.mis[F.mi], me = $('hmis'); guide(mi); if (mi) { me.hidden = false; const t = `<b>${mi.t}</b>${mi.timer && F.pt !== undefined ? ` · <span style="color:${F.pt > 50 ? '#9fe0a0' : F.pt > 25 ? '#ffd27a' : '#ff5a3a'}">состояние ${Math.round(F.pt)}%</span>` : ''}<br>${mi.d}${mi.how === 'winch' ? ` · на борту ${mi.to.folks.filter((f) => f.userData.up).length} из ${mi.to.folks.length}` : F.hold > 0.2 ? ` · ${mi.how === 'watch' ? 'съёмка' : 'выгрузка'} ${Math.min(100, Math.round(F.hold / (mi.how === 'watch' ? 15 : 2) * 100))}%` : ''}`; if (me.innerHTML !== t) me.innerHTML = t; } else me.hidden = true;
+    const hint = F.coach === undefined && F.t < 30 && Hc.ground && !F.mi ? (TOUCH ? '▲ — вверх · джойстик: вперёд — разгон, на себя — тормоз, вбок — поворот' : 'Пробел — вверх, Shift — вниз · ↑ разгон, ↓ тормоз, ← → поворот') : '';
     const he = $('hint'); if (he.textContent !== hint) he.textContent = hint; he.hidden = !hint; he.className = 'hud'; }
   // стрелка к цели (относительно взгляда камеры) и посадочные подсказки у цели
   function guide(mi) { const ar = $('harr'), ld = $('hland'); if (F.banner && F.banner.t > 0) { F.banner.t -= 0.1; ar.hidden = true; ld.hidden = false; ld.textContent = F.banner.txt; ld.className = 'hud ok'; ld.style.fontSize = '42px'; return; } ld.style.fontSize = ''; if (!mi || Hc.crash) { ar.hidden = true; ld.hidden = true; return; }
     const dx = mi.to.X - Hc.X, dy = mi.to.Y - Hc.Y, d = Math.hypot(dx, dy), camYaw = Math.atan2(clook.x, -clook.z) + G.orbit, rel = wrapPi(Math.atan2(dx, dy) - camYaw);
     ar.hidden = d < 120; if (!ar.hidden) { ar.firstChild.style.transform = `rotate(${rel}rad)`; ar.lastChild.textContent = d >= 1000 ? (d / 1000).toFixed(1) + ' км' : Math.round(d) + ' м'; }
     let t = '', c = 'go'; const agl = Hc.agl;
-    const brakeD = Hc.speed * Hc.speed / 3.2 + 80; // тормозной путь тяжёлой машины
-    if (d < Math.max(220, brakeD) && mi.how !== 'watch') { if (Hc.speed > 7 && d < brakeD) t = 'ТОРМОЗИ — ОТПУСТИ РУЧКУ';
+    const brakeD = Hc.speed * Hc.speed / 7 + 50; // тормозной путь тяжёлой машины
+    if (d < Math.max(220, brakeD) && mi.how !== 'watch') { if (Hc.speed > 7 && d < brakeD) t = TOUCH ? 'ТОРМОЗИ — ДЖОЙСТИК НА СЕБЯ' : 'ТОРМОЗИ — СТРЕЛКА ↓';
       else if (mi.how === 'land') { if (Hc.ground) { t = d < 45 ? 'ПОСАДКА ✓' : 'ДАЛЕКО ОТ КРУГА'; c = d < 45 ? 'ok' : 'bad'; } else if (Hc.vz < -3 && agl < 18) { t = 'МЯГЧЕ! ▲'; c = 'bad'; } else if (agl > 10) t = `СНИЖАЙСЯ ▼ · ${Math.round(agl)} м`; else { t = 'РОВНО — САДИСЬ'; c = 'ok'; } }
-      else if (mi.how === 'winch') { if (agl > 16) t = `НИЖЕ ▼ до 15 м · сейчас ${Math.round(agl)}`; else if (d > 25) t = 'ПОДВИНЬСЯ К ЛЮДЯМ'; else { t = 'ВИСИ РОВНО — ЛЕБЁДКА'; c = 'ok'; } } }
+      else if (mi.how === 'winch') { const W = F.w; if (!W || W.ph === 'idle' || !W.init) { t = agl > 50 ? `НИЖЕ ▼ · трос до 50 м · сейчас ${Math.round(agl)}` : 'ЗАВИСНИ НАД ЛЮДЬМИ'; }
+        else if (W.ph === 'lower' && W.init) { const f = mi.to.folks.find((q) => !q.userData.up), gp = mi.to.g.position, hd = f ? Math.hypot(W.p[0] - gp.x - f.position.x, W.p[1] + gp.z + f.position.z) : 0; t = `НАВЕДИ КРЮК НА ЧЕЛОВЕКА · ${Math.round(hd)} м`; c = hd < 8 ? 'ok' : 'go'; }
+        else if (W.sw > 0.45) { t = 'РАСКАЧКА! ДЕРЖИ РОВНО'; c = 'bad'; } else { t = W.sw < 0.17 ? 'ПОДЪЁМ · РОВНО — БЫСТРЕЕ' : 'ПОДЪЁМ · ГАСИ КАЧКУ'; c = W.sw < 0.17 ? 'ok' : 'go'; } } }
     else if (mi.how === 'watch' && d < 900) { t = Hc.speed > 8 ? 'ЗАВИСНИ — ИДЁТ СЪЁМКА' : 'СНИМАЕМ… ДЕРЖИ МЕСТО'; c = Hc.speed > 8 ? 'go' : 'ok'; }
     ld.hidden = !t; if (ld.textContent !== t) ld.textContent = t; ld.className = 'hud ' + c; }
   function pointMark() { const mk = $('mark'), mi = F && F.mis[F.mi]; if (!mi || Hc.crash) { mk.hidden = true; return; } const tg = [mi.to.X, mi.to.Y, mi.to.z + 6], w = window.innerWidth, hh = window.innerHeight;

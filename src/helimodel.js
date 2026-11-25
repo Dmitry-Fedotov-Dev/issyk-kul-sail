@@ -62,7 +62,7 @@ export function makeHeli() {
   const winch = new THREE.Group(); winch.position.set(1.25, Y0 + 2.4, -5.2); air.add(winch);
   const rope = mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 5), dark, winch); rope.geometry.translate(0, -0.5, 0); const hook = mesh(new THREE.SphereGeometry(0.22, 8, 6), orange, winch); winch.visible = false;
   let ang = 0, tang = 0;
-  return { root, air, Y0,
+  return { root, air, Y0, winch,
     // rpm 0..1 -- обороты (к раскрутке лопасти поднимаются из прогиба), dt -- шаг
     spin(dt, rpm) { ang += dt * rpm * 20.5; tang += dt * rpm * 110; hub.rotation.y = ang; tr.rotation.x = tang;
       for (const b of blades) b.m.rotation.x = -0.05 * (1 - rpm) + 0.02 * rpm; disc.material.opacity = 0.32 * Math.max(0, rpm - 0.4) / 0.6; tdisc.material.opacity = 0.3 * rpm;

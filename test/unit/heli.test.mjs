@@ -24,7 +24,7 @@ test('ручка вперёд: разгон до 200+ км/ч', () => {
   assert.ok(hl.speed * 3.6 > 200, String(hl.speed * 3.6)); assert.ok(hl.Y > 1500, 'летит на север');
 });
 test('вихревое кольцо: быстрое снижение на месте -- провал тяги и тряска', () => {
-  const hl = new Heli().reset(0, 0, 900, 0, false); run(hl, 8, { up: -1 }, flat(0));
+  const hl = new Heli().reset(0, 0, 900, 0, false); hl.load = 2500; run(hl, 8, { up: -1 }, flat(0));
   assert.ok(hl.vrs > 0.3, 'vrs ' + hl.vrs.toFixed(2));
 });
 test('посадка: плавно вниз -- на земле, без аварии', () => {
@@ -34,4 +34,16 @@ test('посадка: плавно вниз -- на земле, без авар�
 test('взлёт с земли: шаг вверх -- отрыв', () => {
   const hl = new Heli().reset(0, 0, 0, 0, true); run(hl, 6, { up: 1 }, flat(0));
   assert.ok(!hl.ground && hl.Z > 10, String(hl.Z));
+});
+test('аркада: отпустил ручку на скорости -- катится по инерции, а не встаёт', () => {
+  const hl = new Heli().reset(0, 0, 500, 0, false); run(hl, 20, { fwd: 1 }, flat(0)); const v0 = hl.speed; run(hl, 4, {}, flat(0));
+  assert.ok(hl.speed > v0 * 0.6, `${v0.toFixed(0)} -> ${hl.speed.toFixed(0)}`); run(hl, 6, { fwd: -1 }, flat(0)); assert.ok(hl.speed < v0 * 0.45, 'на себя -- тормоз: ' + hl.speed.toFixed(0));
+});
+test('удар о склон: отскок и повреждение, не мгновенная авария', () => {
+  const wall = (x, y) => (y > 300 ? 400 : 0); const hl = new Heli().reset(0, 0, 100, 0, false); run(hl, 30, (q) => ({ fwd: q.Y < 200 ? 0.5 : 0 }), wall);
+  assert.ok(hl.hp < 100 && !hl.crash, 'hp ' + hl.hp + ' crash ' + JSON.stringify(hl.crash)); assert.ok(hl.Y < 300, 'отбросило: ' + hl.Y.toFixed(0));
+});
+test('порыв сбоку сносит висящую машину', () => {
+  const hl = new Heli().reset(0, 0, 300, 0, false); run(hl, 3, {}, flat(0), () => ({ x: 15, y: 0, z: 0, gx: 15, gy: 0 }));
+  assert.ok(hl.vx > 2, 'vx ' + hl.vx.toFixed(1));
 });
