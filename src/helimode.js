@@ -24,12 +24,9 @@ body.heli #speed>b,body.heli #speed>small,body.heli #pos,body.heli #wear,body.he
 body.spy #hwrap,body.spy #sarw,body.spy #mark,body.spy #hint,body.spy #hvec{display:none!important}
 #hradar{position:fixed;right:max(14px,env(safe-area-inset-right,0px));top:64px;width:176px;height:176px;border-radius:50%;pointer-events:auto;touch-action:none;cursor:pointer;z-index:4;filter:drop-shadow(0 2px 8px rgba(0,0,0,.45))}#hradar.big{width:min(330px,72vmin);height:min(330px,72vmin)}
 #hwind{position:fixed;left:auto;transform:none;right:max(14px,env(safe-area-inset-right,0px));top:244px;background:rgba(8,22,48,.62);border-radius:10px;padding:2px 9px;font:600 12px var(--ui);white-space:nowrap;z-index:4}#hwind b{color:#8fd0ff}#hwind .g{color:#ffd27a}
-@media (max-width:640px){body.heli #tools{flex-direction:column;gap:6px}body.heli #tools button{width:40px;height:40px}#hmis{-webkit-line-clamp:2!important}#hradar{top:8px;width:112px;height:112px}#hradar.big{width:240px;height:240px}#hwind{font-size:11px}#hmis{left:10px!important;transform:none!important;width:calc(100vw - 150px)!important;text-align:left}}
-@media (max-height:440px) and (min-width:641px){#hradar{top:52px;width:104px;height:104px}#hradar.big{width:220px;height:220px}#hwind{font-size:11px}}
 body.spy #hradar,body.spy #hwind{display:none!important}
-@media (max-width:640px),(max-height:440px){body.heli #toast{font-size:15px!important;white-space:normal!important;max-width:min(560px,72vw);text-align:center;line-height:1.25}}
 #hflash{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:3}#hflash.hit{box-shadow:inset 0 0 140px 40px rgba(255,40,20,.75)}#hflash.fast{box-shadow:inset 0 0 120px 20px rgba(220,240,255,.7)}
-#hvec{position:fixed;width:110px;height:110px;pointer-events:none;z-index:4}#hdbg{left:auto;right:12px;top:120px;font:11px/1.35 ui-monospace,monospace;background:rgba(0,0,0,.6);padding:6px 8px;border-radius:8px;white-space:pre;color:#cfe}
+#hvec{position:fixed;width:110px;height:110px;pointer-events:none;z-index:4}#hdbg{left:10px;right:auto;top:150px;font:11px/1.35 ui-monospace,monospace;background:rgba(0,0,0,.6);padding:6px 8px;border-radius:8px;white-space:pre;color:#cfe}
 #hmis{left:50%;top:10px;transform:translateX(-50%);text-align:center;font-size:14px;max-width:min(560px,60vw);background:rgba(8,22,48,.55);border-radius:12px;padding:6px 12px}#hmis b{font-size:17px}
 #hcol{position:fixed;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(40px + env(safe-area-inset-bottom,0px));display:none;flex-direction:column;gap:14px;z-index:2}
 #hcol button{width:76px;height:76px;border-radius:50%;border:2px solid rgba(255,255,255,.6);background:rgba(10,30,60,.45);color:#fff;font:800 26px var(--ui);touch-action:none;-webkit-user-select:none;user-select:none}
@@ -44,12 +41,39 @@ body.touchdev.heli #hint{bottom:calc(206px + env(safe-area-inset-bottom,0px))}
 #hscore{right:calc(max(16px,env(safe-area-inset-right,0px)) + 0px);top:62px;text-align:right;background:rgba(8,22,48,.55);border-radius:12px;padding:4px 10px}#hscore b{font-size:24px}#hscore i{font-style:normal;color:#ffd24a;font-weight:800;margin-left:6px}
 #hcr{left:max(10px,env(safe-area-inset-left,0px));top:118px;width:150px;font-size:12px;background:rgba(8,22,48,.55);border-radius:10px;padding:4px 8px}#hcr .bar{width:100%;margin:3px 0 0}
 #hland{left:50%;top:40%;transform:translateX(-50%);background:rgba(8,22,48,.5);border-radius:10px;padding:4px 12px;font:800 clamp(18px,4vmin,28px) var(--ui);letter-spacing:.05em;text-shadow:0 2px 10px rgba(0,0,0,.7)}#hland.ok{color:#9fe0a0}#hland.go{color:#ffd27a}#hland.bad{color:#ff5a3a}
-@media (max-width:640px),(max-height:440px){#hhud{max-width:calc(100vw - 196px);padding:4px 8px}#hhud b.v{font-size:30px}#hhud small{font-size:11px}#hhud .r{font-size:12px;margin-top:1px}#hhud .r2,#hhud .r4,#hhud .lg{display:none}
-#hscore{top:58px;padding:2px 8px}#hscore b{font-size:19px}}
-@media (max-width:640px){#hland{font-size:15px;letter-spacing:.02em;padding:3px 10px;white-space:nowrap;max-width:calc(100vw - 24px);overflow:hidden;text-overflow:ellipsis}#hwarn{font-size:15px!important;transform:translateX(-50%)}#hmis{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}#hwarn{top:64%;font-size:17px;white-space:nowrap}#hmis{top:104px;width:calc(100vw - 24px);max-width:none;font-size:13px;padding:4px 10px}#hmis b{font-size:15px}#harr{top:178px}#harr i{font-size:44px;line-height:44px}
-#hcr{top:auto;bottom:calc(300px + env(safe-area-inset-bottom,0px));width:130px}#hpop{top:36%}#hland{top:46%}}
-@media (max-height:440px) and (min-width:641px){#hwarn{top:40%;font-size:18px}#hmis{top:8px;max-width:min(420px,44vw);font-size:12px;padding:3px 10px}#hmis b{font-size:14px}#harr{top:60px;font-size:12px}#harr i{font-size:34px;line-height:34px}
-#hcr{top:auto;bottom:calc(200px + env(safe-area-inset-bottom,0px))}#hcoach{bottom:calc(12px + env(safe-area-inset-bottom,0px));width:min(420px,50vw);font-size:14px;padding:8px 12px}}
+/* ===== HUD v2: минимальный авиационный HUD -- мир важнее интерфейса =====
+   Постоянно: скорость/высоты/корпус (слева вверху), радар (справа вверху), тонкая полоса миссии (стрелка, расстояние,
+   статус, счётчик). По событию: задание -- уведомлением на 7 с (касание полосы -- снова), предупреждения -- чипом,
+   ветер -- когда сильный, подсказки у цели -- строкой под вертолётом. Сенсорные зоны управления прежние, вид легче. */
+#hhud{left:max(10px,env(safe-area-inset-left,0px));top:max(8px,env(safe-area-inset-top,0px));line-height:1.08;background:linear-gradient(90deg,rgba(6,18,40,.45),rgba(6,18,40,.12));border-radius:8px;padding:3px 12px 5px 8px;max-width:none}
+#hhud b.v{font-size:clamp(28px,8.2vw,40px);font-weight:300;letter-spacing:-1px}#hhud small{font-size:10px;color:#cfe0ff;margin-left:3px;letter-spacing:.1em}
+#hhud .r{font-size:clamp(11px,3.1vw,13px);margin-top:1px}#hhud .r b{font-weight:600}
+#hhud .hp{width:100%;min-width:96px;height:3px;border-radius:2px;background:rgba(255,255,255,.22);margin-top:4px;overflow:hidden}#hhud .hp i{display:block;height:100%;border-radius:2px}
+#hhud .hpt{font-size:11px;font-weight:700}
+body.touchdev #hhud .r2,body.touchdev #hhud .r4{display:none}@media (max-width:640px),(max-height:440px){#hhud .r2,#hhud .r4{display:none}}
+#hstrip{left:50%;top:10px;transform:translateX(-50%);pointer-events:auto;cursor:pointer;display:flex;align-items:center;gap:7px;background:rgba(6,18,40,.48);border-radius:16px;padding:3px 12px 3px 5px;font:600 clamp(12px,3.4vw,14px) var(--ui);white-space:nowrap;max-width:min(520px,calc(100vw - 170px))}
+#hstrip .ar{display:inline-block;width:20px;text-align:center;color:#ff8a2a;font-size:17px;font-style:normal;font-weight:900;flex:none}#hstrip .d{font-weight:800;flex:none}
+#hstrip .t{overflow:hidden;text-overflow:ellipsis;font-weight:500;color:#e8eefc;min-width:0}#hstrip .c{flex:none;color:#9fe0a0;font-weight:700}#hstrip .u{flex:none;color:#ffd27a;font-weight:700}#hstrip .u.bad{color:#ff6a4a}
+#hmis{left:50%;top:44px;transform:translateX(-50%);text-align:center;font-size:clamp(12px,3.4vw,14px);line-height:1.3;width:max-content;max-width:min(520px,calc(100vw - 24px));background:rgba(6,18,40,.58);border-radius:10px;padding:5px 12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#hmis b{font-size:inherit;color:#ffb07a}body.hdet #hmis{-webkit-line-clamp:6}
+#hwarn{left:50%;top:44px;transform:translateX(-50%);font:800 clamp(11px,3.2vw,14px) var(--ui)!important;letter-spacing:.05em;color:#ffb07a;background:rgba(40,10,0,.5);border-radius:8px;padding:2px 9px;animation:none;white-space:nowrap;text-shadow:none}
+#hwarn.crit{color:#ff5a3a;animation:jblink .5s steps(2) infinite}
+#harr{display:none!important}
+#hland{top:63%!important;background:none;padding:0;font:800 clamp(13px,3.9vw,20px) var(--ui);letter-spacing:.04em;white-space:nowrap}
+#hpop{top:35%;font-size:clamp(20px,5.4vmin,34px)}
+#hscore{top:auto;padding:2px 8px;background:rgba(6,18,40,.4)}#hscore b{font-size:17px}#hscore small{font-size:10px}
+#hcr{top:auto;bottom:calc(230px + env(safe-area-inset-bottom,0px));width:130px;font-size:11px;background:rgba(6,18,40,.45)}
+body.heli #toast{font-size:clamp(13px,3.6vw,16px)!important;white-space:normal!important;width:max-content;max-width:min(520px,calc(100vw - 24px));background:rgba(6,18,40,.55);border-radius:10px;padding:4px 12px;line-height:1.3}
+#hcoach{font-size:clamp(13px,3.6vw,16px);border-width:1px;padding:8px 12px;background:rgba(6,18,40,.62);bottom:calc(200px + env(safe-area-inset-bottom,0px))}
+#hradar{top:64px;width:150px;height:150px}#hradar.big{width:min(320px,70vmin);height:min(320px,70vmin)}#hradar.mini{width:56px!important;height:56px!important}
+#hwind{font-size:11px;padding:1px 8px;background:rgba(6,18,40,.45)}
+body.heli #tools button{opacity:.88}
+#hcol{right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(30px + env(safe-area-inset-bottom,0px));gap:12px}
+#hcol button{width:clamp(54px,15vw,62px);height:clamp(54px,15vw,62px);border:1px solid rgba(255,255,255,.35);background:rgba(10,30,60,.26);font:300 22px var(--ui);backdrop-filter:blur(2px)}
+body.touchdev.heli #joy{width:clamp(128px,36vw,150px);height:clamp(128px,36vw,150px);left:calc(20px + env(safe-area-inset-left,0px));bottom:calc(24px + env(safe-area-inset-bottom,0px));background:rgba(7,26,58,.12);border:1px solid rgba(255,255,255,.22)}
+body.touchdev.heli #joy i{width:52px;height:52px;margin:-26px 0 0 -26px;background:rgba(255,255,255,.42)}
+@media (max-width:640px){#hradar{top:max(8px,env(safe-area-inset-top,0px));width:clamp(100px,28vw,118px);height:clamp(100px,28vw,118px)}#hradar.big{width:230px;height:230px}body.heli #tools{flex-direction:column;gap:6px}body.heli #tools button{width:36px;height:36px}#hstrip{max-width:calc(100vw - 180px)}}
+@media (max-height:440px) and (min-width:641px){#hradar{top:60px;width:100px;height:100px}#hradar.big{width:210px;height:210px}#hcoach{bottom:calc(10px + env(safe-area-inset-bottom,0px));width:min(420px,50vw)}}
 `;
 
 export function makeHeliMode(A) {
@@ -94,7 +118,7 @@ export function makeHeliMode(A) {
 
   function build() { if (built) return; built = true;
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    const w = document.createElement('div'); w.id = 'hwrap'; w.hidden = true; w.innerHTML = '<div id="hhud" class="hud"></div><div id="hwarn" class="hud" hidden></div><div id="hmis" class="hud" hidden></div><div id="harr" class="hud" hidden><i>⬆</i><div></div></div><div id="hland" class="hud" hidden></div><div id="hcoach" class="hud" hidden></div><div id="hpop" class="hud" hidden></div><div id="hscore" class="hud"></div><div id="hcr" class="hud" hidden></div><div id="hflash"></div><canvas id="hradar" title="Радар: касание — крупнее/мельче"></canvas><div id="hwind" class="hud"></div><canvas id="hvec" width="180" height="180"></canvas><pre id="hdbg" class="hud" hidden></pre><div id="hcol"><button id="hup">▲</button><button id="hdn">▼</button></div>'; $('game').appendChild(w);
+    const w = document.createElement('div'); w.id = 'hwrap'; w.hidden = true; w.innerHTML = '<div id="hhud" class="hud"></div><div id="hwarn" class="hud" hidden></div><div id="hmis" class="hud" hidden></div><div id="harr" class="hud" hidden><i>⬆</i><div></div></div><div id="hland" class="hud" hidden></div><div id="hcoach" class="hud" hidden></div><div id="hpop" class="hud" hidden></div><div id="hscore" class="hud"></div><div id="hcr" class="hud" hidden></div><div id="hflash"></div><div id="hstrip" class="hud" hidden></div><canvas id="hradar" title="Радар: касание — крупнее/мельче"></canvas><div id="hwind" class="hud"></div><canvas id="hvec" width="180" height="180"></canvas><pre id="hdbg" class="hud" hidden></pre><div id="hcol"><button id="hup">▲</button><button id="hdn">▼</button></div>'; $('game').appendChild(w);
     for (const [id, k] of [['hup', 'hu'], ['hdn', 'hd']]) { const b = $(id); const set = (v) => (e) => { e.preventDefault(); e.stopPropagation(); input[k] = v; b.classList.toggle('on', v); };
       b.addEventListener('pointerdown', set(true)); b.addEventListener('pointerup', set(false)); b.addEventListener('pointercancel', set(false)); b.addEventListener('pointerleave', set(false)); }
     SAR = makeSar({ G, scene, camera, $, store, toast, audio, TOUCH, input, H, net: A.net, personSprite, flagPole, pop: (t, sub) => pop(t, sub), score: (p, t, sub) => score(p, t, sub), buzz: (ms) => buzz(ms),
@@ -103,7 +127,8 @@ export function makeHeliMode(A) {
       setGoal(g) { F.goal = g ? { ...g, to: { X: g.X, Y: g.Y, z: H(g.X, g.Y), name: g.name || g.t } } : null; }, busy: () => F.mi < F.mis.length, resetCam: () => { camInit = false; F.cam = null; }, mission: () => F.mis[F.mi] || null, goal: () => F.goal && { X: F.goal.to.X, Y: F.goal.to.Y },
       hasMission: (k) => F.mis.slice(F.mi).some((m) => (k === 'base' ? m.base : false)) });
     Hc = new Heli(); M = makeHeli(); scene.add(M.root); M.root.visible = false; boom = makeBoom();
-    marks = new THREE.Group(); scene.add(marks); people = []; beacon = makeBeacon(); reticle = makeReticle(); AIRFX = makeHeliAir({ scene, H }); $('hradar').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); $('hradar').classList.toggle('big'); RB.t = 0; }); window.addEventListener('keydown', (e) => { if (on && F && e.code === 'Backquote') F.dbg = !F.dbg; });
+    marks = new THREE.Group(); scene.add(marks); people = []; beacon = makeBeacon(); reticle = makeReticle(); AIRFX = makeHeliAir({ scene, H }); $('hradar').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); const r = $('hradar'); if (r.classList.contains('big')) { r.classList.remove('big'); r.classList.add('mini'); } else if (r.classList.contains('mini')) r.classList.remove('mini'); else r.classList.add('big'); RB.t = 0; }); // обычный -> крупный -> свёрнут в компас
+    $('hstrip').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); if (F) { F.nT = 8; F.detT = 8; } }); // касание полосы -- подробности: задание и сводка операции window.addEventListener('keydown', (e) => { if (on && F && e.code === 'Backquote') F.dbg = !F.dbg; });
     P = { id: 'heli', name: 'Вы', b: { X: 0, Y: 0, th: 0, speed: 0, base: 0, y: 0, tws: 0, vx: 0, vy: 0 }, model: { root: M.root }, wake: { pts: [], mesh: { visible: false }, reset() {}, update() {} }, time: 0, leg: 0 }; }
 
   // ---- места: площадка (база), лагерь на леднике, люди на склоне ----
@@ -275,7 +300,7 @@ export function makeHeliMode(A) {
     if (F.sar) { SAR.begin(); return; }
     const cl = hoverCeiling(Hc.mass); toast(G.khan ? `База ${Math.round(b.z + 1607)} м · висеть можно до ${Math.round(cl)} м` : 'Ми-8 на площадке. Пробел — вверх, стрелки — наклон и поворот');
     setTimeout(() => { if (on) announce(); }, 4500); }
-  function stop() { if (!on) return; on = false; if ($('tools')) $('tools').style.top = ''; if ($('hmis')) $('hmis').style.top = ''; G.spyAir = false; if (F && F.school) G.spyMore = null; if (A.post && A.post.setInk) A.post.setInk(1); INK_U.uK.value = Math.max(0.75, INK_U.uRes.value.y / 720); if (SAR) SAR.stop(); if (AIRFX) AIRFX.hide(); if (streak) streak.m.visible = false; winchDraw(null); M.root.visible = false; marks.visible = false; beacon.g.visible = false; reticle.visible = false; boom.m.visible = false; document.body.classList.remove('heli'); $('hwrap').hidden = true; camera.up.set(0, 1, 0);
+  function stop() { if (!on) return; on = false; for (const id of ['tools', 'hmis', 'toast', 'sclock', 'sshoot']) { const e = $(id); if (e) { e.style.top = ''; e.style.left = ''; e.style.transform = ''; e.style.maxWidth = ''; } } document.body.classList.remove('hdet'); G.spyAir = false; if (F && F.school) G.spyMore = null; if (A.post && A.post.setInk) A.post.setInk(1); INK_U.uK.value = Math.max(0.75, INK_U.uRes.value.y / 720); if (SAR) SAR.stop(); if (AIRFX) AIRFX.hide(); if (streak) streak.m.visible = false; winchDraw(null); M.root.visible = false; marks.visible = false; beacon.g.visible = false; reticle.visible = false; boom.m.visible = false; document.body.classList.remove('heli'); $('hwrap').hidden = true; camera.up.set(0, 1, 0);
     $('hint').hidden = true; $('mark').hidden = true; audio.jet && audio.jet(0, 0, false); audio.rotor && audio.rotor(1, 0, 0, 0, false); audio.airflow(0, 0, 0, false); input.hu = input.hd = false; if (prev) G.player = prev; F = null; }
 
   // ---- ветер Центрального Тянь-Шаня: слоями по высоте, как в настоящих горах ----
@@ -448,12 +473,12 @@ export function makeHeliMode(A) {
   const RB = { cv: null, t: 0, cx: 0, cy: 0, R: 0, ok: false }, cdir = new THREE.Vector3();
   function radar(dt) { const cv = $('hradar'), pill = $('hwind'); if (!cv) return; const panel = ['sbrief', 'sjour'].some((i) => { const e = $(i); return e && !e.hidden; }), hide = !!Hc.crash || panel || (F.sar && SAR && !SAR.running); cv.hidden = hide; pill.hidden = hide; if (hide) return;
     const css = cv.clientWidth || 160, dpr = Math.min(2, window.devicePixelRatio || 1), N = Math.round(css * dpr); if (cv.width !== N) cv.width = cv.height = N;
-    const x = cv.getContext('2d'), c = N / 2, rim = Math.max(13 * dpr, N * 0.09), r = c - rim, big = cv.classList.contains('big'), Rm = big ? 6000 : 2500, k = r / Rm;
+    const x = cv.getContext('2d'), c = N / 2, rim = Math.max(9 * dpr, N * 0.068), r = c - rim, big = cv.classList.contains('big'), Rm = big ? 6000 : 2500, k = r / Rm;
     const p = (SAR && SAR.S && SAR.S.dr) || Hc; camera.getWorldDirection(cdir); const yaw = Math.atan2(cdir.x, -cdir.z);
     RB.t -= dt; if (F.sar && SAR && (RB.t <= 0 || RB.R !== Rm)) { RB.t = 0.25; if (!RB.cv) RB.cv = document.createElement('canvas'); RB.cv._w = Math.round(2 * r * 1.42 / Math.min(2, window.devicePixelRatio || 1)); RB.ok = SAR.miniBase(RB.cv, p.X, p.Y, Rm * 1.42); RB.cx = p.X; RB.cy = p.Y; RB.R = Rm; }
-    x.clearRect(0, 0, N, N); x.save(); x.beginPath(); x.arc(c, c, r, 0, 7); x.clip(); const topo = F.sar && RB.ok; x.fillStyle = topo ? '#efe6cc' : 'rgba(10,26,52,.8)'; x.fillRect(0, 0, N, N);
+    x.clearRect(0, 0, N, N); x.save(); x.beginPath(); x.arc(c, c, r, 0, 7); x.clip(); const topo = F.sar && RB.ok; x.fillStyle = topo ? 'rgba(239,230,204,.78)' : 'rgba(10,26,52,.42)'; x.fillRect(0, 0, N, N);
     x.translate(c, c); x.rotate(-yaw);
-    if (topo) { const bw = 2 * r * 1.42; x.drawImage(RB.cv, -bw / 2 - (p.X - RB.cx) * k, -bw / 2 + (p.Y - RB.cy) * k, bw, bw); }
+    if (topo) { const bw = 2 * r * 1.42; x.globalAlpha = 0.86; x.drawImage(RB.cv, -bw / 2 - (p.X - RB.cx) * k, -bw / 2 + (p.Y - RB.cy) * k, bw, bw); x.globalAlpha = 1; }
     else { x.strokeStyle = 'rgba(255,255,255,.16)'; x.lineWidth = dpr; for (const q of [0.33, 0.66]) { x.beginPath(); x.arc(0, 0, r * q, 0, 7); x.stroke(); } }
     const P = (X, Y) => [(X - p.X) * k, -(Y - p.Y) * k], edge = (a, b) => { const L = Math.hypot(a, b), m = r - 7 * dpr; return L > m ? [a / L * m, b / L * m, true] : [a, b, false]; };
     if (F.base) { const [a, b, o] = edge(...P(F.base.X, F.base.Y)); x.fillStyle = '#3a8ee8'; x.strokeStyle = '#fff'; x.lineWidth = 1.5 * dpr; x.fillRect(a - 5 * dpr, b - 5 * dpr, 10 * dpr, 10 * dpr); x.strokeRect(a - 5 * dpr, b - 5 * dpr, 10 * dpr, 10 * dpr); }
@@ -462,41 +487,55 @@ export function makeHeliMode(A) {
     x.save(); x.rotate(Hc.th); x.fillStyle = '#ff6a1a'; x.strokeStyle = '#fff'; x.lineWidth = 2 * dpr; x.beginPath(); x.moveTo(0, -11 * dpr); x.lineTo(8 * dpr, 8 * dpr); x.lineTo(0, 4 * dpr); x.lineTo(-8 * dpr, 8 * dpr); x.closePath(); x.fill(); x.stroke(); x.restore();
     x.restore();
     // обод-компас
-    x.beginPath(); x.arc(c, c, c - 1, 0, 7); x.arc(c, c, r, 0, 7, true); x.fillStyle = 'rgba(8,22,48,.9)'; x.fill();
+    x.beginPath(); x.arc(c, c, c - 1, 0, 7); x.arc(c, c, r, 0, 7, true); x.fillStyle = 'rgba(8,22,48,.55)'; x.fill();
     x.strokeStyle = 'rgba(255,255,255,.55)'; x.lineWidth = 1.2 * dpr; for (let d = 0; d < 360; d += 30) { const a = d * Math.PI / 180 - yaw, s0 = d % 90 ? 0.35 : 0; if (!s0) continue; x.beginPath(); x.moveTo(c + Math.sin(a) * (r + 2 * dpr), c - Math.cos(a) * (r + 2 * dpr)); x.lineTo(c + Math.sin(a) * (r + rim * s0 + 2 * dpr), c - Math.cos(a) * (r + rim * s0 + 2 * dpr)); x.stroke(); }
-    x.font = `800 ${Math.round(rim * 0.72)}px system-ui,sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; const rr = r + rim / 2;
+    x.font = `800 ${Math.round(rim * 0.78)}px system-ui,sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; const rr = r + rim / 2;
     [['С', 0], ['В', 90], ['Ю', 180], ['З', 270]].forEach(([t, d]) => { const a = d * Math.PI / 180 - yaw; x.fillStyle = d ? '#fff' : '#ff5a3a'; x.fillText(t, c + Math.sin(a) * rr, c - Math.cos(a) * rr); });
     // ветер: откуда дует -- треугольник на ободе остриём к центру; порыв -- мигает жёлтым
     const U = WB.U || 0; if (U > 0.5) { const a = Math.atan2(-WB.x, -WB.y) - yaw, gs = !!F.gWarn && (performance.now() / 250 | 0) % 2; x.save(); x.translate(c + Math.sin(a) * rr, c - Math.cos(a) * rr); x.rotate(a + Math.PI);
       const sz = rim * (0.45 + Math.min(0.35, U / 60)); x.fillStyle = gs ? '#ffd27a' : '#6ec0ff'; x.strokeStyle = '#0b1a33'; x.lineWidth = 1.5 * dpr; x.beginPath(); x.moveTo(0, -sz); x.lineTo(sz * 0.8, sz * 0.7); x.lineTo(-sz * 0.8, sz * 0.7); x.closePath(); x.fill(); x.stroke(); x.restore(); }
-    x.strokeStyle = 'rgba(255,255,255,.5)'; x.lineWidth = 1.5 * dpr; x.beginPath(); x.arc(c, c, c - 1, 0, 7); x.stroke();
+    x.strokeStyle = 'rgba(255,255,255,.3)'; x.lineWidth = dpr; x.beginPath(); x.arc(c, c, c - 1, 0, 7); x.stroke();
     // подпись под радаром
     const t = window.innerWidth <= 640 ? `<b>💨 ${Math.round(U)} м/с</b>${F.gWarn ? ' <span class="g">порыв</span>' : ''}` : `<b>💨 ${Math.round(U)} м/с</b>${F.gWarn ? ` · <span class="g">порыв ${Math.round(F.gWarn.S)}</span>` : WB.kat > 2 ? ' · сток с ледника' : ''} · Ø ${(Rm * 2 / 1000).toFixed(0)} км`; if (pill.innerHTML !== t) pill.innerHTML = t;
-    const rb = cv.getBoundingClientRect(); pill.style.top = (rb.bottom + 4) + 'px'; const hs = $('hscore'); if (hs) { hs.style.top = (rb.bottom + 30) + 'px'; } }
+    pill.hidden = !(U >= 12 || F.gWarn || WB.kat > 6) || cv.classList.contains('mini'); // ветер -- подписью, только когда он мешает (на ободе -- всегда)
+    const rb = cv.getBoundingClientRect(); pill.style.top = (rb.bottom + 4) + 'px'; const hs = $('hscore'); if (hs) { hs.style.top = (rb.bottom + (pill.hidden ? 6 : 28)) + 'px'; } }
   // телефон стоймя: задание, строка поиска, подсказка, тревога и стрелка -- одной колонкой под заданием, без наложения
-  function stack() { const ids = ['sclock', 'sshoot', 'hland', 'hwarn', 'harr'], el = ids.map((i) => $(i)).filter(Boolean);
-    if (window.innerWidth > 640) { for (const e of [...el, $('hmis'), $('tools')]) if (e && e.style.top) e.style.top = ''; return; }
-    const hb = $('hhud').getBoundingClientRect(), mm = $('hmis'); if (mm) mm.style.top = (hb.bottom + 6) + 'px';
-    const tl = $('tools'), wq = $('hwind'); if (tl && wq && !wq.hidden) tl.style.top = (wq.getBoundingClientRect().bottom + 8) + 'px';
-    const m = $('hmis'), wp = $('hwind'); let y = Math.max(m && !m.hidden ? m.getBoundingClientRect().bottom + 6 : 104, wp && !wp.hidden ? wp.getBoundingClientRect().bottom + 6 : 0); // ниже и задания, и радара
-    for (const e of el) { if (e.hidden || !e.getClientRects().length) continue; e.style.top = y + 'px'; y += e.offsetHeight + 4; } }
+  // раскладка верхней зоны: телефон стоймя -- полоса миссии и чип тревоги под скоростью (слева), уведомления -- ниже радара;
+  // иначе -- полоса по центру сверху, под ней чип и уведомления. Касание полосы раскрывает задание и сводку операции
+  function stack() { const W = window.innerWidth, Hh = window.innerHeight, portrait = W <= 640 && Hh > W, hb = $('hhud').getBoundingClientRect();
+    const vis = (e) => e && !e.hidden && e.getClientRects().length, rad = $('hradar'), wp = $('hwind'), rb = vis(rad) ? rad.getBoundingClientRect().bottom : 0, wb = vis(wp) ? wp.getBoundingClientRect().bottom : 0;
+    const place = (e, y, left) => { if (!vis(e)) return y; e.style.top = y + 'px'; if (left !== undefined) { e.style.left = left + 'px'; e.style.transform = 'none'; } else { e.style.left = ''; e.style.transform = ''; } return y + e.offsetHeight + 4; };
+    let y; const tl = $('tools');
+    if (portrait) { y = place($('hstrip'), hb.bottom + 4, hb.left); y = place($('hwarn'), y, hb.left); y = Math.max(y, rb + 4, wb + 4); if (tl) tl.style.top = (Math.max(rb, wb) + 6) + 'px'; }
+    else { y = place($('hstrip'), Math.max(8, Math.min(hb.top, 10))) ; y = place($('hwarn'), y); if (tl) tl.style.top = ''; }
+    for (const id of ['hmis', 'toast']) { const e = $(id); if (e) e.style.maxWidth = portrait ? 'calc(100vw - 110px)' : 'min(520px, calc(100vw - 400px))'; } // справа -- столбик кнопок, по бокам -- радар и скорость
+    y = place($('hmis'), y + 2, portrait ? hb.left : undefined); if (G.toastT > 0) y = place($('toast'), y + 2, portrait ? hb.left : undefined);
+    if (W <= 640 || Hh <= 440) { const sc = $('sclock'); if (sc) sc.style.maxWidth = portrait ? 'calc(100vw - 110px)' : ''; y = place(sc, y + 2, portrait ? hb.left : undefined); place($('sshoot'), y); } else { for (const id of ['sclock', 'sshoot']) { const e = $(id); if (e && e.style.top) { e.style.top = ''; e.style.left = ''; e.style.transform = ''; } } } }
   function hud(dt) { if (!on) return; if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; }
     pointMark(); if (F.sar) SAR.hud(); radar(dt); stack(); hudT -= dt; if (hudT > 0) return; hudT = 0.1; dbg();
     const kmh = Math.round(Hc.speed * 3.6), alt = Math.round(Hc.Z + 1607), agl = Math.round(Math.max(0, Hc.agl)), m = Hc.mass, tw = Hc.Tmax / (m * 9.81), pw = Math.min(1.15, Hc.power);
     const cls = pw > 1 ? 'red' : pw > 0.92 ? 'hot' : '';
-    $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>км/ч</small></div><div class="r"><b>${alt}</b> м<span class="lg"> над морем</span> · ${agl} м<span class="lg"> над землёй</span> · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)} м/с</div>
+    const hpc = Hc.hp > 60 ? '#9fe0a0' : Hc.hp > 30 ? '#ffd27a' : '#ff5a3a';
+    $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>КМ/Ч</small></div><div class="r"><b>${alt}</b> м · ${agl} м · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)}</div>
+      <div class="hp"><i style="width:${Math.round(Hc.hp)}%;background:${hpc}"></i></div>${Hc.hp < 99.5 ? `<div class="hpt" style="color:${hpc}">корпус ${Math.round(Hc.hp)}%</div>` : ''}
       <div class="r r2">шаг<span class="bar"><i class="${cls}" style="width:${Math.round(Math.min(1, pw) * 100)}%"></i></span>${Math.round(pw * 100)}% · обороты ${Math.round(Hc.rpm * 95)}%</div>
-      <div class="r">корпус <b style="color:${Hc.hp > 60 ? '#9fe0a0' : Hc.hp > 30 ? '#ffd27a' : '#ff5a3a'}">${Math.round(Hc.hp)}%</b></div>
       <div class="r r4">масса <b>${(m / 1000).toFixed(1)}</b> т · тяга/вес <b>${tw.toFixed(2)}</b>${Hc.ige > 0.03 ? ' · подушка' : ''} · топливо ${Math.round(Hc.fuel)} кг</div>`;
     $('hscore').innerHTML = `<b>${F.score}</b>${F.combo > 1 ? `<i>×${F.combo.toFixed(2).replace(/\.?0+$/, '')}</i>` : ''}<br><small>рекорд ${store.get('heliScore') || 0}</small>`;
     { const cr = $('hcr'), show = Hc.cr > 0.05 || Hc.heat > 0.02 || Hc.hot > 0; cr.hidden = !show; if (show) cr.innerHTML = `${Hc.hot > 0 ? `ПЕРЕГРЕВ · ${Math.ceil(Hc.hot)} с` : Hc.crOn ? '<b style="color:#ff8a2a">ЧР</b> · +12% тяги' : 'двигатели остывают'}<span class="bar"><i class="${Hc.heat > 0.75 ? 'red' : Hc.heat > 0.45 ? 'hot' : ''}" style="width:${Math.round(Hc.heat * 100)}%"></i></span>`; }
-    const w = Hc.crash ? '' : Hc.gpws ? 'ЗЕМЛЯ! ВВЕРХ ▲' : F.gWarn ? `ПОРЫВ ${F.gWarn.side}! ${Math.round(F.gWarn.S)} М/С` : (F.wU || 0) > 30 && G.frame % 120 < 60 ? `ВЕТЕР ${Math.round(F.wU)} М/С` : Hc.warn === 'hot' ? '' : Hc.warn === 'rpm' ? 'ОБОРОТЫ! СБРОСЬ ШАГ' : Hc.warn === 'vrs' ? 'ВИХРЕВОЕ КОЛЬЦО — СКОРОСТЬ ВПЕРЁД' : Hc.warn === 'power' ? 'МОЩНОСТИ НЕ ХВАТАЕТ' : '';
-    const wl = $('hwarn'); if (wl.textContent !== w) wl.textContent = w; wl.hidden = !w; if (w && audio.beep && G.frame % 18 === 0) audio.beep(true);
-    const mi = F.mis[F.mi] || F.goal, me = $('hmis'); guide(mi); if (mi) { me.hidden = false; const t = `<b>${mi.t}</b>${mi.timer && F.pt !== undefined ? ` · <span style="color:${F.pt > 50 ? '#9fe0a0' : F.pt > 25 ? '#ffd27a' : '#ff5a3a'}">состояние ${Math.round(F.pt)}%</span>` : ''}<br>${mi.d}${mi.how === 'winch' ? ` · на борту ${mi.to.folks.filter((f) => f.userData.up).length} из ${mi.to.folks.length}` : F.hold > 0.2 ? ` · ${mi.how === 'watch' ? 'съёмка' : mi.how === 'hover' ? 'висение' : 'выгрузка'} ${Math.min(100, Math.round(F.hold / (mi.how === 'watch' ? 15 : mi.how === 'hover' ? mi.need : 2) * 100))}%` : ''}`; if (me.innerHTML !== t) me.innerHTML = t; } else me.hidden = true;
+    const w = Hc.crash ? '' : Hc.gpws ? 'ЗЕМЛЯ! ВВЕРХ ▲' : F.gWarn ? `ПОРЫВ ${F.gWarn.side}! ${Math.round(F.gWarn.S)} М/С` : (F.wU || 0) > 30 && G.frame % 120 < 60 ? `ВЕТЕР ${Math.round(F.wU)} М/С` : Hc.warn === 'hot' ? '' : Hc.warn === 'rpm' ? 'ОБОРОТЫ! СБРОСЬ ШАГ' : Hc.warn === 'vrs' ? 'ВИХРЕВОЕ КОЛЬЦО — СКОРОСТЬ ВПЕРЁД' : Hc.warn === 'power' ? '⚠ мощность на пределе' : '';
+    const wl = $('hwarn'), crit = Hc.gpws || Hc.warn === 'rpm' || Hc.warn === 'vrs'; if (wl.textContent !== w) wl.textContent = w; wl.hidden = !w; wl.classList.toggle('crit', !!crit); if (w && crit && audio.beep && G.frame % 18 === 0) audio.beep(true); // мощность -- спокойный чип, земля/обороты/кольцо -- мигает и пищит
+    // задание: уведомлением на 7 с при смене (повтор того же -- не показываем), касание полосы -- снова; постоянно -- только полоса
+    const mi = F.mis[F.mi] || F.goal, me = $('hmis'); guide(mi); const key = mi ? mi.t + '|' + F.mi : ''; if (key !== F.nKey) { F.nKey = key; F.nT = mi ? 7 : 0; }
+    F.nT = Math.max(0, (F.nT || 0) - 0.1); F.detT = Math.max(0, (F.detT || 0) - 0.1); document.body.classList.toggle('hdet', F.detT > 0);
+    if (mi && F.nT > 0) { me.hidden = false; me.style.opacity = String(Math.min(1, F.nT / 0.6)); const t = `<b>${mi.t}.</b> ${mi.d}${mi.timer && F.pt !== undefined ? ` · <span style="color:${F.pt > 50 ? '#9fe0a0' : F.pt > 25 ? '#ffd27a' : '#ff5a3a'}">состояние ${Math.round(F.pt)}%</span>` : ''}`; if (me.innerHTML !== t) me.innerHTML = t; } else me.hidden = true;
+    { const sp = $('hstrip'); sp.hidden = !mi || Hc.crash; if (mi && !Hc.crash) { const dx = mi.to.X - Hc.X, dy = mi.to.Y - Hc.Y, d = Math.hypot(dx, dy); camera.getWorldDirection(cdir); const rel = wrapPi(Math.atan2(dx, dy) - Math.atan2(cdir.x, -cdir.z));
+      const prog = mi.how === 'winch' ? ` · на борту ${mi.to.folks.filter((f) => f.userData.up).length}/${mi.to.folks.length}` : F.hold > 0.2 ? ` · ${Math.min(100, Math.round(F.hold / (mi.how === 'watch' ? 15 : mi.how === 'hover' ? mi.need : 2) * 100))}%` : '';
+      const cnt = F.sar && SAR.stripInfo ? SAR.stripInfo() : F.mis.length > 1 ? `<span class="c">${Math.min(F.mi + 1, F.mis.length)}/${F.mis.length}</span>` : '';
+      const t = `<i class="ar" style="transform:rotate(${rel.toFixed(2)}rad)">↑</i><span class="d">${d >= 1000 ? (d / 1000).toFixed(1) + ' км' : Math.round(d) + ' м'}</span><span class="t">${mi.t.replace(/^\d\/\d · /, '')}${prog}</span>${cnt}`; if (sp.innerHTML !== t) sp.innerHTML = t; } }
     const hint = !F.sar && F.coach === undefined && F.t < 30 && Hc.ground && !F.mi ? (TOUCH ? '▲ — вверх · джойстик: вперёд — разгон, на себя — тормоз, вбок — поворот' : 'Пробел — вверх, Shift — вниз · ↑ разгон, ↓ тормоз, ← → поворот') : '';
     const he = $('hint'); if (he.textContent !== hint) he.textContent = hint; he.hidden = !hint; he.className = 'hud'; }
   // стрелка к цели (относительно взгляда камеры) и посадочные подсказки у цели
-  function guide(mi) { const ar = $('harr'), ld = $('hland'); if (F.banner && F.banner.t > 0) { F.banner.t -= 0.1; ar.hidden = true; ld.hidden = false; ld.textContent = F.banner.txt; ld.className = 'hud ok'; ld.style.fontSize = '42px'; return; } ld.style.fontSize = ''; if (!mi || Hc.crash) { ar.hidden = true; ld.hidden = true; return; }
+  function guide(mi) { const ar = $('harr'), ld = $('hland'); if (F.banner && F.banner.t > 0) { F.banner.t -= 0.1; ar.hidden = true; ld.hidden = false; ld.textContent = F.banner.txt; ld.className = 'hud ok'; ld.style.fontSize = 'clamp(20px,6vw,30px)'; return; } ld.style.fontSize = ''; if (!mi || Hc.crash) { ar.hidden = true; ld.hidden = true; return; }
     const dx = mi.to.X - Hc.X, dy = mi.to.Y - Hc.Y, d = Math.hypot(dx, dy), camYaw = Math.atan2(clook.x, -clook.z) + G.orbit, rel = wrapPi(Math.atan2(dx, dy) - camYaw);
     ar.hidden = d < 120; if (!ar.hidden) { ar.firstChild.style.transform = `rotate(${rel}rad)`; ar.lastChild.textContent = d >= 1000 ? (d / 1000).toFixed(1) + ' км' : Math.round(d) + ' м'; }
     let t = '', c = 'go'; const agl = Hc.agl;

@@ -15,8 +15,8 @@ const CSS = `
 #smini{position:fixed;left:max(10px,env(safe-area-inset-left,0px));top:160px;width:170px;height:170px;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.4);cursor:pointer;touch-action:none}body.sardr #smini{top:auto;bottom:calc(220px + env(safe-area-inset-bottom,0px))}
 #sbtns{position:fixed;right:calc(108px + env(safe-area-inset-right,0px));bottom:calc(40px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
 body:not(.touchdev) #sbtns{right:16px;bottom:70px}
-#sbtns button{min-width:62px;height:54px;border-radius:14px;border:2px solid rgba(255,255,255,.6);background:rgba(10,30,60,.6);color:#fff;font:700 14px var(--ui);padding:0 10px;touch-action:none}
-#sbtns button.on{background:rgba(255,138,42,.8)}#sbtns button small{display:block;font-size:10px;font-weight:400;opacity:.85}
+#sbtns button{min-width:48px;height:48px;border-radius:12px;border:1px solid rgba(255,255,255,.32);background:rgba(10,30,60,.32);color:#fff;font:700 19px var(--ui);padding:0 6px;touch-action:none;line-height:1}
+#sbtns button.on{background:rgba(255,138,42,.8)}#sbtns button small{display:none;font-size:9px;font-weight:500;opacity:.9;margin-top:2px}body.slearn #sbtns button small,#sact small{display:block}#sact{font-size:13px!important}
 #sshoot{left:50%;bottom:calc(76px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#ffd24a;color:#2a1800;border-radius:12px;padding:6px 14px;font:800 15px var(--ui);animation:sblink .7s steps(2) infinite;white-space:nowrap}@keyframes sblink{50%{opacity:.45}}
 #sbtns button.pulse{background:#ffd24a;color:#2a1800;border-color:#fff;animation:sblink .7s steps(2) infinite}
 @media (max-width:640px){#sshoot{bottom:auto;top:196px;font-size:13px}}
@@ -40,6 +40,11 @@ body.sarrun #hscore,body.sardr #hhud,body.sardr #hscore,body.sardr #harr,body.sa
 #smini.big{width:min(300px,60vmin);height:min(300px,60vmin)}
 @media (max-height:440px) and (min-width:641px){#smini{top:96px;width:104px;height:104px}#smini.big{width:200px;height:200px}#sclock{font-size:12px;padding:2px 10px}#sclock b{font-size:14px}.sdet{display:none}#sbtns{gap:6px;bottom:calc(10px + env(safe-area-inset-bottom,0px))}#sbtns button{min-width:52px;height:42px;font-size:12px}#sbtns button small{font-size:9px}#sshoot{bottom:auto;top:60px;font-size:13px}}
 @media (max-width:640px){.sdet{display:none}#smini{top:auto;bottom:calc(250px + env(safe-area-inset-bottom,0px));width:100px;height:100px}#smini.big{width:220px;height:220px}#sframe{inset:200px 8px 250px 8px}#sbtns{right:calc(100px + env(safe-area-inset-right,0px));bottom:calc(24px + env(safe-area-inset-bottom,0px));gap:8px}#sbtns button{min-width:54px;height:46px;font-size:13px}#sclock{bottom:auto;top:150px;font-size:12px;padding:3px 10px;white-space:normal;width:max-content;max-width:calc(100vw - 24px)}#sclock b{font-size:14px}#sshoot{top:196px}}
+/* HUD v2 (вертолёт): строка операции на телефоне -- по касанию полосы миссии; «СНИМАЙ» -- миганием кнопки 📷; кнопки -- компактный столбик */
+#sbtns{right:calc(clamp(54px,15vw,62px) + 30px + env(safe-area-inset-right,0px))!important;bottom:calc(30px + env(safe-area-inset-bottom,0px))!important;gap:8px!important}
+body:not(.touchdev) #sbtns{right:16px!important;bottom:70px!important}
+#sclock{font-size:12px;padding:2px 10px;background:rgba(6,18,40,.5)}#sclock b{font-size:14px}
+@media (max-width:640px),(max-height:440px){body:not(.hdet) #sclock{display:none!important}#sshoot{display:none!important}#sbtns button{min-width:46px!important;height:46px!important}}
 `;
 const NIGHT = (hr) => hr < 6 || hr > 20.5;
 const CLUEICON = { wand: '🚩', note: '📝', tent: '⛺', pole: '🦯', glove: '🧤', debris: '❄', rope: '〰', pack: '🎒', axe: '⛏', track: '👣', cave: '🕳', cornice: '⚠', helmet: '⛑', rocks: '🪨', mirror: '✨', wrap: '🍫', bivy: '💤' };
@@ -312,6 +317,7 @@ export function makeSar(K) {
     const t = `<b>Т+ ${fmtT(S.t)}</b> · ${hhmm} · <b style="color:#ffd24a">${sc.total}</b> оч · 🔎${S.found.size} · 👤${nf}/${S.c.victims.length}${S.rescuerLost ? ` · <span class="sbad">−${S.rescuerLost}</span>` : ''}${hurt ? `<br>${hurt}` : `<span class="sdet"><br>шанс найти живыми: ${hope} · за время ещё +${tb}</span>`}`;
     if (el.innerHTML !== t) el.innerHTML = t;
     if (S.dr) { const d = S.dr, L = Math.hypot(d.X - d.L.X, d.Y - d.L.Y), tx = `ДРОН · батарея ${Math.max(0, Math.round(d.bat * 100))}% · ${Math.round(d.Z - H(d.X, d.Y))} м над землёй · ${(L / 1000).toFixed(1)} км${NIGHT(hr) ? ' · ТЕПЛОВИЗОР' : ''}`; const b = $('sframe').firstChild; if (b.textContent !== tx) b.textContent = tx;  const gs = $('sgim').querySelector('span'), gt = `камера\n${Math.round(d.gim ?? 35)}°`; if (gs.textContent !== gt) { gs.textContent = gt; gs.style.whiteSpace = 'pre'; } }
+    document.body.classList.toggle('slearn', S.t < 25 || !store.get('sarDone')); // подписи кнопок -- в начале операции и в первом деле
     $('sphoto').classList.toggle('pulse', !!S.shoot); { const sh = $('sshoot'); sh.hidden = !S.shoot; }
     const dl = $('sdrone'); dl.hidden = !S.res.drone; dl.classList.toggle('on', !!S.dr); dl.innerHTML = S.dr ? '🛸<small>домой</small>' : `🛸<small>дрон · ${S.bats}</small>`;
     { const q = fastTarget(), h = K.heli(), fb = $('sfast'), far = q && !S.dr && Math.hypot(q.X - h.X, q.Y - h.Y) > 1500; fb.hidden = !far; if (far) { const t = `⏩<small>к цели · ${Math.round(Math.hypot(q.X - h.X, q.Y - h.Y) / 3300 + 2)} мин</small>`; if (fb.innerHTML !== t) fb.innerHTML = t; } }
@@ -431,7 +437,7 @@ export function makeSar(K) {
   function tally() { const c = S.c; return { saved: S.saved, alive: c.victims.filter((v) => v.alive0).length, aliveFound: c.victims.filter((v) => v.foundT !== undefined && !v.dead && !v.saved).length, dead: c.victims.filter((v) => v.foundT !== undefined && v.dead).length,
     clues: [...S.found].filter((i) => !c.clues[i].fake).length, minutes: S.t, rescuerLost: S.rescuerLost, droneLost: S.droneLost, heliCrash: !!K.heli().crash, comm: c.comm,
     extra: [[`горячий след`, S.hot || 0], ['ночные полёты', -(S.nightPen || 0)]] }; }
-  function end() { if (!S || S.ended) return; S.ended = true; S.run = false; G.spyMore = null; journal(false); if (S.dr) { S.dr = null; drone.g.visible = false; } $('sframe').hidden = true; document.body.classList.remove('sardr', 'sarrun'); $('sbtns').hidden = true; $('sclock').hidden = true; $('smini').hidden = true; const c = S.c;
+  function end() { if (!S || S.ended) return; S.ended = true; S.run = false; G.spyMore = null; journal(false); if (S.dr) { S.dr = null; drone.g.visible = false; } $('sframe').hidden = true; document.body.classList.remove('sardr', 'sarrun', 'slearn'); $('sbtns').hidden = true; $('sclock').hidden = true; $('smini').hidden = true; const c = S.c;
     const o = tally();
     const sc = scoreOf(o), rec = sc.total > (store.get('sarBest') || 0); if (rec) store.set('sarBest', sc.total); store.set('sarDone', 1); const rc = store.get('sarRecent') || []; rc.push(c.scen); store.set('sarRecent', rc.slice(-6));
     const truth = c.victims.map((v) => `${v.name}: ${v.saved ? gw(v, 'спасён', 'спасена') : v.foundT !== undefined ? (v.dead ? gw(v, 'найден погибшим', 'найдена погибшей') : gw(v, 'найден живым, но не эвакуирован', 'найдена живой, но не эвакуирована')) : v.alive0 && !v.dead ? gw(v, 'не найден — а был ещё жив…', 'не найдена — а была ещё жива…') : gw(v, 'не найден', 'не найдена')}`).join(' · ');
@@ -439,8 +445,12 @@ export function makeSar(K) {
     $('rs').innerHTML = `<b>Что случилось:</b> ${c.cause}. <small>${c.real}</small><br>${truth}`;
     $('rt').innerHTML = sc.parts.map(([t, v]) => `<tr><td>${t}</td><td style="text-align:right">${v > 0 ? '+' : ''}${v}</td></tr>`).join('') + (sc.k > 1 ? `<tr><td>сложность: ${c.comm.name}</td><td style="text-align:right">×${sc.k}</td></tr>` : '');
     $('ragain').textContent = 'Новое дело'; setTimeout(() => { if (S && S.on) $('result').hidden = false; }, 600); }
-  function stop() { if (!S) return; S.on = false; G.spyMore = null; stopWorld(); if (drone) drone.g.visible = false; if (ping) ping.visible = false; $('sarw').hidden = true; if ($('harr')) $('harr').style.top = ''; const cv = document.querySelector('canvas'); if (cv) cv.style.filter = ''; NETHOOK.sar = null; document.body.classList.remove('sardr', 'sarrun'); const n = net(); if (n && n.sarLeave) n.sarLeave(); S = null; }
+  function stop() { if (!S) return; S.on = false; G.spyMore = null; stopWorld(); if (drone) drone.g.visible = false; if (ping) ping.visible = false; $('sarw').hidden = true; if ($('harr')) $('harr').style.top = ''; const cv = document.querySelector('canvas'); if (cv) cv.style.filter = ''; NETHOOK.sar = null; document.body.classList.remove('sardr', 'sarrun', 'slearn'); const n = net(); if (n && n.sarLeave) n.sarLeave(); S = null; }
   // основа радара (правый верхний угол, рисует helimode): топокарта вокруг точки, без своей стрелки и подписей
+  // для полосы миссии: найдено людей / всего и самый срочный найденный (сколько продержится)
+  function stripInfo() { if (!S || !S.run) return ''; const c = S.c, nf = c.victims.filter((v) => v.foundT !== undefined).length; let u = '';
+    const hurt = c.victims.filter((v) => v.foundT !== undefined && !v.dead && !v.saved).map((v) => Math.max(0, v.left + (v.kit ? 360 : 0) - (v.foundT + (S.t - v.foundT) / 3)) * 3).sort((a, b) => a - b)[0];
+    if (hurt !== undefined) u = `<span class="u${hurt < 120 ? ' bad' : ''}">🩺${fmtT(hurt)}</span>`; return `<span class="c">👤${nf}/${c.victims.length}</span>${u}`; }
   function miniBase(cv, cx, cy, R) { if (!S || !S.run) return false; drawMap(cv, { cx, cy, R }, 'radar'); return true; }
-  return { miniBase, begin, tick, cam, hud, stop, missionDone, end, get on() { return !!(S && S.on); }, get S() { return S; }, get drone() { return !!(S && S.dr); }, get running() { return !!(S && S.run); } };
+  return { stripInfo, miniBase, begin, tick, cam, hud, stop, missionDone, end, get on() { return !!(S && S.on); }, get S() { return S; }, get drone() { return !!(S && S.dr); }, get running() { return !!(S && S.run); } };
 }
