@@ -313,8 +313,10 @@ export function makeSar(K) {
     if (c.last.kind === 'ping') return goal('Точка SOS трекера', 'Летите к сигналу и снимайте 📷 вокруг: трекер ошибается до 200 м', c.last.X, c.last.Y, 250);
     const tr = traces(), knownDay = c.last.kind === 'radio' ? c.last.camp : 0, foundDay = Math.max(knownDay, ...tr.filter((q) => S.found.has(q.id)).map((q) => q.day)), next = tr.find((q) => !S.found.has(q.id) && q.day > knownDay);
     if (next) return goal(`Идём по следу группы · день ${next.day}`, `${foundDay ? `Группа точно прошла день ${foundDay}. ` : ''}Ищите их метки на маршруте дня ${next.day} (оранжевые вешки, записи в лагерях): летите вдоль пунктира низко и снимайте 📷`, next.X, next.Y, 220);
-    const P = [c.leg[0][0] + (c.leg[1][0] - c.leg[0][0]) * 0.55, c.leg[0][1] + (c.leg[1][1] - c.leg[0][1]) * 0.55];
-    return goal('След обрывается', `Последняя метка группы — на маршруте дня ${c.legIdx + 1}. Дальше их нет: что-то случилось. Осмотрите склоны вокруг — палатку, следы, снаряжение. Снимайте 📷`, P[0], P[1], 900); }
+    // след обрывается не в пустоте, а на последней известной метке группы (вешка, запись в лагере); нет меток -- на последнем лагере со связью
+    const lastT = tr.filter((q) => S.found.has(q.id)).pop(), camp = c.pts[Math.min(c.pts.length - 1, knownDay)], at = lastT || { X: camp.X, Y: camp.Y, t: `лагерь «${camp.n}»` };
+    const nx = c.pts[Math.min(c.pts.length - 1, c.legIdx + 1)], ahead = nx ? `в сторону «${nx.n}»` : 'дальше по маршруту';
+    return goal('След обрывается', `Последнее, что знаем о группе: ${lastT ? `«${short(lastT.t, 60)}»` : `${at.t} (день ${c.legIdx + 1})`}. Дальше меток нет — что-то случилось. Осмотрите склоны от этой точки ${ahead}: палатку, следы, снаряжение. Снимайте 📷`, at.X, at.Y, 700); }
   // есть ли что-то в кадре, что снимок, скорее всего, найдёт -- подсказка «СНИМАЙ!»
   function canShoot() { const from = S.dr || K.heli(), agl = from.Z - H(from.X, from.Y), night = NIGHT(clockNow()), kind = S.dr ? 'drone' : 'heli', zk = !S.dr && K.vfOn && K.vfOn() ? 1 + (K.vfZoom() - 1) * 0.4 : 1; camera.updateMatrixWorld();
     const look = (X, Y, z) => { v3.set(X, z + 1, -Y).project(camera); return v3.z < 1 && Math.abs(v3.x) < 0.8 && Math.abs(v3.y) < 0.76; };
