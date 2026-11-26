@@ -66,3 +66,8 @@ test('ветер: 13 м/с автомат висения держит, 28 м/с 
   assert.ok(Math.abs(a.X) < 10, 'слабый снос ' + a.X.toFixed(0)); assert.ok(b.X > 60, 'сильный снос ' + b.X.toFixed(0));
   const c = new Heli().reset(0, 0, Z0, 0, false); run(c, 30, (q) => ({ strafe: q.X > 0 ? -1 : 0 }), fl, () => ({ x: 28, y: 0, z: 0 })); assert.ok(Math.abs(c.X) < 40, 'ручкой удержал: ' + c.X.toFixed(0));
 });
+test('у земли автомат держит высоту над рельефом: на подъём склона машина идёт сама, не врезается', () => {
+  const slope = (x, y) => Math.max(0, (y - 600) * 0.15); const hl = new Heli().reset(0, 0, 60, 0, false); let minA = 99;
+  run(hl, 40, (q) => { if (q.t > 2) minA = Math.min(minA, q.agl); return { fwd: 0.7 }; }, slope);
+  assert.ok(!hl.crash && hl.hp === 100, 'цел: ' + JSON.stringify(hl.crash) + ' hp ' + hl.hp); assert.ok(minA > 25, 'мин. над землёй ' + minA.toFixed(0)); assert.ok(hl.Y > 1500, 'летел: ' + hl.Y.toFixed(0));
+});

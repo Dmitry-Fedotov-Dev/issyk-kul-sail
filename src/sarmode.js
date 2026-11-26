@@ -83,7 +83,7 @@ export function makeSar(K) {
       for (let i = 0; i < 80; i++) { c = makeCase(newCode(), H); if (first ? c.diff === 0 && SCEN.find((q) => q.id === c.scen).rank <= 2 && c.victims.some((v) => v.alive0) : !rc.includes(c.scen)) break; } }
     S = { on: true, c, t: 0, run: false, res: { men: 4, drone: 1 }, teams: [], dr: null, bats: 0, droneLost: 0, rescuerLost: 0, found: new Set(), notes: [], log: [], peers: new Map(), onboard: null, kit: 0, selTeam: -1, posT: 0, saved: 0, aliveFound: 0, deadFound: 0, ended: false, sprites: [], nightOn: false };
     // тревога ночью -- Ми-8 в горах ночью не летает: вылет на рассвете, а у пострадавших тают эти часы
-    const alarm = (c.clock0 + c.since / 60) % 24, wait = NIGHT(alarm) || alarm > 14 ? Math.round((((6.5 - alarm) + 24) % 24) * 60) : 0; // поиск начинают с утра: на светлое время -- весь день c.alarm = alarm; c.wait = wait;
+    const alarm = (c.clock0 + c.since / 60) % 24, wait = NIGHT(alarm) || alarm > 14 ? Math.round((((6.5 - alarm) + 24) % 24) * 60) : 0; c.alarm = alarm; c.wait = wait; // поиск начинают с утра: на светлое время -- весь день
     if (wait) { c.since += wait; for (const v of c.victims) { v.left = Math.max(0, v.left - wait); v.alive0 = v.left > 0; } }
     G.clock = wait ? 6.5 : alarm;
     for (const v of c.victims) { v.foundT = undefined; v.saved = false; v.kit = 0; v.dead = false; v.inEvac = false; }

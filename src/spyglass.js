@@ -55,7 +55,7 @@ export function makeSpyglass({ G, camera, post, audio, store, ach, $, extra }) {
   const TOTAL = () => fixedTargets().length + Object.keys(NAMES).length + 3; // типы судов с яхтой + игрок, флаг, мыс
 
   // ---------- вид ----------
-  function open() { if (s.on || G.mode === 'menu') return; s.on = true; loadLandcover(); // лес и ледники по OSM -- по требованию s.a = s.a || 0; s.lock = null; s.prog = 0; s.f = 1.3; s.fv = 0; s.still = 0;
+  function open() { if (s.on || G.mode === 'menu') return; s.on = true; loadLandcover(); /* лес и ледники по OSM -- по требованию */ s.a = s.a || 0; s.lock = null; s.prog = 0; s.f = 1.3; s.fv = 0; s.still = 0;
     camera.getWorldDirection(v3); s.yaw = Math.atan2(v3.x, -v3.z); s.pitch = G.spyAir ? -0.35 : 0.01; s.zoom = s.zoomT;
     document.body.classList.add('spy'); $('spy').hidden = false; audio.spy && audio.spy(true); counter();
     if (!store.get('spyHelp')) { store.set('spyHelp', 1); $('spyhelp').hidden = false; setTimeout(() => { $('spyhelp').hidden = true; }, 6500); } }

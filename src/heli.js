@@ -48,7 +48,7 @@ export class Heli {
   constructor() { this.reset(0, 0, 0, 0); this.load = 0; }
   // th -- курс (0 -- север, по часовой)
   reset(X, Y, Z, th, ground = true) {
-    Object.assign(this, { anc: null, iF: 0, iS: 0, pv: 0, sv: 0, rollS: 0, bank: 0, jolt: 0, hov: 0, slip: 0, assistA: 0, overT: 0, dem: 0, ax: 0, ay: 0, hp: 100, hit: null, cr: 0, heat: 0, hot: 0, crOn: false, floor: -1e9, gpws: false, X, Y, Z, th, vx: 0, vy: 0, vz: 0, pitch: 0, roll: 0, yr: 0, col: ground ? 0 : 0.85, rpm: 1, T: 0, Tmax: 0, power: 0, ground, crash: null,
+    Object.assign(this, { holdA: null, prec: 0, anc: null, iF: 0, iS: 0, pv: 0, sv: 0, rollS: 0, bank: 0, jolt: 0, hov: 0, slip: 0, assistA: 0, overT: 0, dem: 0, ax: 0, ay: 0, hp: 100, hit: null, cr: 0, heat: 0, hot: 0, crOn: false, floor: -1e9, gpws: false, X, Y, Z, th, vx: 0, vy: 0, vz: 0, pitch: 0, roll: 0, yr: 0, col: ground ? 0 : 0.85, rpm: 1, T: 0, Tmax: 0, power: 0, ground, crash: null,
       vrs: 0, ige: 0, etl: 0, agl: 0, sig: 1, t: 0, fuel: MI8.fuel, warn: '', shake: 0, touch: null, hold: Z, tb: 0 });
     if (!ground) { this.hold = Z; } return this; }
   get mass() { return MI8.empty + MI8.crew + this.fuel + this.load; }
@@ -60,14 +60,16 @@ export class Heli {
     const w = wind ? wind(this.X, this.Y, this.Z) : { x: 0, y: 0, z: 0 }, ax = this.vx - w.x, ay = this.vy - w.y, az = this.vz - w.z, Vair = Math.hypot(ax, ay);
     const u = clamp(ctl.fwd || 0, -1, 1), s = clamp(ctl.side || 0, -1, 1), st = clamp(ctl.strafe || 0, -1, 1), up = clamp(ctl.up || 0, -1, 1);
     const Vg = Math.hypot(this.vx, this.vy), fast = sm(5, 35, Vg);
+    // точный режим: у земли на малой скорости ручка мягче -- можно подкрасться к склону и встать над людьми по метру
+    const prec = (1 - sm(40, 100, this.agl)) * (1 - sm(8, 22, Vg)); this.prec = prec;
     // ---- курс: разворот на месте быстрый, на скорости -- плавный вираж; рысканье с инерцией ----
-    const yrT = this.ground ? 0 : s * (P.yawHover + (P.yawFast - P.yawHover) * fast);
+    const yrT = this.ground ? 0 : s * (P.yawHover + (P.yawFast - P.yawHover) * fast) * (1 - 0.45 * prec);
     this.yr += (yrT - this.yr) * Math.min(1, dt * 3.2); this.th += this.yr * dt;
     const fx = Math.sin(this.th), fy = Math.cos(this.th); // нос; правый борт -- (fy, -fx)
     const vf = this.vx * fx + this.vy * fy, vs = this.vx * fy - this.vy * fx;
     // ---- желаемое ускорение (по носу и вбок): лётчик + автомат висения ----
     const free = Math.abs(u) < 0.05 && Math.abs(st) < 0.05;
-    let dF = u * P.aMax * (u < 0 ? 1.1 : 1), dS = st * P.aMax * 0.55;
+    let dF = u * P.aMax * (u < 0 ? 1.1 : 1) * (1 - 0.5 * prec), dS = st * P.aMax * 0.55 * (1 - 0.4 * prec);
     // висение: ручка отпущена на малой скорости -- гасим путевую скорость; интеграл «запоминает» наклон против ветра
     const hov = free && !this.ground ? 1 - sm(9, 15, Vg) : 0; this.hov = hov;
     if (hov > 0) { this.iF = clamp(this.iF + vf * dt * 0.5 * hov, -4, 4); this.iS = clamp(this.iS + vs * dt * 0.5 * hov, -4, 4);
@@ -97,11 +99,15 @@ export class Heli {
     const Tcap = P.T0 * g * sig * (1 + ige + etl) * (1 - 0.42 * this.vrs) * (1 + 0.12 * this.cr) * (this.hot > 0 ? 0.8 : 1) * (0.93 + 0.07 * this.rpm);
     this.ige = ige; this.etl = etl;
     const cz = Math.cos(this.pitch) * Math.cos(this.rollS + this.bank);
-    if (Math.abs(up) > 0.05) this.hold = this.Z;
-    // ЗЕМЛЯ!: только предупреждение -- рельеф по курсу на 2-6 с выше траектории
-    this.gpws = false; if (Vg > 10 && !this.ground) for (const t of [2, 4, 6]) if (h(this.X + this.vx * t, this.Y + this.vy * t) > this.Z + Math.min(this.vz, 0) * t - 12) { this.gpws = true; break; }
+    // высота: ниже 250 м над рельефом автомат держит высоту НАД ЗЕМЛЁЙ (как по радиовысотомеру) и смотрит вперёд по курсу на 1-3 с --
+    // вдоль склона и над моренами машина сама поднимается перед бугром; выше -- держит отметку (барометрически)
+    if (Math.abs(up) > 0.05) { this.hold = this.Z; this.holdA = this.agl; } else if (this.holdA !== null && this.agl > 320) this.holdA = null; else if (this.holdA === null && this.agl < 250 && Math.abs(this.vz) < 1.5) this.holdA = this.agl;
+    let zHold = this.hold;
+    if (this.holdA !== null && !this.ground) { let gA = gz; if (Vg > 3) for (const t of [0.8, 1.6, 2.6]) gA = Math.max(gA, h(this.X + this.vx * t, this.Y + this.vy * t)); zHold = gA + Math.max(2, this.holdA); this.hold = zHold; }
+    // ЗЕМЛЯ!: рельеф по курсу на 2-6 с выше, чем машина успеет подняться (автомат над рельефом тянет вверх сам -- кричим, только если не успеет)
+    this.gpws = false; { const cm = this.holdA !== null && up >= 0 ? clamp((Tcap * cz / m - g) * 2.2, 1.2, 9) * 0.8 : Math.min(this.vz, 0); if (Vg > 10 && !this.ground) for (const t of [2, 4, 6]) if (h(this.X + this.vx * t, this.Y + this.vy * t) > this.Z + cm * t - 12) { this.gpws = true; break; } }
     const azMax = Tcap * cz / m - g, climbMax = clamp(azMax * 2.2, 1.2, 9);
-    const vzT = Math.abs(up) > 0.05 ? (up > 0 ? up * climbMax : up * Math.min(9, 1.5 + Math.max(0, this.agl) * 0.12)) : clamp((this.hold - this.Z) * 0.7, -4, 4);
+    const vzT = Math.abs(up) > 0.05 ? (up > 0 ? up * climbMax : up * Math.min(9, 1.5 + Math.max(0, this.agl) * 0.12)) : clamp((zHold - this.Z) * 0.7, -4, zHold > this.Z + 15 ? 9 : 4);
     let azW = clamp((vzT - this.vz) * 1.8, -6, 6); const azC = Math.min(azW, azMax); // выше, чем может винт, -- нельзя
     const Treq = m * (g + azW) / Math.max(0.5, cz), demand = Treq / Tcap; this.dem = demand;
     this.col += (clamp(demand, 0, 1) - this.col) * Math.min(1, dt * 2.5);
