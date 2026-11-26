@@ -60,8 +60,8 @@ export function installExtra(A) {
   // ---------- достижения ----------
   function ach(id) { if (done.has(id)) return; const a = ACH.find((x) => x[1] === id); if (!a) return; done.add(id); store.set('ach', [...done]); audio.chime(); toast('★ ' + a[2]); journal(); }
   function journal() { const groups = { yacht: 'Яхта', kayak: 'Каяк', scull: 'Академическая одиночка', sup: 'SUP-доска', jetski: 'Гидроцикл', boat: 'Моторный катер', law: 'Закон и порядок', map: 'География', spy: 'Подзорная труба', para: 'Параплан', jet: 'Як-130', mount: 'Горы и джайлоо', dymok: 'Дымок на берегу' };
-    const ACHs = ACH.filter((a) => shown(a[0])); $('bjournal').textContent = `Журнал · ${ACHs.filter((a) => done.has(a[1])).length}/${ACHs.length}`;
-    $('jlist').innerHTML = Object.keys(groups).filter(shown).map((g) => `<h4>${groups[g]}</h4>` + ACH.filter((a) => a[0] === g).map((a) => `<div class="ja${done.has(a[1]) ? ' ok' : ''}"><b>${a[2]}</b><span>${a[3]}</span></div>`).join('') + (g === 'dymok' ? collHtml() : '')).join(''); }
+    const ACHs = ACH.filter((a) => shown(a[0]) && shown(a[1])); $('bjournal').textContent = `Журнал · ${ACHs.filter((a) => done.has(a[1])).length}/${ACHs.length}`;
+    $('jlist').innerHTML = Object.keys(groups).filter(shown).map((g) => `<h4>${groups[g]}</h4>` + ACH.filter((a) => a[0] === g && shown(a[1])).map((a) => `<div class="ja${done.has(a[1]) ? ' ok' : ''}"><b>${a[2]}</b><span>${a[3]}</span></div>`).join('') + (g === 'dymok' ? collHtml() : '')).join(''); }
   // коллекция находок Дымка: что найдено и сколько; ненайденное -- знаком вопроса, чтобы было что искать
   function collHtml() { const c = store.get('finds') || {}; return `<div class="ja coll"><b>Коллекция</b><span>${FKINDS.map((k) => (c[k.id] ? `${k.name} × ${c[k.id]}` : '???')).join(' · ')}</span></div>`; }
 
@@ -227,7 +227,7 @@ export function installExtra(A) {
 
   // ---------- меню ----------
   function refreshMenu() { for (const c of $('crafts').children) c.setAttribute('aria-pressed', c.dataset.id === sel);
-    $('brace').innerHTML = `${COMPETE[sel][0]}<small>${COMPETE[sel][1]}</small>`; $('briver').hidden = sel !== 'kayak';
+    $('brace').innerHTML = `${COMPETE[sel][0]}<small>${COMPETE[sel][1]}</small>`; $('briver').hidden = sel !== 'kayak' || !shown('river');
     siteUI(); $('bfree').innerHTML = sel === 'heli' ? (store.get('heliSite') === 'rwy' ? 'Свободный полёт<small>площадка аэродрома Чолпон-Аты</small>' : (store.get('heliSite') === 'merz' ? 'К озеру Мерцбахера<small>прорыв ледникового озера — грохот, воронка, айсберги</small>' : store.get('heliSite') === 'sar' ? 'Поисковая операция<small>пропала группа: маршрут, улики, дрон, отряды — можно вместе по коду</small>' : 'Спасработы<small>Хан-Тенгри: база на леднике Южный Иныльчек</small>')) : sel === 'jet' ? (store.get('jetSite') === 'khan' ? 'Свободный полёт<small>над Иныльчеком: Хан-Тенгри, пик Победы</small>' : 'Свободный полёт<small>взлёт с полосы старого аэродрома</small>') : sel === 'para' ? `Свободный полёт<small>старт: ${({ winch: 'лебёдка на полосе аэродрома', airport: 'склон над аэродромом', kurgak: 'пик Кургак-Сай', kalitka: 'гора Калитка' })[store.get('paraSite') || 'airport']}</small>` : 'Свободное плавание<small>бухта, мыс, открытая вода</small>';
     $('how').innerHTML = sel === 'yacht' ? yachtHow : HOW[sel].replace(/<b>Пробел<\/b>/g, TOUCH ? `кнопка <b>«${info(sel).key}»</b>` : '<b>Пробел</b>').replace(/<b>← →<\/b>/g, TOUCH ? '<b>касание слева и справа</b>' : '<b>← →</b>');
     $('bmap').textContent = startAt ? `Место: ${startAt.label}` : 'Место: Чолпон-Ата';
