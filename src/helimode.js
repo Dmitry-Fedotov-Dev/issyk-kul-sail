@@ -250,7 +250,7 @@ export function makeHeliMode(A) {
     M.root.updateMatrixWorld(true); M.winch.getWorldPosition(wA); const AX = wA.x, AY = -wA.z, AZ = wA.y;
     const g = m.to.g.position, left = m.to.folks.filter((f) => !f.userData.up), wpos = (f) => [g.x + f.position.x, -(g.z + f.position.z), g.y + f.position.y];
     const T = W.who || left[0], tp = T ? wpos(T) : null, inRange = !Hc.ground && d < 70 && Hc.agl < 50;
-    F.wtp = tp && !W.carry ? tp : null; personRing(F.wtp && d < 250 ? F.wtp : null); // кого поднимаем -- кольцо на снегу, камера держит его в кадре
+    F.wtp = tp && !W.carry && d < 200 ? tp : null; personRing(F.wtp); // камера и кольцо -- только рядом (иначе камера «улетала» к людям за километры) // кого поднимаем -- кольцо на снегу, камера держит его в кадре
     if (W.ph === 'idle' && inRange && left.length) W.ph = 'lower';
     if (W.ph === 'lower') { if (!inRange) W.ph = 'idle'; W.L = Math.min(W.L + dt * 6, Math.max(2, Hc.agl + 3), 52); }
     if (W.ph === 'idle') W.L = Math.max(0, W.L - dt * 8);
@@ -481,7 +481,7 @@ export function makeHeliMode(A) {
     const la = Math.min(1, 0.9 * fl) * (narrow ? 0.35 : 1) * (1 - orb), tx = Hc.X + clampA(Hc.vx * 0.8, -50, 50) * la + Math.sin(Hc.th) * 5 * (1 - orb), ty = Hc.Y + clampA(Hc.vy * 0.8, -50, 50) * la + Math.cos(Hc.th) * 5 * (1 - orb), tz = Hc.Z + 3; // смотрим вперёд по движению
     v3.set(Hc.X - fx * d * ce, tz + d * se, -(Hc.Y - fy * d * ce));
     // штанга камеры: склон между машиной и камерой -- камера подъезжает ближе (вертолёт не прячется за горой при облёте)
-    { const hx = Hc.X, hy = Hc.Y, hz = Hc.Z + 2; let tm = 1; for (let k = 1; k <= 12; k++) { const t = k / 12, px = hx + (v3.x - hx) * t, py = hy + (-v3.z - hy) * t, pz = hz + (v3.y - hz) * t; if (H(px, py) + 4 > pz) { tm = Math.max(0.2, t - 0.1); break; } }
+    { const hx = Hc.X, hy = Hc.Y, hz = Hc.Z + 5; let tm = 1; for (let k = 3; k <= 12; k++) { const t = k / 12, px = hx + (v3.x - hx) * t, py = hy + (-v3.z - hy) * t, pz = hz + (v3.y - hz) * t; if (H(px, py) > pz + 1) { tm = Math.max(0.45, t - 0.1); break; } } // от верха машины; у самой машины (на земле) склон не считается заслоном
       F.cocc = tm < (F.cocc ?? 1) ? tm : Math.min(tm, (F.cocc ?? 1) + dt * 0.6); if (F.cocc < 1) v3.set(hx + (v3.x - hx) * F.cocc, hz + (v3.y - hz) * F.cocc, -hy + (v3.z + hy) * F.cocc); }
     const gy = Math.max(0, H(v3.x, -v3.z)) + 6; F.cgy = Math.max(gy, (F.cgy || gy) + (gy - (F.cgy || gy)) * Math.min(1, dt * 4)); if (v3.y < F.cgy) v3.y = F.cgy; // склон под камерой -- приподнимаем плавно
     // пружина: относительно машины (иначе на 70 м/с камера отстаёт на десятки метров) -- запаздывание чувствуется только при рывках
