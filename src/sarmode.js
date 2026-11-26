@@ -44,6 +44,7 @@ body.sarrun #hscore,body.sardr #hhud,body.sardr #hscore,body.sardr #harr,body.sa
 #sbtns{right:calc(clamp(54px,15vw,62px) + 30px + env(safe-area-inset-right,0px))!important;bottom:calc(30px + env(safe-area-inset-bottom,0px))!important;gap:8px!important}
 body:not(.touchdev) #sbtns{right:16px!important;bottom:70px!important}
 #sclock{font-size:12px;padding:2px 10px;background:rgba(6,18,40,.5)}#sclock b{font-size:14px}
+@media (max-height:440px) and (min-width:641px){#sbtns{flex-direction:row!important;bottom:calc(24px + env(safe-area-inset-bottom,0px))!important}} /* лёжа: ряд у нижнего края, а не столбик до радара */
 @media (max-width:640px),(max-height:440px){body:not(.hdet) #sclock{display:none!important}#sshoot{display:none!important}#sbtns button{min-width:46px!important;height:46px!important}}
 `;
 const NIGHT = (hr) => hr < 6 || hr > 20.5;
@@ -450,7 +451,10 @@ export function makeSar(K) {
   // для полосы миссии: найдено людей / всего и самый срочный найденный (сколько продержится)
   function stripInfo() { if (!S || !S.run) return ''; const c = S.c, nf = c.victims.filter((v) => v.foundT !== undefined).length; let u = '';
     const hurt = c.victims.filter((v) => v.foundT !== undefined && !v.dead && !v.saved).map((v) => Math.max(0, v.left + (v.kit ? 360 : 0) - (v.foundT + (S.t - v.foundT) / 3)) * 3).sort((a, b) => a - b)[0];
-    if (hurt !== undefined) u = `<span class="u${hurt < 120 ? ' bad' : ''}">🩺${fmtT(hurt)}</span>`; return `<span class="c">👤${nf}/${c.victims.length}</span>${u}`; }
+    if (hurt !== undefined) u = `<span class="u${hurt < 120 ? ' bad' : ''}">🩺${fmtT(hurt)}</span>`;
+    // часы операции -- всегда на виду: «время тикает» -- главное давление режима; за час до темноты -- жёлтые, ночью -- красные
+    const hr = clockNow(), hh = `${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.floor(hr % 1 * 60)).padStart(2, '0')}`, dk = NIGHT(hr) ? ' bad' : hr > 19.5 ? '' : null;
+    return `<span class="c">👤${nf}/${c.victims.length}</span>${u}<span class="${dk === null ? 'k' : 'u' + dk}">${NIGHT(hr) ? '🌙' : '🕘'}${hh}</span>`; }
   function miniBase(cv, cx, cy, R) { if (!S || !S.run) return false; drawMap(cv, { cx, cy, R }, 'radar'); return true; }
   return { stripInfo, miniBase, begin, tick, cam, hud, stop, missionDone, end, get on() { return !!(S && S.on); }, get S() { return S; }, get drone() { return !!(S && S.dr); }, get running() { return !!(S && S.run); } };
 }
