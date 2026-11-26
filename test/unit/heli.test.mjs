@@ -71,3 +71,10 @@ test('у земли автомат держит высоту над рельеф
   run(hl, 40, (q) => { if (q.t > 2) minA = Math.min(minA, q.agl); return { fwd: 0.7 }; }, slope);
   assert.ok(!hl.crash && hl.hp === 100, 'цел: ' + JSON.stringify(hl.crash) + ' hp ' + hl.hp); assert.ok(minA > 25, 'мин. над землёй ' + minA.toFixed(0)); assert.ok(hl.Y > 1500, 'летел: ' + hl.Y.toFixed(0));
 });
+test('точное зависание: держит место при 20 м/с, команда ручки двигает, ураган сносит', () => {
+  const Z0 = 3000, fl = () => Z0 - 40;
+  const a = new Heli().reset(0, 0, Z0, 0, false); run(a, 30, { pvx: 0, pvy: 0 }, fl, () => ({ x: 20, y: 0, z: 0 }));
+  assert.ok(Math.hypot(a.X, a.Y) < 6, 'держит: снос ' + Math.hypot(a.X, a.Y).toFixed(1));
+  const b = new Heli().reset(0, 0, Z0, 0, false); run(b, 6, { pvx: 4, pvy: 0 }, fl); assert.ok(b.X > 15 && Math.abs(b.Y) < 5, 'сдвиг вправо по команде: ' + b.X.toFixed(1) + ' / ' + b.Y.toFixed(1)); assert.ok(Math.abs(b.th) < 0.01, 'нос не поворачивает');
+  const c = new Heli().reset(0, 0, Z0, 0, false); run(c, 20, { pvx: 0, pvy: 0 }, fl, () => ({ x: 40, y: 0, z: 0 })); assert.ok(c.X > 40, 'шквал 40 м/с сносит: ' + c.X.toFixed(0));
+});

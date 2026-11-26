@@ -393,7 +393,7 @@ window.addEventListener('keydown', (e) => {
   if (!G || e.repeat) return;
   if (e.code === 'KeyN') { ENV.uCine.value = ENV.uCine.value > 0.5 ? 0 : 1; store.set('skyCine', ENV.uCine.value); toast(ENV.uCine.value ? 'Небо: кино (выразительнее)' : 'Небо: природное (как глазом)'); }
   else if (e.code === 'KeyC') { G.cLines = !G.cLines; toast(G.cLines ? 'Созвездия: линии включены' : 'Созвездия: линии скрыты'); }
-  else if (e.code === 'KeyZ' && G.mode !== 'menu') { if (HM && HM.on && HM.vf) HM.vf.toggle(); else SPY.toggle(); } // в вертолёте вместо трубы -- фотоаппарат
+  else if (e.code === 'KeyZ' && G.mode !== 'menu') { if (HM && HM.on && HM.vf) HM.vfToggle(); else SPY.toggle(); } // в вертолёте вместо трубы -- фотоаппарат
   else if (e.code === 'KeyE' && SPY && SPY.on) SPY.holdStart(); // E -- зажать с клавиатуры
   else if (e.code === 'Escape' && SPY && SPY.on) SPY.close();
   else if (e.code === 'Escape' && HM && HM.on && HM.vf && HM.vf.on) HM.vf.close();
@@ -458,7 +458,7 @@ canvas.addEventListener('wheel', (e) => { if (!G || G.mode === 'menu') return; e
   for (const n of ['pointerup', 'pointercancel']) el.addEventListener(n, end); }
 $('bmenu').onclick = () => toMenu();
 $('bcam').onclick = () => { G.cam = (G.cam + 1) % 3; resetView(); };
-$('bspy').onclick = () => { audio.start(); if (HM && HM.on && HM.vf) HM.vf.toggle(); else SPY.toggle(); }; $('bpro').onclick = (e) => { e.currentTarget.blur(); togglePro(); }; $('spyx').onclick = () => SPY.close();
+$('bspy').onclick = () => { audio.start(); if (HM && HM.on && HM.vf) HM.vfToggle(); else SPY.toggle(); }; $('bpro').onclick = (e) => { e.currentTarget.blur(); togglePro(); }; $('spyx').onclick = () => SPY.close();
 $('spyin').onclick = () => SPY.zoomBy(1.5); $('spyout').onclick = () => SPY.zoomBy(1 / 1.5);
 let drag = null;
 

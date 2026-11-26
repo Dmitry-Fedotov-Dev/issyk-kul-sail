@@ -70,13 +70,19 @@ export class Heli {
     // ---- желаемое ускорение (по носу и вбок): лётчик + автомат висения ----
     const free = Math.abs(u) < 0.05 && Math.abs(st) < 0.05;
     let dF = u * P.aMax * (u < 0 ? 1.1 : 1) * (1 - 0.5 * prec), dS = st * P.aMax * 0.55 * (1 - 0.4 * prec);
+    // точное зависание (у людей): ручка задаёт путевую скорость в мире (ctl.pvx, ctl.pvy -- по экрану, до ~5 м/с), автомат её
+    // выдерживает с интегралом против ветра; автомат сильнее обычного висения (×1.8), но не всесилен -- шквал сносит
+    if (ctl.pvx !== undefined && !this.ground) { const evx = ctl.pvx - this.vx, evy = ctl.pvy - this.vy; this.ipx = clamp((this.ipx || 0) + evx * dt * 0.7, -4, 4); this.ipy = clamp((this.ipy || 0) + evy * dt * 0.7, -4, 4);
+      let ax = evx * 1.5 + this.ipx * 0.9, ay = evy * 1.5 + this.ipy * 0.9; const A = Math.hypot(ax, ay), cap = P.assist * 1.8; if (A > cap) { ax *= cap / A; ay *= cap / A; }
+      dF = ax * fx + ay * fy; dS = ax * fy - ay * fx; this.hov = 1; this.assistA = Math.min(A, cap); this.iF *= 0.9; this.iS *= 0.9; }
+    else { this.ipx = (this.ipx || 0) * 0.95; this.ipy = (this.ipy || 0) * 0.95; }
     // висение: ручка отпущена на малой скорости -- гасим путевую скорость; интеграл «запоминает» наклон против ветра
-    const hov = free && !this.ground ? 1 - sm(9, 15, Vg) : 0; this.hov = hov;
+    const hov = ctl.pvx === undefined && free && !this.ground ? 1 - sm(9, 15, Vg) : 0; if (ctl.pvx === undefined) this.hov = hov;
     if (hov > 0) { this.iF = clamp(this.iF + vf * dt * 0.5 * hov, -4, 4); this.iS = clamp(this.iS + vs * dt * 0.5 * hov, -4, 4);
       let aF = -(vf * 0.9 + this.iF * 0.8) * hov, aS = -(vs * 0.9 + this.iS * 0.8) * hov; const A = Math.hypot(aF, aS), k = A > P.assist ? P.assist / A : 1; dF += aF * k; dS += aS * k; this.assistA = A * k; }
     else { const k = Math.max(0, 1 - dt * 1.2); this.iF *= k; this.iS *= k; this.assistA = 0; }
     // отпустил ручку на скорости -- лёгкое подтормаживание задиранием носа (иначе катится вечно)
-    if (free && !hov) dF -= clamp(vf * 0.006, -0.3, 0.35);
+    if (free && !hov && ctl.pvx === undefined) dF -= clamp(vf * 0.006, -0.3, 0.35);
     // ---- ориентация: целевой наклон из желаемого ускорения, плюс крен виража ----
     const K = Math.tan(P.tiltMax) / P.aMax; // перевод ускорения в наклон: полный наклон -- aMax
     const pT = -Math.atan(dF * K), rS = Math.atan(dS * K);

@@ -24,7 +24,7 @@ export const VF_CSS = `
 body.sarpanel #hfeed,body.sarpanel #hstrip,body.sarpanel #hwarn,body.sarpanel #hhud,body.vf #hradar,body.vf #hwind,body.vf #tools,body.vf #sbtns,body.vf #hland,body.vf #hside,body.vf #hscore,body.vf #hcr{display:none!important}
 `;
 
-export function makeViewfinder({ camera, renderer, scene, $, host, H, audio, store, onShot }) {
+export function makeViewfinder({ camera, renderer, scene, $, host, H, audio, store, onShot, onClose }) {
   const el = document.createElement('div'); el.id = 'vf'; el.hidden = true;
   el.innerHTML = '<i class="cr c0"></i><i class="cr c1"></i><i class="cr c2"></i><i class="cr c3"></i><i class="x0"></i><div class="inf"></div><div class="zm"><b>24×</b><input type="range" min="0" max="100" value="0"><b>1×</b></div><button class="sh" aria-label="Снимок"></button><button class="cl" aria-label="Закрыть">✕</button><div class="hp" hidden></div><div class="fl"></div><div class="th"></div>';
   host.appendChild(el);
@@ -34,17 +34,18 @@ export function makeViewfinder({ camera, renderer, scene, $, host, H, audio, sto
   slider.addEventListener('input', () => { s.zt = Math.pow(24, slider.value / 100); });
   el.querySelector('.cl').addEventListener('click', (e) => { e.stopPropagation(); close(); });
   el.querySelector('.sh').addEventListener('click', (e) => { e.stopPropagation(); shoot(); });
-  function open() { if (s.on) return; s.on = true; el.hidden = false; document.body.classList.add('vf'); s.yaw = 0; s.pitch = -0.3; audio.tick && audio.tick(1800, 0.02);
+  // открыть с направления взгляда (из кабины -- тот же взгляд); закрыть -- вернуть взгляд владельцу (onClose)
+  function open(look) { if (s.on) return; s.on = true; el.hidden = false; document.body.classList.add('vf'); s.yaw = look ? look.yaw : 0; s.pitch = look ? look.pitch : -0.3; audio.tick && audio.tick(1800, 0.02);
     if (!store.get('vfHelp')) { store.set('vfHelp', 1); const hp = el.querySelector('.hp'); hp.innerHTML = 'Тяните по экрану — обзор · щипок, колесо или ползунок — зум до 24×<br>Круглая кнопка (или 📷, F) — снимок: всё в кадре уходит в дело с подписями'; hp.hidden = false; setTimeout(() => { hp.hidden = true; }, 7000); } }
-  function close() { if (!s.on) return; s.on = false; el.hidden = true; document.body.classList.remove('vf'); camera.near = 2.5; camera.fov = 55; camera.updateProjectionMatrix(); }
+  function close() { if (!s.on) return; s.on = false; if (onClose) onClose({ yaw: s.yaw, pitch: s.pitch }); el.hidden = true; document.body.classList.remove('vf'); camera.near = 2.5; camera.fov = 55; camera.updateProjectionMatrix(); }
   // обзор и зум -- вызываются из общего обработчика пальцев/мыши (main.js), как у подзорной трубы
   function pan(dx, dy) { const k = 2 * Math.atan(Math.tan(30 * Math.PI / 180) / s.zoom) / Math.max(240, window.innerHeight); s.yaw -= dx * k; s.pitch = Math.max(-1.45, Math.min(0.5, s.pitch + dy * k)); s.still = 0; }
   function zoomBy(f) { s.zt = Math.max(1, Math.min(24, s.zt * f)); slider.value = String(Math.round(Math.log(s.zt) / Math.log(24) * 100)); }
   const fovDeg = () => 2 * Math.atan(Math.tan(30 * Math.PI / 180) / s.zoom) * 180 / Math.PI;
   // кадр: глаз под носом машины, взгляд -- курс + поворот, тангаж -- свой (горизонт ровный); болтанка -- дрожь, заметная на зуме
   function place(dt, M, hc) { s.zoom += (s.zt - s.zoom) * Math.min(1, dt * 8); s.still += dt;
-    M.root.updateMatrixWorld(true); M.root.localToWorld(eye.set(0, 0.7, -9.6));
-    const jit = (hc.shake * 0.01 + (hc.tb || 0) * 0.012 + 0.0006) * Math.min(1, s.zoom / 6), t = performance.now() / 1000, yaw = hc.th + s.yaw + Math.sin(t * 7.3) * jit, pit = s.pitch + Math.sin(t * 5.1 + 1) * jit;
+    M.root.updateMatrixWorld(true); M.root.localToWorld(eye.set(0, 2.9, -9.6)); // тот же глаз, что у вида из кабины
+    const jit = (hc.shake * 0.01 + (hc.tb || 0) * 0.012 + 0.0006) * Math.min(1, s.zoom / 6), t = performance.now() / 1000, yaw = (s.abs = hc.th + s.yaw) + Math.sin(t * 7.3) * jit, pit = s.pitch + Math.sin(t * 5.1 + 1) * jit;
     dir.set(Math.sin(yaw) * Math.cos(pit), Math.sin(pit), -Math.cos(yaw) * Math.cos(pit)); camera.position.copy(eye); camera.up.set(0, 1, 0); camera.lookAt(tmp.copy(eye).add(dir));
     camera.fov = fovDeg(); camera.near = 1; camera.updateProjectionMatrix(); camera.updateMatrixWorld();
     if ((s.rT = (s.rT || 0) - dt) <= 0) { s.rT = 0.2; s.rng = range(); el.querySelector('.inf').textContent = `📷 ${s.zoom < 1.95 ? s.zoom.toFixed(1) : Math.round(s.zoom)}×${s.rng ? ' · ' + (s.rng >= 1000 ? (s.rng / 1000).toFixed(1) + ' км' : Math.round(s.rng / 10) * 10 + ' м') : ''}`; } }
@@ -63,6 +64,6 @@ export function makeViewfinder({ camera, renderer, scene, $, host, H, audio, sto
   function shoot() { if (!s.on) return; const fl = el.querySelector('.fl'); fl.style.transition = 'none'; fl.style.opacity = '0.85'; void fl.offsetWidth; fl.style.transition = 'opacity .4s'; fl.style.opacity = '0';
     audio.shutter ? audio.shutter() : audio.tick && audio.tick(2400, 0.03); const thumb = snap(), th = el.querySelector('.th'); if (thumb) { th.style.backgroundImage = `url(${thumb})`; th.classList.remove('go'); void th.offsetWidth; th.classList.add('go'); }
     const sh = el.querySelector('.sh'); sh.classList.add('go'); setTimeout(() => sh.classList.remove('go'), 180);
-    onShot && onShot({ zoom: s.zoom, eye: { X: eye.x, Y: -eye.z, Z: eye.y }, thumb, range: s.rng, inFrame, visible }); }
-  return { snap, get on() { return s.on; }, get zoom() { return s.zoom; }, open, close, toggle() { if (s.on) close(); else open(); }, pan, zoomBy, place, shoot, inFrame, visible, holdStart() {}, holdEnd() {} };
+    onShot && onShot({ yaw: s.abs || 0, zoom: s.zoom, eye: { X: eye.x, Y: -eye.z, Z: eye.y }, thumb, range: s.rng, inFrame, visible }); }
+  return { snap, get on() { return s.on; }, get zoom() { return s.zoom; }, open, close, toggle(look) { if (s.on) close(); else open(look); }, pan, zoomBy, place, shoot, inFrame, visible, holdStart() {}, holdEnd() {} };
 }

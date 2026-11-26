@@ -163,7 +163,8 @@ export function makeSar(K) {
 
   // ---- лог операции и общие события ----
   // хроника дела: всё -- в журнал дела и в сводку операции (сообщения отрядов -- обычные, находки -- важные)
-  function say(txt, me = true) { S.log.unshift({ t: S.t, txt }); if (S.log.length > 60) S.log.pop(); if (K.feed) K.feed(txt, me ? 0 : 1); else if (me) toast(txt); refreshJournal(); }
+  // pri -- важность для сводки: 1 критично, 2 задача, 3 находка, 4 сведения, 5 мелочь; по умолчанию: сообщение -- 4, находка в хронике -- 3
+  function say(txt, me = true, pri) { S.log.unshift({ t: S.t, txt }); if (S.log.length > 60) S.log.pop(); if (K.feed) K.feed(txt, pri || (me ? 4 : 3)); else if (me) toast(txt); refreshJournal(); }
   function share(e) { const n = net(); if (n && n.sar) n.sar(S.c.code, e); }
   function syncJoin() { const n = net(); if (n && n.sarJoin) n.sarJoin(S.c.code); NETHOOK.sar = (m) => { if (!S || !S.on) return;
     const list = m.t === 'sarh' ? m.ev || [] : [m.e]; for (const e of list) remote(e || {}, m.t === 'sarh'); }; }
@@ -178,16 +179,20 @@ export function makeSar(K) {
   // снимок: o -- кадр фотоаппарата вертолёта (зум, глаз, миниатюра, «в кадре», «не за склоном»); без o -- снимок с дрона (его вид).
   // Зум приближает: дальность обнаружения растёт как 1 + 0.4·(зум − 1) (24× -- примерно в 10 раз), но сквозь склон не видно.
   // Каждый кадр -- в фотоархив дела: миниатюра, время, зум, высота и подписи ко всему, что в кадре.
+  // тип объекта для подписи снимка -- по виду улики (не выдумываем: только то, что есть в деле)
+  const CTYPE = { track: 'следы', tent: 'лагерь', bivy: 'лагерь', cave: 'укрытие', pack: 'снаряжение', axe: 'снаряжение', rope: 'снаряжение', glove: 'снаряжение', helmet: 'снаряжение', pole: 'снаряжение', mirror: 'снаряжение', wrap: 'снаряжение', wand: 'ориентир', note: 'записка', debris: 'след происшествия', cornice: 'след происшествия', rocks: 'след происшествия' };
+  const ctype = (q) => (q.fake ? 'старое снаряжение' : CTYPE[q.k] || 'неизвестный объект');
   function photo(o) { if (!S || !S.run || S.ended) return; if (!o) { const fl = $('sflash'); fl.style.transition = 'none'; fl.style.opacity = 0.85; void fl.offsetWidth; fl.style.transition = 'opacity .35s'; fl.style.opacity = 0; audio.beep && audio.beep(false); }
-    const from = o ? o.eye : S.dr ? { X: S.dr.X, Y: S.dr.Y, Z: S.dr.Z } : { X: K.heli().X, Y: K.heli().Y, Z: K.heli().Z }, agl = from.Z - H(from.X, from.Y), kind = S.dr ? 'drone' : 'heli', night = NIGHT(clockNow()), zk = o ? 1 + (o.zoom - 1) * 0.4 : 1; let got = 0, seen = 0; const caps = [];
+    const from = o ? o.eye : S.dr ? { X: S.dr.X, Y: S.dr.Y, Z: S.dr.Z } : { X: K.heli().X, Y: K.heli().Y, Z: K.heli().Z }, agl = from.Z - H(from.X, from.Y), kind = S.dr ? 'drone' : 'heli', night = NIGHT(clockNow()), zk = o ? 1 + (o.zoom - 1) * 0.4 : 1; let got = 0, seen = 0, unk = 0; const items = [];
     camera.updateMatrixWorld(); const look = o ? (X, Y, z) => o.inFrame(X, Y, z + 1) && o.visible(X, Y, z + 1) : (X, Y, z) => { v3.set(X, z + 1, -Y).project(camera); return v3.z < 1 && Math.abs(v3.x) < 0.8 && Math.abs(v3.y) < 0.76; };
-    for (const q of S.c.clues) { const z = H(q.X, q.Y); if (!look(q.X, q.Y, z)) continue; if (S.found.has(q.id)) { caps.push(`${CLUEICON[q.k] || '•'} ${short(q.t, 46)} <small>(уже в деле)</small>`); continue; } seen++;
-      const d = Math.hypot(q.X - from.X, q.Y - from.Y, z - from.Z) / zk; if (Math.random() < pod(q, d, agl, night, kind)) { found(q); got++; caps.push(`${CLUEICON[q.k] || '•'} ${short(q.t, 80)}`); } }
-    for (const v of S.c.victims) { const z = H(v.X, v.Y); if (!v.spr || (!v.spr.visible && !(v.buried || v.pose === 'crev'))) continue; if (!look(v.X, v.Y, z)) continue; if (v.foundT !== undefined) { caps.push(`🧍 ${v.name}${v.saved ? ' — спасён' : v.dead ? ' ✖' : ''}`); continue; } seen++;
-      const d = Math.hypot(v.X - from.X, v.Y - from.Y, z - from.Z) / zk; if (Math.random() < pod({ ...v, buried: v.buried || v.pose === 'crev' }, d, agl, night, kind)) { foundV(v, kind); got++; caps.push(`🧍 ${v.name} — ${v.dead ? gw(v, 'погиб', 'погибла') : gw(v, 'жив', 'жива') + ', машет'}`); } }
-    if (!got && seen) caps.push(o && o.zoom < 6 ? 'что-то есть — подлетите ближе или увеличьте зум' : 'что-то есть — ближе!');
+    for (const q of S.c.clues) { const z = H(q.X, q.Y); if (!look(q.X, q.Y, z)) continue; if (S.found.has(q.id)) { items.push({ type: ctype(q), title: short(q.t, 46), cap: `${CLUEICON[q.k] || '•'} ${short(q.t, 46)} <small>(уже в деле)</small>`, ref: q.id }); continue; } seen++;
+      const d = Math.hypot(q.X - from.X, q.Y - from.Y, z - from.Z) / zk; if (Math.random() < pod(q, d, agl, night, kind)) { found(q); got++; items.push({ type: ctype(q), title: short(q.t, 80), cap: `${CLUEICON[q.k] || '•'} ${short(q.t, 80)}`, ref: q.id, isNew: true }); } else unk++; }
+    for (const v of S.c.victims) { const z = H(v.X, v.Y); if (!v.spr || (!v.spr.visible && !(v.buried || v.pose === 'crev'))) continue; if (!look(v.X, v.Y, z)) continue; if (v.foundT !== undefined) { items.push({ type: 'пострадавший', title: v.name, cap: `🧍 ${v.name}${v.saved ? ' — спасён' : v.dead ? ' ✖' : ''}`, ref: 'v' + v.id }); continue; } seen++;
+      const d = Math.hypot(v.X - from.X, v.Y - from.Y, z - from.Z) / zk; if (Math.random() < pod({ ...v, buried: v.buried || v.pose === 'crev' }, d, agl, night, kind)) { foundV(v, kind); got++; items.push({ type: 'пострадавший', title: v.name, cap: `🧍 ${v.name} — ${v.dead ? gw(v, 'погиб', 'погибла') : gw(v, 'жив', 'жива') + ', машет'}`, ref: 'v' + v.id, isNew: true }); } else unk++; }
+    if (unk) items.push({ type: 'неизвестный объект', title: 'Неизвестный объект', cap: `❔ Неизвестный объект${unk > 1 ? ' ×' + unk : ''} — ${o && o.zoom < 6 ? 'подлетите ближе или увеличьте зум' : 'ближе!'}`, ref: null });
+    const caps = items.map((it) => it.cap);
     if (!got) K.pop('ПУСТО', o ? (seen ? 'что-то есть — ближе или больше зум' : 'в кадре ничего') : agl > 160 ? 'слишком высоко: снижайтесь до 60-120 м' : seen ? 'что-то есть — ближе!' : 'в кадре ничего');
-    const hr = clockNow(), ph = { t: S.t, hh: `${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.floor(hr % 1 * 60)).padStart(2, '0')}`, zoom: o ? o.zoom : 1, thumb: o ? o.thumb : K.snap ? K.snap() : null, caps, drone: !!S.dr, alt: Math.round(from.Z + ASL), range: o && o.range ? Math.round(o.range) : null };
+    const hr = clockNow(), brg = o ? Math.round(((o.yaw * 180 / Math.PI) % 360 + 360) % 360) : null, ph = { id: `${S.c.code}-ф${(S.phN = (S.phN || 0) + 1)}`, X: Math.round(from.X), Y: Math.round(from.Y), brg, items, t: S.t, hh: `${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.floor(hr % 1 * 60)).padStart(2, '0')}`, zoom: o ? o.zoom : 1, thumb: o ? o.thumb : K.snap ? K.snap() : null, caps, drone: !!S.dr, alt: Math.round(from.Z + ASL), range: o && o.range ? Math.round(o.range) : null };
     (S.photos || (S.photos = [])).push(ph); if (S.photos.length > 40) S.photos.shift(); if (!got) say(`📷 Снимок ${ph.hh}${ph.zoom >= 1.5 ? ' · ' + Math.round(ph.zoom) + '×' : ''}: ${caps.length ? caps.join('; ').replace(/<[^>]+>/g, '') : 'пусто'}`, false); else refreshJournal(); }
   // бинокль с борта (Z / 🔭): улики и люди -- цели для опознания. Крупное (палатка, рюкзак, вынос, следы, человек) засчитывается
   // сразу; мелочь (записка, обёртка, перчатка) бинокль только замечает -- «снимите вблизи». Дальность -- 2.5 км, мелкое -- на большой кратности
@@ -247,7 +252,7 @@ export function makeSar(K) {
         if (d > 5) { t.X += dx / d * step; t.Y += dy / d * step; } else arrive(t);
         // риск: крутизна, высота, лавиноопасная зона, погода, ночь
         const inZone = S.c.zone.kind === 'aval' && Math.hypot(t.X - S.c.zone.X, t.Y - S.c.zone.Y) < 400, p = 0.00025 * dm * (sl > 0.55 ? 3 : 1) * (asl > 6000 ? 2 : 1) * (inZone ? 3 : 1) * wx * (night ? 1.6 : 1);
-        if (Math.random() < p) { t.n--; S.rescuerLost++; K.pop('ПОТЕРЯ В ОТРЯДЕ', `отряд ${t.id}: ${['срыв на склоне', 'закрытая трещина', 'обморожение, эвакуация', 'камень с кулуара'][Math.floor(Math.random() * 4)]}`); say(`⚠ Отряд ${t.id} потерял спасателя. Осталось ${t.n}`); if (t.n <= 0) { t.spr.visible = false; say(`Отряд ${t.id} выбыл`); } } }
+        if (Math.random() < p) { t.n--; S.rescuerLost++; K.pop('ПОТЕРЯ В ОТРЯДЕ', `отряд ${t.id}: ${['срыв на склоне', 'закрытая трещина', 'обморожение, эвакуация', 'камень с кулуара'][Math.floor(Math.random() * 4)]}`); say(`⚠ Отряд ${t.id} потерял спасателя. Осталось ${t.n}`, true, 1); if (t.n <= 0) { t.spr.visible = false; say(`Отряд ${t.id} выбыл`); } } }
       if (t.carry) { const v = t.carry; v.X = t.X + 2; v.Y = t.Y; v.spr.visible = true; v.spr.position.set(v.X, H(v.X, v.Y) + 0.3, -v.Y); }
       // поиск: прочёсывают вокруг себя ~90 м (засыпанного -- лавинными щупами ~40 м)
       for (const q of S.c.clues) if (!S.found.has(q.id) && Math.hypot(q.X - t.X, q.Y - t.Y) < 90) { found(q); say(`Отряд ${t.id} нашёл: ${q.t}`, false); }
@@ -269,7 +274,8 @@ export function makeSar(K) {
   // ---- такт ----
   function tick(dt, c) { if (!S || !S.on) return { lock: false }; if (!S.run || S.ended || S.film) return { lock: !!S.dr };
     const dm = dt; S.t += dm; // секунда -- минута операции
-    for (const v of S.c.victims) { if (!v.dead && v.alive0 && !aliveAt(v, S.t) && !v.saved && !v.onboard) { v.dead = true; if (v.foundT !== undefined) { K.pop('ПОТЕРЯЛИ', `${v.name} — не ${gw(v, 'дождался', 'дождалась')}`); say(`✖ ${v.name} ${gw(v, 'умер', 'умерла')}, не дождавшись эвакуации`); } }
+    for (const v of S.c.victims) { if (!v.dead && v.alive0 && !aliveAt(v, S.t) && !v.saved && !v.onboard) { v.dead = true; if (v.foundT !== undefined) { K.pop('ПОТЕРЯЛИ', `${v.name} — не ${gw(v, 'дождался', 'дождалась')}`); say(`✖ ${v.name} ${gw(v, 'умер', 'умерла')}, не дождавшись эвакуации`, true, 1); } }
+      if (v.foundT !== undefined && !v.dead && !v.saved && !v.onboard && !v.w60 && Math.max(0, v.left + (v.kit ? 360 : 0) - (v.foundT + (S.t - v.foundT) / 3)) * 3 < 60) { v.w60 = 1; say(`🩺 ${v.name}: меньше часа! Эвакуируйте или сбросьте набор`, true, 1); }
       if (v.walker && v.foundT === undefined) placeVictim(v); else if (v.flag) { v.flag.visible = !v.dead && !v.saved && !v.onboard && v.spr.visible; if (v.flag.visible) v.flag.userData.cl.rotation.y = Math.sin(performance.now() / 180 + (v.id || 0)) * 0.6; } }
     if (S.dr) droneTick(dt, c); teamsTick(dm);
     // вертолёт видит человека сам: низко и близко -- «вижу человека!»
@@ -278,7 +284,7 @@ export function makeSar(K) {
     const nightDr = !!S.dr && NIGHT(clockNow()); if (nightDr !== S.nightOn) { S.nightOn = nightDr; const cv = document.querySelector('canvas'); if (cv) cv.style.filter = nightDr ? 'grayscale(1) brightness(3.2) contrast(1.25)' : ''; }
     S.posT -= dt; if (S.posT <= 0) { S.posT = 2; const p = S.dr || h; share({ k: 'pos', X: Math.round(p.X), Y: Math.round(p.Y), d: S.dr ? 1 : 0 }); }
     if ((S.mapT = (S.mapT || 0) - dt) <= 0) { S.mapT = 0.25; if (!$('sjour').hidden) drawMap();  }
-    { const hr = clockNow(); if (hr > 19.4 && hr < 19.6 && !S.duskWarn) { S.duskWarn = 1; K.pop('ДО ТЕМНОТЫ ЧАС', 'садитесь на базе или в лагере: ночью в горах не летают'); say('⚠ До темноты час. Ночной полёт — штраф и риск'); }
+    { const hr = clockNow(); if (hr > 19.4 && hr < 19.6 && !S.duskWarn) { S.duskWarn = 1; K.pop('ДО ТЕМНОТЫ ЧАС', 'садитесь на базе или в лагере: ночью в горах не летают'); say('⚠ До темноты час. Ночной полёт — штраф и риск', true, 1); }
       if (hr > 6 && hr < 7) S.duskWarn = 0;
       if (NIGHT(hr) && !h.ground && !h.crash) { S.nightT = (S.nightT || 0) + dt; if (S.nightT >= 30) { S.nightT = 0; S.nightPen = (S.nightPen || 0) + 150; K.pop('−150 НОЧНОЙ ПОЛЁТ', 'темно: садитесь — дрон ночью видит тепловизором'); K.buzz([60, 40, 60]); } } }
     S.objT = (S.objT || 0) - dt; if (S.objT <= 0) { S.objT = 0.5; objective(); S.shoot = canShoot(); }
@@ -406,7 +412,7 @@ export function makeSar(K) {
     const clues = c.clues.filter((q) => S.found.has(q.id)).map((q) => `<div>${CLUEICON[q.k] || ''} ${q.fake ? '<small>' : ''}${q.t}${q.fake ? '</small>' : ''}</div>`).join('') || '<small>Пока ничего. Снимайте 📷 низко над маршрутом — вешки, палатки, следы</small>';
     const notes = S.notes.map((n, i) => `<div data-n="${i}" style="cursor:pointer">📌 ${n.txt} <small>${n.n && n.n !== 'вы' ? '— ' + n.n : ''}</small></div>`).join('') || '<small>Нет заметок. Включите «📌 Заметка» и коснитесь карты</small>';
     const log = S.log.slice(0, 14).map((l) => `<div><i>Т+${fmtT(l.t)}</i> ${l.txt}</div>`).join('');
-    const photos = (S.photos || []).slice().reverse().map((p) => `<figure class="ph">${p.thumb ? `<img src="${p.thumb}" alt="">` : '<div class="nop">нет кадра</div>'}<figcaption><i>${p.hh}</i>${p.zoom >= 1.5 ? ` · ${Math.round(p.zoom)}×` : ''}${p.drone ? ' · дрон' : ''} · ${p.alt} м${p.range ? ` · до склона ${p.range} м` : ''}<br>${p.caps.length ? p.caps.join('<br>') : '<small>ничего примечательного</small>'}</figcaption></figure>`).join('') || '<small>Снимков нет. 📷 — фотоаппарат с зумом до 24×: всё в кадре попадёт сюда с подписями</small>';
+    const photos = (S.photos || []).slice().reverse().map((p) => `<figure class="ph">${p.thumb ? `<img src="${p.thumb}" alt="">` : '<div class="nop">нет кадра</div>'}<figcaption><i>${p.hh}</i> <small>№${p.id.split('-ф')[1]}</small>${p.brg !== null && p.brg !== undefined ? ` · курс ${p.brg}°` : ''}${p.zoom >= 1.5 ? ` · ${Math.round(p.zoom)}×` : ''}${p.drone ? ' · дрон' : ''} · ${p.alt} м${p.range ? ` · до склона ${p.range} м` : ''}<br>${p.caps.length ? p.caps.join('<br>') : '<small>ничего примечательного</small>'}</figcaption></figure>`).join('') || '<small>Снимков нет. 📷 — фотоаппарат с зумом до 24×: всё в кадре попадёт сюда с подписями</small>';
     return { course: course(), clues, notes, log, photos }; }
   function refreshJournal() { if (!S || $('sjour').hidden) return; const p = parts(); for (const [id, k] of [['scourse', 'course'], ['sclues', 'clues'], ['snotes', 'notes'], ['slog', 'log']]) { const el = $(id); if (el && el.innerHTML !== p[k]) el.innerHTML = p[k]; } const pe = $('sphotos'), pn = (S.photos || []).length; if (pe && pe.dataset.n !== String(pn)) { pe.innerHTML = p.photos; pe.dataset.n = pn; } bindNotes(); } // фотоархив -- только когда прибавился кадр (миниатюры тяжёлые)
   function bindNotes() { for (const d of document.querySelectorAll('#snotes [data-n]')) d.onclick = () => { const n = S.notes[+d.dataset.n]; if (n) { S.view.cx = n.X; S.view.cy = n.Y; S.view.R = Math.min(S.view.R, 1500); drawMap(); } }; }
@@ -454,6 +460,7 @@ export function makeSar(K) {
     $('rh').textContent = `${'★'.repeat(sc.stars)}${'☆'.repeat(3 - sc.stars)} ${sc.total} очков${rec ? ' · рекорд!' : ''}`;
     $('rs').innerHTML = `<b>Что случилось:</b> ${c.cause}. <small>${c.real}</small><br>${truth}`;
     $('rt').innerHTML = sc.parts.map(([t, v]) => `<tr><td>${t}</td><td style="text-align:right">${v > 0 ? '+' : ''}${v}</td></tr>`).join('') + (sc.k > 1 ? `<tr><td>сложность: ${c.comm.name}</td><td style="text-align:right">×${sc.k}</td></tr>` : '');
+    { const ph = (S.photos || []).filter((p) => p.thumb && p.items.some((it) => it.isNew)).slice(-6); if (ph.length) $('rs').innerHTML += `<div style="display:flex;gap:6px;overflow-x:auto;margin-top:8px">${ph.map((p) => `<figure style="margin:0;flex:none;width:120px;font-size:11px"><img src="${p.thumb}" style="width:120px;border-radius:6px;display:block"><figcaption>${p.hh} · ${p.items.filter((it) => it.isNew).map((it) => it.title).join(', ')}</figcaption></figure>`).join('')}</div><small>Снимки дела — ${(S.photos || []).length}, все в «Фотоархиве»</small>`; } // итог: кадры, на которых были находки
     $('ragain').textContent = 'Новое дело'; setTimeout(() => { if (S && S.on) $('result').hidden = false; }, 600); }
   function stop() { if (!S) return; S.on = false; G.spyMore = null; stopWorld(); if (drone) drone.g.visible = false; if (ping) ping.visible = false; $('sarw').hidden = true; if ($('harr')) $('harr').style.top = ''; const cv = document.querySelector('canvas'); if (cv) cv.style.filter = ''; NETHOOK.sar = null; document.body.classList.remove('sardr', 'sarrun', 'slearn'); const n = net(); if (n && n.sarLeave) n.sarLeave(); S = null; }
   // основа радара (правый верхний угол, рисует helimode): топокарта вокруг точки, без своей стрелки и подписей
