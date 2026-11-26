@@ -144,6 +144,7 @@ export function makeAudio() {
     const k = on ? thr : 0; set(jt.g.gain, on ? 0.04 + 0.2 * k : 0, 0.3); set(jt.fl.frequency, 300 + 1500 * k + V * 3, 0.3); set(jt.og.gain, on ? 0.008 + 0.025 * k : 0, 0.4); set(jt.o.frequency, 1800 + 2600 * k, 0.8); }
   return {
     start, update, engine, siren, vario, airflow, winch, beach, find, foot, jet, rotor,
+    shutter() { noise(3200, 1.4, 0.045, 0.16); setTimeout(() => noise(2100, 1.6, 0.05, 0.12), 85); }, // затвор: два щелчка
     plop(p = 1) { noise(700, 1.2, 0.5, 0.3 * p, 0, 180); tone(300, 0.15, 'sine', 0.12 * p, 120); },
     paddle() { noise(900 + Math.random() * 400, 1, 0.22, 0.04, (Math.random() - 0.5) * 0.4, 400); },
     shake() { for (let i = 0; i < 6; i++) setTimeout(() => noise(3500, 1.5, 0.07, 0.05, i % 2 ? 0.4 : -0.4), i * 45); },

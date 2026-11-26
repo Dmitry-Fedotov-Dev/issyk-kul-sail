@@ -3,7 +3,7 @@
 // трубы). Ищем после `// ` в строке признаки кода: `; if (`, `; const `, `; x = `, `; f(`... Прозаические описания
 // сигнатур с точкой с запятой -- в списке исключений.
 import { test } from 'node:test'; import assert from 'node:assert/strict'; import fs from 'node:fs';
-const FILES = ['heli.js', 'helimode.js', 'heliair.js', 'helimodel.js', 'sar.js', 'sarmode.js', 'sartoon.js', 'toon.js', 'spyglass.js', 'post.js', 'audio.js', 'channel.js', 'net.js'];
+const FILES = ['heli.js', 'helimode.js', 'heliair.js', 'helicam.js', 'helifeed.js', 'helimodel.js', 'sar.js', 'sarmode.js', 'sartoon.js', 'toon.js', 'spyglass.js', 'post.js', 'audio.js', 'channel.js', 'net.js'];
 const PROSE = [/ctl: \{ fwd -1\.\.1/];
 test('код не спрятан за // посреди строки (вертолёт, поиск, труба, звук, кадр)', () => {
   const bad = [];

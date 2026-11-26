@@ -46,6 +46,7 @@ body:not(.touchdev) #sbtns{right:16px!important;bottom:70px!important}
 #sclock{font-size:12px;padding:2px 10px;background:rgba(6,18,40,.5)}#sclock b{font-size:14px}
 @media (max-height:440px) and (min-width:641px){#sbtns{flex-direction:row!important;bottom:calc(24px + env(safe-area-inset-bottom,0px))!important}} /* лёжа: ряд у нижнего края, а не столбик до радара */
 @media (max-width:640px),(max-height:440px){body:not(.hdet) #sclock{display:none!important}#sshoot{display:none!important}#sbtns button{min-width:46px!important;height:46px!important}}
+#sphotos{display:grid;grid-template-columns:1fr 1fr;gap:8px}#sphotos .ph{margin:0;background:rgba(255,255,255,.06);border-radius:8px;overflow:hidden;cursor:pointer}#sphotos .ph.big{grid-column:1/-1}#sphotos img{display:block;width:100%;aspect-ratio:8/5;object-fit:cover}#sphotos figcaption{font-size:12px;line-height:1.3;padding:4px 6px}#sphotos figcaption i{color:#ffb07a;font-style:normal}#sphotos .nop{aspect-ratio:8/5;display:grid;place-items:center;color:#8fa3c4;font-size:12px}
 `;
 const NIGHT = (hr) => hr < 6 || hr > 20.5;
 const CLUEICON = { wand: '🚩', note: '📝', tent: '⛺', pole: '🦯', glove: '🧤', debris: '❄', rope: '〰', pack: '🎒', axe: '⛏', track: '👣', cave: '🕳', cornice: '⚠', helmet: '⛑', rocks: '🪨', mirror: '✨', wrap: '🍫', bivy: '💤' };
@@ -65,7 +66,7 @@ export function makeSar(K) {
       <div id="sbrief" class="spanel" hidden></div><div id="sjour" class="spanel" hidden></div>`;
     document.body.appendChild(w);
     const tap = (id, f) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); f(); });
-    tap('sphoto', photo); tap('smini', () => $('smini').classList.toggle('big')); tap('sdrone', () => (S && S.dr ? recall() : launch())); tap('sjb', () => journal(!$('sjour').hidden ? false : true)); tap('sact', act); tap('sfast', fast);
+    tap('sphoto', () => (K.camBtn ? K.camBtn() : photo())); tap('smini', () => $('smini').classList.toggle('big')); tap('sdrone', () => (S && S.dr ? recall() : launch())); tap('sjb', () => journal(!$('sjour').hidden ? false : true)); tap('sact', act); tap('sfast', fast);
     // подвес камеры дрона: тянуть пальцем/мышью по картинке вверх-вниз, колесо мыши, Q (к горизонту) / E (вниз), кнопки ▴▾
     let gp = null; const gim = (dg) => { if (!S || !S.dr) return; S.dr.gim = S.gim = Math.max(0, Math.min(90, (S.dr.gim ?? 35) + dg)); };
     window.addEventListener('pointerdown', (e) => { if (S && S.dr && e.target.tagName === 'CANVAS' && !e.target.closest('#sjour')) { gp = { id: e.pointerId, y: e.clientY }; } }, true);
@@ -74,7 +75,7 @@ export function makeSar(K) {
     window.addEventListener('wheel', (e) => { if (S && S.dr && e.target.tagName === 'CANVAS') { e.preventDefault(); e.stopImmediatePropagation(); gim(e.deltaY * 0.03); } }, { capture: true, passive: false });
     tap('sgu', () => gim(-10)); tap('sgd', () => gim(10));
     window.addEventListener('keydown', (e) => { if (!S || !S.on || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
-      if (e.code === 'KeyT') fast(); else if (e.code === 'KeyQ' && S.dr) gim(-10); else if (e.code === 'KeyE' && S.dr) gim(10); else if (e.code === 'KeyF') photo(); else if (e.code === 'KeyG') (S.dr ? recall() : launch()); else if (e.code === 'KeyJ') journal($('sjour').hidden); else if (e.code === 'KeyB') act(); });
+      if (e.code === 'KeyT') fast(); else if (e.code === 'KeyQ' && S.dr) gim(-10); else if (e.code === 'KeyE' && S.dr) gim(10); else if (e.code === 'KeyF') (K.camBtn ? K.camBtn() : photo()); else if (e.code === 'KeyG') (S.dr ? recall() : launch()); else if (e.code === 'KeyJ') journal($('sjour').hidden); else if (e.code === 'KeyB') act(); });
     // дрон: корпус, лучи, винты (маленький -- в 3 раза крупнее, чтобы был виден в кадре), мигалка
     const g = new THREE.Group(), m = new THREE.MeshStandardMaterial({ color: 0x2a2f38, roughness: 0.6 }), o = new THREE.MeshBasicMaterial({ color: 0xff7a1a });
     g.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.5), m)); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4, arm = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.06), m); arm.position.set(Math.cos(a) * 0.35, 0.05, Math.sin(a) * 0.35); arm.rotation.y = -a; g.add(arm);
@@ -161,7 +162,8 @@ export function makeSar(K) {
   const aliveNow = (v) => !v.dead && aliveAt(v, S.t);
 
   // ---- лог операции и общие события ----
-  function say(txt, me = true) { S.log.unshift({ t: S.t, txt }); if (S.log.length > 60) S.log.pop(); if (me) toast(txt); refreshJournal(); }
+  // хроника дела: всё -- в журнал дела и в сводку операции (сообщения отрядов -- обычные, находки -- важные)
+  function say(txt, me = true) { S.log.unshift({ t: S.t, txt }); if (S.log.length > 60) S.log.pop(); if (K.feed) K.feed(txt, me ? 0 : 1); else if (me) toast(txt); refreshJournal(); }
   function share(e) { const n = net(); if (n && n.sar) n.sar(S.c.code, e); }
   function syncJoin() { const n = net(); if (n && n.sarJoin) n.sarJoin(S.c.code); NETHOOK.sar = (m) => { if (!S || !S.on) return;
     const list = m.t === 'sarh' ? m.ev || [] : [m.e]; for (const e of list) remote(e || {}, m.t === 'sarh'); }; }
@@ -173,14 +175,20 @@ export function makeSar(K) {
     else if (e.k === 'saved' && c.victims[e.id]) c.victims[e.id].saved = true; }
 
   // ---- снимок: всё, что в кадре, близко и не слишком высоко ----
-  function photo() { if (!S || !S.run || S.ended) return; const fl = $('sflash'); fl.style.transition = 'none'; fl.style.opacity = 0.85; void fl.offsetWidth; fl.style.transition = 'opacity .35s'; fl.style.opacity = 0; audio.beep && audio.beep(false);
-    const from = S.dr ? { X: S.dr.X, Y: S.dr.Y, Z: S.dr.Z } : { X: K.heli().X, Y: K.heli().Y, Z: K.heli().Z }, agl = from.Z - H(from.X, from.Y), kind = S.dr ? 'drone' : 'heli', night = NIGHT(clockNow()); let got = 0, seen = 0;
-    camera.updateMatrixWorld(); const look = (X, Y, z) => { v3.set(X, z + 1, -Y).project(camera); return v3.z < 1 && Math.abs(v3.x) < 0.8 && Math.abs(v3.y) < 0.76; };
-    for (const q of S.c.clues) { if (S.found.has(q.id)) continue; const d = Math.hypot(q.X - from.X, q.Y - from.Y, H(q.X, q.Y) - from.Z); if (!look(q.X, q.Y, H(q.X, q.Y))) continue; seen++;
-      if (Math.random() < pod(q, d, agl, night, kind)) { found(q); got++; } }
-    for (const v of S.c.victims) { if (v.foundT !== undefined) continue; const z = H(v.X, v.Y), d = Math.hypot(v.X - from.X, v.Y - from.Y, z - from.Z); if (!look(v.X, v.Y, z)) continue;
-      if (Math.random() < pod({ ...v, buried: v.buried || v.pose === 'crev' }, d, agl, night, kind)) { foundV(v, kind); got++; } }
-    if (!got) K.pop('ПУСТО', agl > 160 ? 'слишком высоко: снижайтесь до 60-120 м' : seen ? 'что-то есть — ближе!' : 'в кадре ничего'); }
+  // снимок: o -- кадр фотоаппарата вертолёта (зум, глаз, миниатюра, «в кадре», «не за склоном»); без o -- снимок с дрона (его вид).
+  // Зум приближает: дальность обнаружения растёт как 1 + 0.4·(зум − 1) (24× -- примерно в 10 раз), но сквозь склон не видно.
+  // Каждый кадр -- в фотоархив дела: миниатюра, время, зум, высота и подписи ко всему, что в кадре.
+  function photo(o) { if (!S || !S.run || S.ended) return; if (!o) { const fl = $('sflash'); fl.style.transition = 'none'; fl.style.opacity = 0.85; void fl.offsetWidth; fl.style.transition = 'opacity .35s'; fl.style.opacity = 0; audio.beep && audio.beep(false); }
+    const from = o ? o.eye : S.dr ? { X: S.dr.X, Y: S.dr.Y, Z: S.dr.Z } : { X: K.heli().X, Y: K.heli().Y, Z: K.heli().Z }, agl = from.Z - H(from.X, from.Y), kind = S.dr ? 'drone' : 'heli', night = NIGHT(clockNow()), zk = o ? 1 + (o.zoom - 1) * 0.4 : 1; let got = 0, seen = 0; const caps = [];
+    camera.updateMatrixWorld(); const look = o ? (X, Y, z) => o.inFrame(X, Y, z + 1) && o.visible(X, Y, z + 1) : (X, Y, z) => { v3.set(X, z + 1, -Y).project(camera); return v3.z < 1 && Math.abs(v3.x) < 0.8 && Math.abs(v3.y) < 0.76; };
+    for (const q of S.c.clues) { const z = H(q.X, q.Y); if (!look(q.X, q.Y, z)) continue; if (S.found.has(q.id)) { caps.push(`${CLUEICON[q.k] || '•'} ${short(q.t, 46)} <small>(уже в деле)</small>`); continue; } seen++;
+      const d = Math.hypot(q.X - from.X, q.Y - from.Y, z - from.Z) / zk; if (Math.random() < pod(q, d, agl, night, kind)) { found(q); got++; caps.push(`${CLUEICON[q.k] || '•'} ${short(q.t, 80)}`); } }
+    for (const v of S.c.victims) { const z = H(v.X, v.Y); if (!v.spr || (!v.spr.visible && !(v.buried || v.pose === 'crev'))) continue; if (!look(v.X, v.Y, z)) continue; if (v.foundT !== undefined) { caps.push(`🧍 ${v.name}${v.saved ? ' — спасён' : v.dead ? ' ✖' : ''}`); continue; } seen++;
+      const d = Math.hypot(v.X - from.X, v.Y - from.Y, z - from.Z) / zk; if (Math.random() < pod({ ...v, buried: v.buried || v.pose === 'crev' }, d, agl, night, kind)) { foundV(v, kind); got++; caps.push(`🧍 ${v.name} — ${v.dead ? gw(v, 'погиб', 'погибла') : gw(v, 'жив', 'жива') + ', машет'}`); } }
+    if (!got && seen) caps.push(o && o.zoom < 6 ? 'что-то есть — подлетите ближе или увеличьте зум' : 'что-то есть — ближе!');
+    if (!got) K.pop('ПУСТО', o ? (seen ? 'что-то есть — ближе или больше зум' : 'в кадре ничего') : agl > 160 ? 'слишком высоко: снижайтесь до 60-120 м' : seen ? 'что-то есть — ближе!' : 'в кадре ничего');
+    const hr = clockNow(), ph = { t: S.t, hh: `${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.floor(hr % 1 * 60)).padStart(2, '0')}`, zoom: o ? o.zoom : 1, thumb: o ? o.thumb : K.snap ? K.snap() : null, caps, drone: !!S.dr, alt: Math.round(from.Z + ASL), range: o && o.range ? Math.round(o.range) : null };
+    (S.photos || (S.photos = [])).push(ph); if (S.photos.length > 40) S.photos.shift(); if (!got) say(`📷 Снимок ${ph.hh}${ph.zoom >= 1.5 ? ' · ' + Math.round(ph.zoom) + '×' : ''}: ${caps.length ? caps.join('; ').replace(/<[^>]+>/g, '') : 'пусто'}`, false); else refreshJournal(); }
   // бинокль с борта (Z / 🔭): улики и люди -- цели для опознания. Крупное (палатка, рюкзак, вынос, следы, человек) засчитывается
   // сразу; мелочь (записка, обёртка, перчатка) бинокль только замечает -- «снимите вблизи». Дальность -- 2.5 км, мелкое -- на большой кратности
   const SMALL = { note: 1, wrap: 1, glove: 1, mirror: 1, helmet: 1, axe: 1, pole: 1 }, SIZE = { debris: 80, tent: 5, bivy: 3, track: 8, cave: 6, cornice: 20, rocks: 10, pack: 1.6, rope: 3, wand: 1.6 };
@@ -302,10 +310,10 @@ export function makeSar(K) {
     const P = [c.leg[0][0] + (c.leg[1][0] - c.leg[0][0]) * 0.55, c.leg[0][1] + (c.leg[1][1] - c.leg[0][1]) * 0.55];
     return goal('След обрывается', `Последняя метка группы — на маршруте дня ${c.legIdx + 1}. Дальше их нет: что-то случилось. Осмотрите склоны вокруг — палатку, следы, снаряжение. Снимайте 📷`, P[0], P[1], 900); }
   // есть ли что-то в кадре, что снимок, скорее всего, найдёт -- подсказка «СНИМАЙ!»
-  function canShoot() { const from = S.dr || K.heli(), agl = from.Z - H(from.X, from.Y), night = NIGHT(clockNow()), kind = S.dr ? 'drone' : 'heli'; camera.updateMatrixWorld();
+  function canShoot() { const from = S.dr || K.heli(), agl = from.Z - H(from.X, from.Y), night = NIGHT(clockNow()), kind = S.dr ? 'drone' : 'heli', zk = !S.dr && K.vfOn && K.vfOn() ? 1 + (K.vfZoom() - 1) * 0.4 : 1; camera.updateMatrixWorld();
     const look = (X, Y, z) => { v3.set(X, z + 1, -Y).project(camera); return v3.z < 1 && Math.abs(v3.x) < 0.8 && Math.abs(v3.y) < 0.76; };
-    for (const q of S.c.clues) { if (S.found.has(q.id)) continue; const z = H(q.X, q.Y), d = Math.hypot(q.X - from.X, q.Y - from.Y, z - from.Z); if (d < 400 && pod(q, d, agl, night, kind) > 0.4 && look(q.X, q.Y, z)) return true; }
-    for (const v of S.c.victims) { if (v.foundT !== undefined) continue; const z = H(v.X, v.Y), d = Math.hypot(v.X - from.X, v.Y - from.Y, z - from.Z); if (d < 400 && pod({ ...v, buried: v.buried || v.pose === 'crev' }, d, agl, night, kind) > 0.4 && look(v.X, v.Y, z)) return true; }
+    for (const q of S.c.clues) { if (S.found.has(q.id)) continue; const z = H(q.X, q.Y), d = Math.hypot(q.X - from.X, q.Y - from.Y, z - from.Z) / zk; if (d < 400 && pod(q, d, agl, night, kind) > 0.4 && look(q.X, q.Y, z)) return true; }
+    for (const v of S.c.victims) { if (v.foundT !== undefined) continue; const z = H(v.X, v.Y), d = Math.hypot(v.X - from.X, v.Y - from.Y, z - from.Z) / zk; if (d < 400 && pod({ ...v, buried: v.buried || v.pose === 'crev' }, d, agl, night, kind) > 0.4 && look(v.X, v.Y, z)) return true; }
     return false; }
 
   // ---- приборы ----
@@ -398,8 +406,9 @@ export function makeSar(K) {
     const clues = c.clues.filter((q) => S.found.has(q.id)).map((q) => `<div>${CLUEICON[q.k] || ''} ${q.fake ? '<small>' : ''}${q.t}${q.fake ? '</small>' : ''}</div>`).join('') || '<small>Пока ничего. Снимайте 📷 низко над маршрутом — вешки, палатки, следы</small>';
     const notes = S.notes.map((n, i) => `<div data-n="${i}" style="cursor:pointer">📌 ${n.txt} <small>${n.n && n.n !== 'вы' ? '— ' + n.n : ''}</small></div>`).join('') || '<small>Нет заметок. Включите «📌 Заметка» и коснитесь карты</small>';
     const log = S.log.slice(0, 14).map((l) => `<div><i>Т+${fmtT(l.t)}</i> ${l.txt}</div>`).join('');
-    return { course: course(), clues, notes, log }; }
-  function refreshJournal() { if (!S || $('sjour').hidden) return; const p = parts(); for (const [id, k] of [['scourse', 'course'], ['sclues', 'clues'], ['snotes', 'notes'], ['slog', 'log']]) { const el = $(id); if (el && el.innerHTML !== p[k]) el.innerHTML = p[k]; } bindNotes(); }
+    const photos = (S.photos || []).slice().reverse().map((p) => `<figure class="ph">${p.thumb ? `<img src="${p.thumb}" alt="">` : '<div class="nop">нет кадра</div>'}<figcaption><i>${p.hh}</i>${p.zoom >= 1.5 ? ` · ${Math.round(p.zoom)}×` : ''}${p.drone ? ' · дрон' : ''} · ${p.alt} м${p.range ? ` · до склона ${p.range} м` : ''}<br>${p.caps.length ? p.caps.join('<br>') : '<small>ничего примечательного</small>'}</figcaption></figure>`).join('') || '<small>Снимков нет. 📷 — фотоаппарат с зумом до 24×: всё в кадре попадёт сюда с подписями</small>';
+    return { course: course(), clues, notes, log, photos }; }
+  function refreshJournal() { if (!S || $('sjour').hidden) return; const p = parts(); for (const [id, k] of [['scourse', 'course'], ['sclues', 'clues'], ['snotes', 'notes'], ['slog', 'log']]) { const el = $(id); if (el && el.innerHTML !== p[k]) el.innerHTML = p[k]; } const pe = $('sphotos'), pn = (S.photos || []).length; if (pe && pe.dataset.n !== String(pn)) { pe.innerHTML = p.photos; pe.dataset.n = pn; } bindNotes(); } // фотоархив -- только когда прибавился кадр (миниатюры тяжёлые)
   function bindNotes() { for (const d of document.querySelectorAll('#snotes [data-n]')) d.onclick = () => { const n = S.notes[+d.dataset.n]; if (n) { S.view.cx = n.X; S.view.cy = n.Y; S.view.R = Math.min(S.view.R, 1500); drawMap(); } }; }
   function modeHint() { return S.selTeam > 0 ? `Касание карты — <b>отряд ${S.selTeam} пойдёт туда</b>` : 'Касание карты — <b>поставить заметку</b> (видят все участники). Двумя пальцами или колесом — масштаб, перетаскиванием — сдвиг'; }
   function journal(open) { if (!S) return; const el = $('sjour'); if (!open) { el.hidden = true; return; } const c = S.c; el.hidden = false; if (!S.view) S.view = homeView(); const p = parts();
@@ -410,9 +419,9 @@ export function makeSar(K) {
       <div style="position:relative"><canvas id="smap"></canvas>
         <div style="position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:6px">${['＋', '－', '⊙', '⤢'].map((t, i) => `<button class="ch" data-z="${i}" style="flex:none;min-width:0;width:40px;height:40px;padding:0;font-size:20px" title="${['ближе', 'дальше', 'ко мне', 'весь маршрут'][i]}">${t}</button>`).join('')}</div>
         <div id="snoteb" hidden style="position:absolute;left:8px;right:56px;top:8px;background:rgba(8,22,48,.95);border:2px solid #ffd24a;border-radius:12px;padding:8px;display:flex;gap:6px"><input id="snote" maxlength="80" placeholder="заметка: что здесь?" style="flex:1;width:auto;text-transform:none" enterkeyhint="done"><button class="ch" id="snoteok" style="flex:none">OK</button><button class="ch" id="snotex" style="flex:none">✕</button></div></div>
-      <h3>Заметки</h3><div id="snotes">${p.notes}</div><h3>Улики</h3><div id="sclues">${p.clues}</div><h3>Журнал операции</h3><div id="slog">${p.log}</div>
+      <h3>Заметки</h3><div id="snotes">${p.notes}</div><h3>Улики</h3><div id="sclues">${p.clues}</div><h3>Фотоархив</h3><div id="sphotos">${p.photos}</div><h3>Журнал операции</h3><div id="slog">${p.log}</div>
       <button class="ch" id="stoon2" style="width:100%;margin-top:12px">🎬 Как это работает — ролик с Дымком</button><button class="go" id="send" style="background:#3a4a66;color:#fff;font-size:15px">Завершить операцию</button>`;
-    $('sjx').onclick = () => journal(false); $('stoon2').onclick = () => film(); bindNotes();
+    $('sjx').onclick = () => journal(false); $('sphotos').dataset.n = String((S.photos || []).length); $('sphotos').onclick = (e) => { const f = e.target.closest('figure'); if (f) f.classList.toggle('big'); }; $('stoon2').onclick = () => film(); bindNotes();
     for (const b of el.querySelectorAll('#smode button')) b.onclick = () => { S.selTeam = +b.dataset.t || -1; for (const q of el.querySelectorAll('#smode button')) q.setAttribute('aria-pressed', q === b); $('smodeh').innerHTML = modeHint(); drawMap(); };
     $('send').onclick = () => { if (S.confirmEnd) end(); else { S.confirmEnd = 1; $('send').textContent = 'Точно свернуть поиск? Нажмите ещё раз'; } };
     const zoom = (k, fx = 0.5, fy = 0.5) => { const v = S.view, hv = homeView(), R = Math.max(250, Math.min(hv.R * 1.3, v.R * k)), X = v.cx + (fx - 0.5) * 2 * v.R, Y = v.cy - (fy - 0.5) * 2 * v.R; v.cx = X - (fx - 0.5) * 2 * R; v.cy = Y + (fy - 0.5) * 2 * R; v.R = R; drawMap(); };
@@ -456,5 +465,7 @@ export function makeSar(K) {
     const hr = clockNow(), hh = `${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.floor(hr % 1 * 60)).padStart(2, '0')}`, dk = NIGHT(hr) ? ' bad' : hr > 19.5 ? '' : null;
     return `<span class="c">👤${nf}/${c.victims.length}</span>${u}<span class="${dk === null ? 'k' : 'u' + dk}">${NIGHT(hr) ? '🌙' : '🕘'}${hh}</span>`; }
   function miniBase(cv, cx, cy, R) { if (!S || !S.run) return false; drawMap(cv, { cx, cy, R }, 'radar'); return true; }
-  return { stripInfo, miniBase, begin, tick, cam, hud, stop, missionDone, end, get on() { return !!(S && S.on); }, get S() { return S; }, get drone() { return !!(S && S.dr); }, get running() { return !!(S && S.run); } };
+  // кто-то найден живым и ждёт помощи -- задача «активна» (мигает в сводке)
+  const urgent = () => !!(S && S.run && S.c.victims.some((v) => v.foundT !== undefined && !v.dead && !v.saved));
+  return { photo, urgent, stripInfo, miniBase, begin, tick, cam, hud, stop, missionDone, end, get on() { return !!(S && S.on); }, get S() { return S; }, get drone() { return !!(S && S.dr); }, get running() { return !!(S && S.run); } };
 }

@@ -153,7 +153,7 @@ async function init() {
   await late('пляж', () => { G.beach = makeBeach({ G, scene, camera, audio, toast }); G.finds = makeFinds({ G, scene, camera, beach: G.beach, audio, toast, store, ach: X.ach, onTake: (k) => FT && FT.found(k) }); });
   await late('пеший режим', () => { FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach, store, ach: X.ach, finds: G.finds }); $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey(); });
   await late('Як-130', () => { JM = makeJetMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt }); });
-  await late('Ми-8', () => { HM = makeHeliMode({ G, scene, camera, post, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, net: () => X && X.net }); });
+  await late('Ми-8', () => { HM = makeHeliMode({ G, scene, camera, post, renderer, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, net: () => X && X.net }); });
   await late('параплан', () => { PG = makeParaMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, lens }); });
   await loadStep(86, 'Рисуем облака…');
   const cap = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(r, ms))]); // не ждём вечно, если поток не ответил
@@ -393,9 +393,10 @@ window.addEventListener('keydown', (e) => {
   if (!G || e.repeat) return;
   if (e.code === 'KeyN') { ENV.uCine.value = ENV.uCine.value > 0.5 ? 0 : 1; store.set('skyCine', ENV.uCine.value); toast(ENV.uCine.value ? 'Небо: кино (выразительнее)' : 'Небо: природное (как глазом)'); }
   else if (e.code === 'KeyC') { G.cLines = !G.cLines; toast(G.cLines ? 'Созвездия: линии включены' : 'Созвездия: линии скрыты'); }
-  else if (e.code === 'KeyZ' && G.mode !== 'menu') SPY.toggle();
+  else if (e.code === 'KeyZ' && G.mode !== 'menu') { if (HM && HM.on && HM.vf) HM.vf.toggle(); else SPY.toggle(); } // в вертолёте вместо трубы -- фотоаппарат
   else if (e.code === 'KeyE' && SPY && SPY.on) SPY.holdStart(); // E -- зажать с клавиатуры
   else if (e.code === 'Escape' && SPY && SPY.on) SPY.close();
+  else if (e.code === 'Escape' && HM && HM.on && HM.vf && HM.vf.on) HM.vf.close();
   else if (e.code === 'KeyC') { G.cam = (G.cam + 1) % 3; resetView(); }
   else if (e.code === 'KeyF' && G.mode !== 'menu' && (FT.on || (PG && PG.on))) footKey();
   else if (e.code === 'KeyG' && G.mode === 'free' && !(PG && PG.on)) footKey();
@@ -421,9 +422,11 @@ if (TOUCH) document.body.classList.add('touchdev');
 const held = new Map(), ptr = new Map(); let pinch = 0, lastTap = 0;
 const syncTouch = () => { let l = false, r = false; for (const v of held.values()) { if (v === 'left') l = true; else r = true; } input.left = l; input.right = r; };
 const resetView = () => { G.orbit = 0; G.orbitP = 0; G.zoom = 1; };
+// кто сейчас «смотрит»: подзорная труба или фотоаппарат вертолёта -- палец двигает обзор, два пальца/колесо -- зум
+const LK = () => (SPY && SPY.on ? SPY : HM && HM.on && HM.vf && HM.vf.on ? HM.vf : null);
 canvas.addEventListener('pointerdown', (e) => { if (!G || G.mode === 'menu') return; audio.start(); e.preventDefault();
-  if (SPY && SPY.on) { ptr.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, look: true, t: performance.now() }); try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* без захвата */ }
-    if (ptr.size === 2) { const [a, c] = [...ptr.values()]; pinch = Math.hypot(a.x - c.x, a.y - c.y); SPY.holdEnd(); } else SPY.holdStart(); return; } // в трубе: палец -- обзор, два -- кратность, руля нет
+  if (LK()) { ptr.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, look: true, t: performance.now() }); try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* без захвата */ }
+    if (ptr.size === 2) { const [a, c] = [...ptr.values()]; pinch = Math.hypot(a.x - c.x, a.y - c.y); LK().holdEnd(); } else LK().holdStart(); return; } // в трубе: палец -- обзор, два -- кратность, руля нет
   const mouse = e.pointerType === 'mouse'; ptr.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, look: mouse, t: performance.now() });
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* захват недоступен -- обзор просто кончится, когда палец уйдёт с холста */ }
   const side = e.clientX < window.innerWidth / 2 ? 'left' : 'right', other = [...held.values()][0];
@@ -432,14 +435,14 @@ canvas.addEventListener('pointerdown', (e) => { if (!G || G.mode === 'menu') ret
   else if (!mouse && !document.body.classList.contains('motor') && !document.body.classList.contains('jet') && !document.body.classList.contains('heli')) { held.set(e.pointerId, e.clientX < window.innerWidth / 2 ? 'left' : 'right'); syncTouch(); } });
 canvas.addEventListener('pointermove', (e) => { const q = ptr.get(e.pointerId); if (!q || !G) return; const dx = e.clientX - q.x, dy = e.clientY - q.y; q.x = e.clientX; q.y = e.clientY;
   if (ptr.size === 2 && PG && PG.on && held.size === 2) return;
-  if (ptr.size === 2) { const [a, c] = [...ptr.values()], d = Math.hypot(a.x - c.x, a.y - c.y); if (pinch > 0) { if (SPY && SPY.on) SPY.zoomBy(d / Math.max(pinch, 1)); else G.zoom = clamp(G.zoom * pinch / Math.max(d, 1), PG && PG.on ? 0.15 : 0.45, 3.2); } pinch = d; return; }
-  if (SPY && SPY.on) { if (Math.hypot(e.clientX - q.x0, e.clientY - q.y0) > 9) { SPY.holdEnd(); SPY.pan(dx, dy); } return; } // сдвинул -- это обзор, а не зажатие
+  if (ptr.size === 2) { const [a, c] = [...ptr.values()], d = Math.hypot(a.x - c.x, a.y - c.y); if (pinch > 0) { if (LK()) LK().zoomBy(d / Math.max(pinch, 1)); else G.zoom = clamp(G.zoom * pinch / Math.max(d, 1), PG && PG.on ? 0.15 : 0.45, 3.2); } pinch = d; return; }
+  if (LK()) { if (Math.hypot(e.clientX - q.x0, e.clientY - q.y0) > 9) { LK().holdEnd(); LK().pan(dx, dy); } return; } // сдвинул -- это обзор, а не зажатие
   // палец сдвинулся -- это обзор, а не руль
   if (!q.look && Math.hypot(e.clientX - q.x0, e.clientY - q.y0) > 14) { q.look = true; if (held.delete(e.pointerId)) syncTouch(); }
-  if (q.look) { const k = 5.5 / Math.max(window.innerHeight, 320); G.orbit = wrapPi(G.orbit + dx * k); G.orbitP = clamp(G.orbitP + dy * k, -0.22, 1.35); } });
-for (const n of ['pointerup', 'pointercancel']) window.addEventListener(n, (e) => { const q = ptr.get(e.pointerId); ptr.delete(e.pointerId); if (SPY && SPY.on && q) SPY.holdEnd(); if (ptr.size < 2) pinch = 0; if (held.delete(e.pointerId)) syncTouch();
+  if (q.look) { const k = 5.5 / Math.max(window.innerHeight, 320); G.orbit = wrapPi(G.orbit + dx * k); G.orbitP = clamp(G.orbitP + dy * k, AIR() ? -0.6 : -0.22, 1.35); } }); // с вертолёта можно посмотреть и снизу
+for (const n of ['pointerup', 'pointercancel']) window.addEventListener(n, (e) => { const q = ptr.get(e.pointerId); ptr.delete(e.pointerId); if (LK() && q) LK().holdEnd(); if (ptr.size < 2) pinch = 0; if (held.delete(e.pointerId)) syncTouch();
   if (q && n === 'pointerup' && G && Math.hypot(e.clientX - q.x0, e.clientY - q.y0) < 8 && performance.now() - q.t < 300) { const now = performance.now(); if (now - lastTap < 320) { resetView(); lastTap = 0; } else lastTap = now; } });
-canvas.addEventListener('wheel', (e) => { if (!G || G.mode === 'menu') return; e.preventDefault(); if (SPY && SPY.on) { SPY.zoomBy(Math.exp(-e.deltaY * 0.0016)); return; } G.zoom = clamp(G.zoom * Math.exp(e.deltaY * 0.0012), PG && PG.on ? 0.15 : 0.45, 3.2); }, { passive: false });
+canvas.addEventListener('wheel', (e) => { if (!G || G.mode === 'menu') return; e.preventDefault(); if (LK()) { LK().zoomBy(Math.exp(-e.deltaY * 0.0016)); return; } G.zoom = clamp(G.zoom * Math.exp(e.deltaY * 0.0012), PG && PG.on ? 0.15 : 0.45, 3.2); }, { passive: false });
 { const el = $('ts'); let y0 = null; const set = (v) => (e) => { e.preventDefault(); e.stopPropagation(); input.ease = v; input.bar = v; el.classList.toggle('on', v); y0 = v ? e.clientY : null; if (!v) input.sheetT = 0; };
   // Pro: провести по кнопке вверх -- выбрать шкот, вниз -- потравить; просто держать -- как раньше, обезветрить
   el.addEventListener('pointermove', (e) => { if (y0 === null || !G || !G.pro) return; const dy = e.clientY - y0; if (Math.abs(dy) > 10) { input.ease = input.bar = false; el.classList.remove('on'); input.sheetT = clamp(-dy / 50, -1, 1); } });
@@ -455,7 +458,7 @@ canvas.addEventListener('wheel', (e) => { if (!G || G.mode === 'menu') return; e
   for (const n of ['pointerup', 'pointercancel']) el.addEventListener(n, end); }
 $('bmenu').onclick = () => toMenu();
 $('bcam').onclick = () => { G.cam = (G.cam + 1) % 3; resetView(); };
-$('bspy').onclick = () => { audio.start(); SPY.toggle(); }; $('bpro').onclick = (e) => { e.currentTarget.blur(); togglePro(); }; $('spyx').onclick = () => SPY.close();
+$('bspy').onclick = () => { audio.start(); if (HM && HM.on && HM.vf) HM.vf.toggle(); else SPY.toggle(); }; $('bpro').onclick = (e) => { e.currentTarget.blur(); togglePro(); }; $('spyx').onclick = () => SPY.close();
 $('spyin').onclick = () => SPY.zoomBy(1.5); $('spyout').onclick = () => SPY.zoomBy(1 / 1.5);
 let drag = null;
 
@@ -465,7 +468,7 @@ function lens(n) { const box = $('lens'); n = Math.min(Math.round(n), 30); if (b
     d.style.cssText = `left:${Math.random() * 100}%;top:${18 + Math.random() * 74}%;width:${sz}px;height:${sz * (1 + Math.random() * 0.5)}px;animation-duration:${1.4 + Math.random() * 2.6}s;--fall:${12 + Math.random() * 90}px`;
     d.addEventListener('animationend', () => d.remove()); box.appendChild(d); } }
 
-function toast(t) { const el = $('toast'); el.textContent = t; el.style.opacity = 1; G.toastT = 1.9; }
+function toast(t) { if (G && G.toastHook && G.toastHook(t)) return; const el = $('toast'); el.textContent = t; el.style.opacity = 1; G.toastT = 1.9; }
 
 // ---------- события лодки игрока ----------
 function playerEvents(e) {
