@@ -529,7 +529,7 @@ function sunTint(sinEl, eve, storm) { const hD = Math.max(-0.6, Math.asin(clamp(
 async function startKhan(craft, mode = '') { const merzNow = mode === 'merz'; const b = $('bfree'); b.classList.add('wait');
   try { if (!G.khan) { toast('Летим на Хан-Тенгри… грузим рельеф Иныльчека'); G.khan = await loadKhan(scene); G.merz = makeMerz(scene, G.khan); G.snow = makeSnow(scene); G.klabels = makePeakLabels($('game'), G.khan.h); } } catch (e) { toast(e.message); return; } finally { b.classList.remove('wait'); }
   if (craft === 'jet') JM.startZone(G.khan); else if (craft === 'heli') { if (merzNow) G.merz.force(); HM.startFree(mode); } }
-function heliGo() { if (!HM) { toast('Вертолёт не загрузился — выберите другой снаряд'); return; } audio.start(); G.clock = G.todHour(); if (store.get('heliSite') === 'rwy') HM.startFree(); else startKhan('heli', ['merz', 'sar'].includes(store.get('heliSite')) ? store.get('heliSite') : ''); }
+function heliGo() { if (!HM) { toast('Вертолёт не загрузился — выберите другой снаряд'); return; } audio.start(); G.clock = G.todHour(); if (store.get('heliSite') === 'rwy') HM.startFree(); else startKhan('heli', ['merz', 'sar', 'school'].includes(store.get('heliSite')) ? store.get('heliSite') : ''); }
 function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; { const c = G.clock + (G.mode === 'menu' ? 0 : dt / 60 * (G.clockK || 1)); if (c >= 24) G.day = (G.day || 0) + 1; G.clock = c % 24; } const k = G.wx; if (!k) return; // G.day -- игровые сутки от 23 июля: идут сезоны; в меню время стоит на выбранном
   astroSun(G.day || 0, G.clock, SUN); const sinEl = SUN.y; // Солнце -- по эфемериде на игровую дату (astro.js): долгота дня и заря меняются с сезоном
   sunTint(sinEl, G.clock > 12, k.storm);
