@@ -2,7 +2,7 @@
 // движение в акватории и милиция, выбор места старта по карте (включая горы). Главный модуль вызывает отсюда крючки.
 import { KINDS as FKINDS } from './finds.js';
 import { merzPhase } from './merz.js';
-import { shown, BETA } from './channel.js';
+import { shown, BADGE } from './channel.js';
 import { SPECS, CRAFT_ORDER, YACHT_INFO, ACH, makeCraftBody, aiPaddle, aiMotor, flow } from './crafts.js';
 import { MODEL, FX } from './craftmodels.js';
 import { makeTraffic } from './traffic.js';
@@ -243,7 +243,7 @@ export function installExtra(A) {
     if (box.dataset.for !== sel) { box.dataset.for = sel; box.innerHTML = '';
       for (const [id, n, sub] of S[2]) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${n}</b><small>${typeof sub === 'function' ? sub() : sub}</small>`; if (typeof sub === 'function') b.dataset.live = 1; b.onclick = () => { store.set(S[0], id); startAt = null; refreshMenu(); }; box.appendChild(b); } } // явный выбор старта отменяет точку на карте
     for (const c of box.children) { c.setAttribute('aria-pressed', c.dataset.id === (store.get(S[0]) || S[1])); if (c.dataset.live) { const f = S[2].find((q) => q[0] === c.dataset.id)[2]; c.querySelector('small').textContent = f(); } } }
-  function buildMenu() { yachtHow = $('how').innerHTML; if (BETA) { const h = document.querySelector('h1'); if (h && !h.querySelector('.beta')) h.insertAdjacentHTML('beforeend', ' <sup class="beta" style="font:700 .38em var(--ui);color:#ff8a2a;letter-spacing:.1em;vertical-align:super">БЕТА</sup>'); }
+  function buildMenu() { yachtHow = $('how').innerHTML; if (BADGE) { const h = document.querySelector('h1'); if (h && !h.querySelector('.beta')) h.insertAdjacentHTML('beforeend', ' <sup class="beta" style="font:700 .38em var(--ui);color:#ff8a2a;letter-spacing:.1em;vertical-align:super">БЕТА</sup>'); }
     for (const id of [...CRAFT_ORDER, 'para', 'jet', 'heli'].filter(shown)) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); refreshMenu(); }; $('crafts').appendChild(b); }
     $('briver').onclick = () => { audio.start(); startRiver(); }; $('bjournal').onclick = () => { journal(); $('journal').hidden = false; }; $('jclose').onclick = () => { $('journal').hidden = true; };
     $('bmap').onclick = openMap; $('mclose').onclick = () => { $('mapdlg').hidden = true; }; $('mreset').onclick = () => { startAt = null; $('mapdlg').hidden = true; refreshMenu(); };
