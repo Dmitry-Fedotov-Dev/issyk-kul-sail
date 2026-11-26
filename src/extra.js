@@ -2,6 +2,7 @@
 // движение в акватории и милиция, выбор места старта по карте (включая горы). Главный модуль вызывает отсюда крючки.
 import { KINDS as FKINDS } from './finds.js';
 import { merzPhase } from './merz.js';
+import { shown, BETA } from './channel.js';
 import { SPECS, CRAFT_ORDER, YACHT_INFO, ACH, makeCraftBody, aiPaddle, aiMotor, flow } from './crafts.js';
 import { MODEL, FX } from './craftmodels.js';
 import { makeTraffic } from './traffic.js';
@@ -52,15 +53,15 @@ export function installExtra(A) {
   let fid = String(store.get('fid') || ''); if (!fid) { fid = Math.random().toString(36).slice(2, 12); store.set('fid', fid); }
   let friends = (store.get('friends') || []).filter((x) => x && x.fid && x.fid !== fid).slice(0, 20), fstat = new Map(), pendingTp = null, pendingFriend = null;
   const addFriend = (f, n) => { if (!f || f === fid) return false; const o = friends.find((x) => x.fid === f); if (o) { if (n) o.n = n; } else friends.unshift({ fid: f, n: n || 'Друг' }); friends = friends.slice(0, 20); store.set('friends', friends); return !o; };
-  if (sel !== 'yacht' && sel !== 'para' && sel !== 'jet' && sel !== 'heli' && !SPECS[sel]) sel = 'yacht';
+  if ((sel !== 'yacht' && sel !== 'para' && sel !== 'jet' && sel !== 'heli' && !SPECS[sel]) || !shown(sel)) sel = 'yacht';
   const info = (id) => (id === 'yacht' ? YACHT_INFO : id === 'para' ? PARA_INFO : id === 'jet' ? JET_INFO : id === 'heli' ? HELI_INFO : SPECS[id]);
   const SHORT = { heli: 'Ми-8', jet: 'Як-130', para: 'Параплан', yacht: 'Яхта', kayak: 'Каяк', scull: 'Одиночка', sup: 'SUP-доска', jetski: 'Гидроцикл', boat: 'Катер' }; // на кнопке -- коротко, полное имя в подсказке
 
   // ---------- достижения ----------
   function ach(id) { if (done.has(id)) return; const a = ACH.find((x) => x[1] === id); if (!a) return; done.add(id); store.set('ach', [...done]); audio.chime(); toast('★ ' + a[2]); journal(); }
   function journal() { const groups = { yacht: 'Яхта', kayak: 'Каяк', scull: 'Академическая одиночка', sup: 'SUP-доска', jetski: 'Гидроцикл', boat: 'Моторный катер', law: 'Закон и порядок', map: 'География', spy: 'Подзорная труба', para: 'Параплан', jet: 'Як-130', mount: 'Горы и джайлоо', dymok: 'Дымок на берегу' };
-    $('bjournal').textContent = `Журнал · ${done.size}/${ACH.length}`;
-    $('jlist').innerHTML = Object.keys(groups).map((g) => `<h4>${groups[g]}</h4>` + ACH.filter((a) => a[0] === g).map((a) => `<div class="ja${done.has(a[1]) ? ' ok' : ''}"><b>${a[2]}</b><span>${a[3]}</span></div>`).join('') + (g === 'dymok' ? collHtml() : '')).join(''); }
+    const ACHs = ACH.filter((a) => shown(a[0])); $('bjournal').textContent = `Журнал · ${ACHs.filter((a) => done.has(a[1])).length}/${ACHs.length}`;
+    $('jlist').innerHTML = Object.keys(groups).filter(shown).map((g) => `<h4>${groups[g]}</h4>` + ACH.filter((a) => a[0] === g).map((a) => `<div class="ja${done.has(a[1]) ? ' ok' : ''}"><b>${a[2]}</b><span>${a[3]}</span></div>`).join('') + (g === 'dymok' ? collHtml() : '')).join(''); }
   // коллекция находок Дымка: что найдено и сколько; ненайденное -- знаком вопроса, чтобы было что искать
   function collHtml() { const c = store.get('finds') || {}; return `<div class="ja coll"><b>Коллекция</b><span>${FKINDS.map((k) => (c[k.id] ? `${k.name} × ${c[k.id]}` : '???')).join(' · ')}</span></div>`; }
 
@@ -242,8 +243,8 @@ export function installExtra(A) {
     if (box.dataset.for !== sel) { box.dataset.for = sel; box.innerHTML = '';
       for (const [id, n, sub] of S[2]) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${n}</b><small>${typeof sub === 'function' ? sub() : sub}</small>`; if (typeof sub === 'function') b.dataset.live = 1; b.onclick = () => { store.set(S[0], id); startAt = null; refreshMenu(); }; box.appendChild(b); } } // явный выбор старта отменяет точку на карте
     for (const c of box.children) { c.setAttribute('aria-pressed', c.dataset.id === (store.get(S[0]) || S[1])); if (c.dataset.live) { const f = S[2].find((q) => q[0] === c.dataset.id)[2]; c.querySelector('small').textContent = f(); } } }
-  function buildMenu() { yachtHow = $('how').innerHTML;
-    for (const id of [...CRAFT_ORDER, 'para', 'jet', 'heli']) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); refreshMenu(); }; $('crafts').appendChild(b); }
+  function buildMenu() { yachtHow = $('how').innerHTML; if (BETA) { const h = document.querySelector('h1'); if (h && !h.querySelector('.beta')) h.insertAdjacentHTML('beforeend', ' <sup class="beta" style="font:700 .38em var(--ui);color:#ff8a2a;letter-spacing:.1em;vertical-align:super">БЕТА</sup>'); }
+    for (const id of [...CRAFT_ORDER, 'para', 'jet', 'heli'].filter(shown)) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); refreshMenu(); }; $('crafts').appendChild(b); }
     $('briver').onclick = () => { audio.start(); startRiver(); }; $('bjournal').onclick = () => { journal(); $('journal').hidden = false; }; $('jclose').onclick = () => { $('journal').hidden = true; };
     $('bmap').onclick = openMap; $('mclose').onclick = () => { $('mapdlg').hidden = true; }; $('mreset').onclick = () => { startAt = null; $('mapdlg').hidden = true; refreshMenu(); };
     const nm = $('pname'), setName = (v) => { name = v; store.set('name', v); };
