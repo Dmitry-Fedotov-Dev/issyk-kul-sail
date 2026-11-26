@@ -108,7 +108,7 @@ export function makeSar(K) {
       <p style="margin-top:10px"><small>Присоединиться к чужой операции:</small> <input id="sjoin" maxlength="5" placeholder="КОД"> <button class="ch" id="sjoinb" style="flex:none;display:inline-block;min-width:0">Войти</button></p>`;
     for (const b of el.querySelectorAll('.ch[data-k]')) b.onclick = () => { S.res[b.dataset.k] = +b.dataset.v; brief(); };
     $('sgo').onclick = start; $('stoon').onclick = () => film(); $('sjoinb').onclick = () => { const v = $('sjoin').value.trim().toUpperCase(); if (seedOf(v) === null) { toast('Код — 5 знаков, например K7QZA'); return; } stopWorld(); begin(v); }; }
-  function start() { $('sbrief').hidden = true; S.run = true; G.spyMore = spyTargets; document.body.classList.add('sarrun'); $('smini').hidden = false; S.bats = S.res.drone ? 3 : 0; const b = K.base();
+  function start() { $('sbrief').hidden = true; S.run = true; G.spyMore = spyTargets; document.body.classList.add('sarrun'); S.bats = S.res.drone ? 3 : 0; const b = K.base();
     const lc = S.c.pts[Math.max(0, S.c.legIdx)]; // отряды уже заброшены в последний лагерь группы
     for (let i = 0; i < S.res.men / 4; i++) S.teams.push({ id: i + 1, n: 4, X: lc.X + 20 + i * 12, Y: lc.Y - 25, tgt: null, carry: null, risk: 0, spr: teamSprite() });
     const hk = S.c.hook && S.c.clues[S.c.hook.id]; if (hk) { S.found.add(hk.id); const tx = S.c.last.kind === 'ping' ? S.c.last.X : hk.X, ty = S.c.last.kind === 'ping' ? S.c.last.Y : hk.Y; hop(tx, ty, 700, 140, false, true); }
@@ -263,7 +263,7 @@ export function makeSar(K) {
     // ночью дрон смотрит тепловизором
     const nightDr = !!S.dr && NIGHT(clockNow()); if (nightDr !== S.nightOn) { S.nightOn = nightDr; const cv = document.querySelector('canvas'); if (cv) cv.style.filter = nightDr ? 'grayscale(1) brightness(3.2) contrast(1.25)' : ''; }
     S.posT -= dt; if (S.posT <= 0) { S.posT = 2; const p = S.dr || h; share({ k: 'pos', X: Math.round(p.X), Y: Math.round(p.Y), d: S.dr ? 1 : 0 }); }
-    if ((S.mapT = (S.mapT || 0) - dt) <= 0) { S.mapT = 0.25; if (!$('sjour').hidden) drawMap(); const mc = $('smini'), p = S.dr || h; if (mc && !mc.hidden) drawMap(mc, { cx: p.X, cy: p.Y, R: 3000 }, true); }
+    if ((S.mapT = (S.mapT || 0) - dt) <= 0) { S.mapT = 0.25; if (!$('sjour').hidden) drawMap();  }
     { const hr = clockNow(); if (hr > 19.4 && hr < 19.6 && !S.duskWarn) { S.duskWarn = 1; K.pop('ДО ТЕМНОТЫ ЧАС', 'садитесь на базе или в лагере: ночью в горах не летают'); say('⚠ До темноты час. Ночной полёт — штраф и риск'); }
       if (hr > 6 && hr < 7) S.duskWarn = 0;
       if (NIGHT(hr) && !h.ground && !h.crash) { S.nightT = (S.nightT || 0) + dt; if (S.nightT >= 30) { S.nightT = 0; S.nightPen = (S.nightPen || 0) + 150; K.pop('−150 НОЧНОЙ ПОЛЁТ', 'темно: садитесь — дрон ночью видит тепловизором'); K.buzz([60, 40, 60]); } } }
@@ -355,7 +355,7 @@ export function makeSar(K) {
     for (let X = Math.ceil(B.x0 / st) * st; X < B.x1; X += st) { const [a] = P(X, 0); x.fillText(String(((Math.round(X / 1000) + 50) % 100 + 100) % 100).padStart(2, '0'), a + 2 * u, 10 * u); }
     for (let Y = Math.ceil(B.y0 / st) * st; Y < B.y1; Y += st) { const [, b] = P(0, Y); x.fillText(String(((Math.round(Y / 1000) + 50) % 100 + 100) % 100).padStart(2, '0'), 2 * u, b - 2 * u); }
     x.strokeStyle = '#1d1d1d'; x.lineWidth = 2 * u; x.strokeRect(u, u, N - 2 * u, N - 2 * u); }
-  function drawMap(cv = $('smap'), view = S.view, mini = false) { if (!cv || !S) return; const Wc = cv.clientWidth || (mini ? 150 : 360), dpr = Math.min(2, window.devicePixelRatio || 1); if (cv.width !== Math.round(Wc * dpr)) { cv.width = cv.height = Math.round(Wc * dpr); }
+  function drawMap(cv = $('smap'), view = S.view, mini = false) { if (!cv || !S) return; const Wc = cv.clientWidth || cv._w || (mini ? 150 : 360), dpr = Math.min(2, window.devicePixelRatio || 1); if (cv.width !== Math.round(Wc * dpr)) { cv.width = cv.height = Math.round(Wc * dpr); }
     const HB = bbox(); if (!mapImg) mapImg = relief(HB, 512); view = view || (S.view = homeView());
     const B = { x0: view.cx - view.R, x1: view.cx + view.R, y0: view.cy - view.R, y1: view.cy + view.R }, x = cv.getContext('2d'), N = cv.width, P = (X, Y) => [(X - B.x0) / (B.x1 - B.x0) * N, (B.y1 - Y) / (B.y1 - B.y0) * N], u = N / (mini ? 190 : 360), m2p = N / (B.x1 - B.x0);
     x.fillStyle = '#efe6cc'; x.fillRect(0, 0, N, N); { const [a, b] = P(HB.x0, HB.y1), [c2, d2] = P(HB.x1, HB.y0); x.drawImage(mapImg, a, b, c2 - a, d2 - b); } const c = S.c;
@@ -375,7 +375,8 @@ export function makeSar(K) {
       x.fillStyle = S.selTeam === t.id ? '#fff' : '#1f5fbf'; x.fillRect(a - 5 * u, b - 5 * u, 10 * u, 10 * u); if (!mini) { x.fillStyle = '#1d1d1d'; x.font = `italic 700 ${10 * u}px Georgia,serif`; x.fillText(`О${t.id}·${t.n}`, a, b + 16 * u); } }
     for (const [n, p] of S.peers) if (performance.now() - p.t < 8000) { const [a, b] = P(p.X, p.Y); x.fillStyle = '#c78bff'; x.beginPath(); x.arc(a, b, 5 * u, 0, 7); x.fill(); if (!mini) x.fillText(n, a, b - 8 * u); }
     if (S.dr) { const [e, f] = P(S.dr.X, S.dr.Y), [g0, g1] = P(S.dr.L.X, S.dr.L.Y); x.strokeStyle = 'rgba(80,220,255,.5)'; x.lineWidth = 1.5 * u; x.beginPath(); x.arc(g0, g1, 6000 * m2p, 0, 7); x.stroke(); x.fillStyle = '#5df'; x.beginPath(); x.arc(e, f, 5 * u, 0, 7); x.fill(); if (!mini) { x.fillStyle = '#5df'; x.fillText('дрон', e, f - 9 * u); } }
-    // вы: вертолёт -- оранжевая стрелка по курсу с пульсом; вне карты -- стрелка у края
+    // вы: вертолёт -- оранжевая стрелка по курсу с пульсом; вне карты -- стрелка у края (на радаре её рисует сам радар, каждый кадр)
+    if (mini === 'radar') return;
     const h = K.heli(); let [a, b] = P(h.X, h.Y); const out = a < 0 || b < 0 || a > N || b > N; if (out) { a = Math.max(10 * u, Math.min(N - 10 * u, a)); b = Math.max(10 * u, Math.min(N - 10 * u, b)); }
     const pr = (performance.now() / 1000 % 1.2) / 1.2; x.strokeStyle = `rgba(255,106,26,${1 - pr})`; x.lineWidth = 3 * u; x.beginPath(); x.arc(a, b, (8 + pr * 18) * u, 0, 7); x.stroke();
     x.save(); x.translate(a, b); x.rotate(h.th); x.fillStyle = '#ff6a1a'; x.strokeStyle = '#fff'; x.lineWidth = 2 * u; x.beginPath(); x.moveTo(0, -11 * u); x.lineTo(7 * u, 8 * u); x.lineTo(0, 4 * u); x.lineTo(-7 * u, 8 * u); x.closePath(); x.fill(); x.stroke(); x.restore();
@@ -439,5 +440,7 @@ export function makeSar(K) {
     $('rt').innerHTML = sc.parts.map(([t, v]) => `<tr><td>${t}</td><td style="text-align:right">${v > 0 ? '+' : ''}${v}</td></tr>`).join('') + (sc.k > 1 ? `<tr><td>сложность: ${c.comm.name}</td><td style="text-align:right">×${sc.k}</td></tr>` : '');
     $('ragain').textContent = 'Новое дело'; setTimeout(() => { if (S && S.on) $('result').hidden = false; }, 600); }
   function stop() { if (!S) return; S.on = false; G.spyMore = null; stopWorld(); if (drone) drone.g.visible = false; if (ping) ping.visible = false; $('sarw').hidden = true; if ($('harr')) $('harr').style.top = ''; const cv = document.querySelector('canvas'); if (cv) cv.style.filter = ''; NETHOOK.sar = null; document.body.classList.remove('sardr', 'sarrun'); const n = net(); if (n && n.sarLeave) n.sarLeave(); S = null; }
-  return { begin, tick, cam, hud, stop, missionDone, end, get on() { return !!(S && S.on); }, get S() { return S; }, get drone() { return !!(S && S.dr); }, get running() { return !!(S && S.run); } };
+  // основа радара (правый верхний угол, рисует helimode): топокарта вокруг точки, без своей стрелки и подписей
+  function miniBase(cv, cx, cy, R) { if (!S || !S.run) return false; drawMap(cv, { cx, cy, R }, 'radar'); return true; }
+  return { miniBase, begin, tick, cam, hud, stop, missionDone, end, get on() { return !!(S && S.on); }, get S() { return S; }, get drone() { return !!(S && S.dr); }, get running() { return !!(S && S.run); } };
 }

@@ -22,6 +22,11 @@ body.heli #speed>b,body.heli #speed>small,body.heli #pos,body.heli #wear,body.he
 #hhud .r{font-size:14px;margin-top:3px}#hhud .r b{font-weight:600}#hhud .bar{display:inline-block;width:86px;height:7px;border-radius:4px;background:rgba(255,255,255,.18);vertical-align:middle;margin:0 6px;overflow:hidden}#hhud .bar i{display:block;height:100%;background:#9fe0a0}#hhud .bar i.hot{background:#ff8a2a}#hhud .bar i.red{background:#ff4a3a}
 #hwarn{left:50%;top:28%;transform:translateX(-50%);font:800 clamp(20px,4.6vmin,34px) var(--ui);color:#ff5a3a;text-shadow:0 2px 12px rgba(0,0,0,.7);letter-spacing:.06em;animation:jblink .5s steps(2) infinite}
 body.spy #hwrap,body.spy #sarw,body.spy #mark,body.spy #hint,body.spy #hvec{display:none!important}
+#hradar{position:fixed;right:max(14px,env(safe-area-inset-right,0px));top:64px;width:176px;height:176px;border-radius:50%;pointer-events:auto;touch-action:none;cursor:pointer;z-index:4;filter:drop-shadow(0 2px 8px rgba(0,0,0,.45))}#hradar.big{width:min(330px,72vmin);height:min(330px,72vmin)}
+#hwind{position:fixed;left:auto;transform:none;right:max(14px,env(safe-area-inset-right,0px));top:244px;background:rgba(8,22,48,.62);border-radius:10px;padding:2px 9px;font:600 12px var(--ui);white-space:nowrap;z-index:4}#hwind b{color:#8fd0ff}#hwind .g{color:#ffd27a}
+@media (max-width:640px){#hradar{top:58px;width:116px;height:116px}#hradar.big{width:240px;height:240px}#hwind{font-size:11px}#hmis{left:10px!important;transform:none!important;width:calc(100vw - 150px)!important;text-align:left}}
+@media (max-height:440px) and (min-width:641px){#hradar{top:52px;width:104px;height:104px}#hradar.big{width:220px;height:220px}#hwind{font-size:11px}}
+body.spy #hradar,body.spy #hwind{display:none!important}
 #hflash{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:3}#hflash.hit{box-shadow:inset 0 0 140px 40px rgba(255,40,20,.75)}#hflash.fast{box-shadow:inset 0 0 120px 20px rgba(220,240,255,.7)}
 #hvec{position:fixed;width:110px;height:110px;pointer-events:none;z-index:4}#hdbg{left:auto;right:12px;top:120px;font:11px/1.35 ui-monospace,monospace;background:rgba(0,0,0,.6);padding:6px 8px;border-radius:8px;white-space:pre;color:#cfe}
 #hmis{left:50%;top:10px;transform:translateX(-50%);text-align:center;font-size:14px;max-width:min(560px,60vw);background:rgba(8,22,48,.55);border-radius:12px;padding:6px 12px}#hmis b{font-size:17px}
@@ -88,7 +93,7 @@ export function makeHeliMode(A) {
 
   function build() { if (built) return; built = true;
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    const w = document.createElement('div'); w.id = 'hwrap'; w.hidden = true; w.innerHTML = '<div id="hhud" class="hud"></div><div id="hwarn" class="hud" hidden></div><div id="hmis" class="hud" hidden></div><div id="harr" class="hud" hidden><i>⬆</i><div></div></div><div id="hland" class="hud" hidden></div><div id="hcoach" class="hud" hidden></div><div id="hpop" class="hud" hidden></div><div id="hscore" class="hud"></div><div id="hcr" class="hud" hidden></div><div id="hflash"></div><canvas id="hvec" width="180" height="180"></canvas><pre id="hdbg" class="hud" hidden></pre><div id="hcol"><button id="hup">▲</button><button id="hdn">▼</button></div>'; $('game').appendChild(w);
+    const w = document.createElement('div'); w.id = 'hwrap'; w.hidden = true; w.innerHTML = '<div id="hhud" class="hud"></div><div id="hwarn" class="hud" hidden></div><div id="hmis" class="hud" hidden></div><div id="harr" class="hud" hidden><i>⬆</i><div></div></div><div id="hland" class="hud" hidden></div><div id="hcoach" class="hud" hidden></div><div id="hpop" class="hud" hidden></div><div id="hscore" class="hud"></div><div id="hcr" class="hud" hidden></div><div id="hflash"></div><canvas id="hradar" title="Радар: касание — крупнее/мельче"></canvas><div id="hwind" class="hud"></div><canvas id="hvec" width="180" height="180"></canvas><pre id="hdbg" class="hud" hidden></pre><div id="hcol"><button id="hup">▲</button><button id="hdn">▼</button></div>'; $('game').appendChild(w);
     for (const [id, k] of [['hup', 'hu'], ['hdn', 'hd']]) { const b = $(id); const set = (v) => (e) => { e.preventDefault(); e.stopPropagation(); input[k] = v; b.classList.toggle('on', v); };
       b.addEventListener('pointerdown', set(true)); b.addEventListener('pointerup', set(false)); b.addEventListener('pointercancel', set(false)); b.addEventListener('pointerleave', set(false)); }
     SAR = makeSar({ G, scene, camera, $, store, toast, audio, TOUCH, input, H, net: A.net, personSprite, flagPole, pop: (t, sub) => pop(t, sub), score: (p, t, sub) => score(p, t, sub), buzz: (ms) => buzz(ms),
@@ -97,7 +102,7 @@ export function makeHeliMode(A) {
       setGoal(g) { F.goal = g ? { ...g, to: { X: g.X, Y: g.Y, z: H(g.X, g.Y), name: g.name || g.t } } : null; }, busy: () => F.mi < F.mis.length, resetCam: () => { camInit = false; F.cam = null; }, mission: () => F.mis[F.mi] || null, goal: () => F.goal && { X: F.goal.to.X, Y: F.goal.to.Y },
       hasMission: (k) => F.mis.slice(F.mi).some((m) => (k === 'base' ? m.base : false)) });
     Hc = new Heli(); M = makeHeli(); scene.add(M.root); M.root.visible = false; boom = makeBoom();
-    marks = new THREE.Group(); scene.add(marks); people = []; beacon = makeBeacon(); reticle = makeReticle(); AIRFX = makeHeliAir({ scene, H }); window.addEventListener('keydown', (e) => { if (on && F && e.code === 'Backquote') F.dbg = !F.dbg; });
+    marks = new THREE.Group(); scene.add(marks); people = []; beacon = makeBeacon(); reticle = makeReticle(); AIRFX = makeHeliAir({ scene, H }); $('hradar').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); $('hradar').classList.toggle('big'); RB.t = 0; }); window.addEventListener('keydown', (e) => { if (on && F && e.code === 'Backquote') F.dbg = !F.dbg; });
     P = { id: 'heli', name: 'Вы', b: { X: 0, Y: 0, th: 0, speed: 0, base: 0, y: 0, tws: 0, vx: 0, vy: 0 }, model: { root: M.root }, wake: { pts: [], mesh: { visible: false }, reset() {}, update() {} }, time: 0, leg: 0 }; }
 
   // ---- места: площадка (база), лагерь на леднике, люди на склоне ----
@@ -400,18 +405,49 @@ export function makeHeliMode(A) {
   // отладка лётной модели: ` (обратная кавычка) или ?helidbg
   function dbg() { const el = $('hdbg'); if (!F.dbg) { el.hidden = true; return; } el.hidden = false; const w = wind(Hc.X, Hc.Y, Hc.Z), f = (v, n = 1) => (+v || 0).toFixed(n);
     el.textContent = `V ${f(Hc.speed)} м/с  vx ${f(Hc.vx)} vy ${f(Hc.vy)} vz ${f(Hc.vz)}\nнос ${f(Hc.th * 57.3 % 360, 0)}°  движение ${f(Math.atan2(Hc.vx, Hc.vy) * 57.3, 0)}°  занос ${f(Hc.slip * 57.3, 0)}°\nтангаж ${f(Hc.pitch * 57.3)}°  крен ${f(Hc.roll * 57.3)}° (вираж ${f(Hc.bank * 57.3)})  рыск ${f(Hc.yr, 2)} рад/с\nускор ${f(Hc.ax)} / ${f(Hc.ay)} м/с²\nветер ${f(w.x)} / ${f(w.y)} / ${f(w.z)}  порыв ${f(w.gx || 0)}/${f(w.gy || 0)}  болт ${f(w.tb, 2)}\nвисение ${f(Hc.hov, 2)}  автомат ${f(Hc.assistA, 2)} м/с²  интеграл ${f(Hc.iF, 2)} / ${f(Hc.iS, 2)}\nшаг ${f(Hc.col, 2)}  запрос ${f(Hc.dem, 2)}  тяга/вес ${f(Hc.Tmax / (Hc.mass * 9.81), 2)}  σ ${f(Hc.sig, 2)}  ETL ${f(Hc.etl, 2)}`; }
+  // ---- радар в правом верхнем углу: карта поворачивается с камерой (вверху -- что впереди на экране), по ободу -- компас
+  // (С красная), синий треугольник на ободе -- откуда дует ветер, под радаром -- сила ветра. В поиске основа -- топокарта
+  // района (рисуется 4 раза в секунду вокруг машины), иначе -- тёмный диск с кольцами дальности. Стрелка -- нос, линия -- куда летим
+  const RB = { cv: null, t: 0, cx: 0, cy: 0, R: 0, ok: false }, cdir = new THREE.Vector3();
+  function radar(dt) { const cv = $('hradar'), pill = $('hwind'); if (!cv) return; const hide = !!Hc.crash; cv.hidden = hide; pill.hidden = hide; if (hide) return;
+    const css = cv.clientWidth || 160, dpr = Math.min(2, window.devicePixelRatio || 1), N = Math.round(css * dpr); if (cv.width !== N) cv.width = cv.height = N;
+    const x = cv.getContext('2d'), c = N / 2, rim = Math.max(13 * dpr, N * 0.09), r = c - rim, big = cv.classList.contains('big'), Rm = big ? 6000 : 2500, k = r / Rm;
+    const p = (SAR && SAR.S && SAR.S.dr) || Hc; camera.getWorldDirection(cdir); const yaw = Math.atan2(cdir.x, -cdir.z);
+    RB.t -= dt; if (F.sar && SAR && (RB.t <= 0 || RB.R !== Rm)) { RB.t = 0.25; if (!RB.cv) RB.cv = document.createElement('canvas'); RB.cv._w = Math.round(2 * r * 1.42 / Math.min(2, window.devicePixelRatio || 1)); RB.ok = SAR.miniBase(RB.cv, p.X, p.Y, Rm * 1.42); RB.cx = p.X; RB.cy = p.Y; RB.R = Rm; }
+    x.clearRect(0, 0, N, N); x.save(); x.beginPath(); x.arc(c, c, r, 0, 7); x.clip(); const topo = F.sar && RB.ok; x.fillStyle = topo ? '#efe6cc' : 'rgba(10,26,52,.8)'; x.fillRect(0, 0, N, N);
+    x.translate(c, c); x.rotate(-yaw);
+    if (topo) { const bw = 2 * r * 1.42; x.drawImage(RB.cv, -bw / 2 - (p.X - RB.cx) * k, -bw / 2 + (p.Y - RB.cy) * k, bw, bw); }
+    else { x.strokeStyle = 'rgba(255,255,255,.16)'; x.lineWidth = dpr; for (const q of [0.33, 0.66]) { x.beginPath(); x.arc(0, 0, r * q, 0, 7); x.stroke(); } }
+    const P = (X, Y) => [(X - p.X) * k, -(Y - p.Y) * k], edge = (a, b) => { const L = Math.hypot(a, b), m = r - 7 * dpr; return L > m ? [a / L * m, b / L * m, true] : [a, b, false]; };
+    if (F.base) { const [a, b, o] = edge(...P(F.base.X, F.base.Y)); x.fillStyle = '#3a8ee8'; x.strokeStyle = '#fff'; x.lineWidth = 1.5 * dpr; x.fillRect(a - 5 * dpr, b - 5 * dpr, 10 * dpr, 10 * dpr); x.strokeRect(a - 5 * dpr, b - 5 * dpr, 10 * dpr, 10 * dpr); }
+    const mi = F.mis[F.mi] || F.goal; if (mi) { const [a, b] = edge(...P(mi.to.X, mi.to.Y)), pr = (performance.now() / 900) % 1; x.fillStyle = '#ff8a2a'; x.strokeStyle = '#fff'; x.lineWidth = 2 * dpr; x.beginPath(); x.arc(a, b, 6 * dpr, 0, 7); x.fill(); x.stroke(); x.strokeStyle = `rgba(255,138,42,${1 - pr})`; x.beginPath(); x.arc(a, b, (6 + pr * 10) * dpr, 0, 7); x.stroke(); }
+    if (Hc.speed > 2) { const L = Math.min(r * 0.85, Hc.speed * 12 * k + 10 * dpr), a = Math.atan2(Hc.vx, Hc.vy); x.strokeStyle = topo ? 'rgba(200,60,0,.9)' : '#ffb07a'; x.lineWidth = 2.5 * dpr; x.setLineDash([5 * dpr, 4 * dpr]); x.beginPath(); x.moveTo(0, 0); x.lineTo(Math.sin(a) * L, -Math.cos(a) * L); x.stroke(); x.setLineDash([]); }
+    x.save(); x.rotate(Hc.th); x.fillStyle = '#ff6a1a'; x.strokeStyle = '#fff'; x.lineWidth = 2 * dpr; x.beginPath(); x.moveTo(0, -11 * dpr); x.lineTo(8 * dpr, 8 * dpr); x.lineTo(0, 4 * dpr); x.lineTo(-8 * dpr, 8 * dpr); x.closePath(); x.fill(); x.stroke(); x.restore();
+    x.restore();
+    // обод-компас
+    x.beginPath(); x.arc(c, c, c - 1, 0, 7); x.arc(c, c, r, 0, 7, true); x.fillStyle = 'rgba(8,22,48,.9)'; x.fill();
+    x.strokeStyle = 'rgba(255,255,255,.55)'; x.lineWidth = 1.2 * dpr; for (let d = 0; d < 360; d += 30) { const a = d * Math.PI / 180 - yaw, s0 = d % 90 ? 0.35 : 0; if (!s0) continue; x.beginPath(); x.moveTo(c + Math.sin(a) * (r + 2 * dpr), c - Math.cos(a) * (r + 2 * dpr)); x.lineTo(c + Math.sin(a) * (r + rim * s0 + 2 * dpr), c - Math.cos(a) * (r + rim * s0 + 2 * dpr)); x.stroke(); }
+    x.font = `800 ${Math.round(rim * 0.72)}px system-ui,sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; const rr = r + rim / 2;
+    [['С', 0], ['В', 90], ['Ю', 180], ['З', 270]].forEach(([t, d]) => { const a = d * Math.PI / 180 - yaw; x.fillStyle = d ? '#fff' : '#ff5a3a'; x.fillText(t, c + Math.sin(a) * rr, c - Math.cos(a) * rr); });
+    // ветер: откуда дует -- треугольник на ободе остриём к центру; порыв -- мигает жёлтым
+    const U = WB.U || 0; if (U > 0.5) { const a = Math.atan2(-WB.x, -WB.y) - yaw, gs = !!F.gWarn && (performance.now() / 250 | 0) % 2; x.save(); x.translate(c + Math.sin(a) * rr, c - Math.cos(a) * rr); x.rotate(a + Math.PI);
+      const sz = rim * (0.45 + Math.min(0.35, U / 60)); x.fillStyle = gs ? '#ffd27a' : '#6ec0ff'; x.strokeStyle = '#0b1a33'; x.lineWidth = 1.5 * dpr; x.beginPath(); x.moveTo(0, -sz); x.lineTo(sz * 0.8, sz * 0.7); x.lineTo(-sz * 0.8, sz * 0.7); x.closePath(); x.fill(); x.stroke(); x.restore(); }
+    x.strokeStyle = 'rgba(255,255,255,.5)'; x.lineWidth = 1.5 * dpr; x.beginPath(); x.arc(c, c, c - 1, 0, 7); x.stroke();
+    // подпись под радаром
+    const t = `<b>💨 ${Math.round(U)} м/с</b>${F.gWarn ? ` · <span class="g">порыв ${Math.round(F.gWarn.S)}</span>` : WB.kat > 2 ? ' · сток с ледника' : ''} · Ø ${(Rm * 2 / 1000).toFixed(0)} км`; if (pill.innerHTML !== t) pill.innerHTML = t;
+    const rb = cv.getBoundingClientRect(); pill.style.top = (rb.bottom + 4) + 'px'; const hs = $('hscore'); if (hs) { hs.style.top = (rb.bottom + 30) + 'px'; } }
   // телефон стоймя: задание, строка поиска, подсказка, тревога и стрелка -- одной колонкой под заданием, без наложения
   function stack() { const ids = ['sclock', 'sshoot', 'hland', 'hwarn', 'harr'], el = ids.map((i) => $(i)).filter(Boolean);
     if (window.innerWidth > 640) { for (const e of el) if (e.style.top) e.style.top = ''; return; }
-    const m = $('hmis'); let y = m && !m.hidden ? m.getBoundingClientRect().bottom + 6 : 104;
+    const m = $('hmis'), wp = $('hwind'); let y = Math.max(m && !m.hidden ? m.getBoundingClientRect().bottom + 6 : 104, wp && !wp.hidden ? wp.getBoundingClientRect().bottom + 6 : 0); // ниже и задания, и радара
     for (const e of el) { if (e.hidden || !e.getClientRects().length) continue; e.style.top = y + 'px'; y += e.offsetHeight + 4; } }
   function hud(dt) { if (!on) return; if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; }
-    pointMark(); if (F.sar) SAR.hud(); vec(); stack(); hudT -= dt; if (hudT > 0) return; hudT = 0.1; dbg();
+    pointMark(); if (F.sar) SAR.hud(); radar(dt); stack(); hudT -= dt; if (hudT > 0) return; hudT = 0.1; dbg();
     const kmh = Math.round(Hc.speed * 3.6), alt = Math.round(Hc.Z + 1607), agl = Math.round(Math.max(0, Hc.agl)), m = Hc.mass, tw = Hc.Tmax / (m * 9.81), pw = Math.min(1.15, Hc.power);
     const cls = pw > 1 ? 'red' : pw > 0.92 ? 'hot' : '';
     $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>км/ч</small></div><div class="r"><b>${alt}</b> м<span class="lg"> над морем</span> · ${agl} м<span class="lg"> над землёй</span> · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)} м/с</div>
       <div class="r r2">шаг<span class="bar"><i class="${cls}" style="width:${Math.round(Math.min(1, pw) * 100)}%"></i></span>${Math.round(pw * 100)}% · обороты ${Math.round(Hc.rpm * 95)}%</div>
-      <div class="r">ветер <b>${Math.round(WB.U || 0)}</b> м/с <i style="display:inline-block;font-style:normal;transform:rotate(${(wrapPi(Math.atan2(WB.x, WB.y) - Math.atan2(clook.x, -clook.z) - G.orbit)).toFixed(2)}rad)">⬆</i>${WB.kat > 2 ? ' · ледниковый сток' : ''} · корпус <b style="color:${Hc.hp > 60 ? '#9fe0a0' : Hc.hp > 30 ? '#ffd27a' : '#ff5a3a'}">${Math.round(Hc.hp)}%</b></div>
+      <div class="r">корпус <b style="color:${Hc.hp > 60 ? '#9fe0a0' : Hc.hp > 30 ? '#ffd27a' : '#ff5a3a'}">${Math.round(Hc.hp)}%</b></div>
       <div class="r r4">масса <b>${(m / 1000).toFixed(1)}</b> т · тяга/вес <b>${tw.toFixed(2)}</b>${Hc.ige > 0.03 ? ' · подушка' : ''} · топливо ${Math.round(Hc.fuel)} кг</div>`;
     $('hscore').innerHTML = `<b>${F.score}</b>${F.combo > 1 ? `<i>×${F.combo.toFixed(2).replace(/\.?0+$/, '')}</i>` : ''}<br><small>рекорд ${store.get('heliScore') || 0}</small>`;
     { const cr = $('hcr'), show = Hc.cr > 0.05 || Hc.heat > 0.02 || Hc.hot > 0; cr.hidden = !show; if (show) cr.innerHTML = `${Hc.hot > 0 ? `ПЕРЕГРЕВ · ${Math.ceil(Hc.hot)} с` : Hc.crOn ? '<b style="color:#ff8a2a">ЧР</b> · +12% тяги' : 'двигатели остывают'}<span class="bar"><i class="${Hc.heat > 0.75 ? 'red' : Hc.heat > 0.45 ? 'hot' : ''}" style="width:${Math.round(Hc.heat * 100)}%"></i></span>`; }
