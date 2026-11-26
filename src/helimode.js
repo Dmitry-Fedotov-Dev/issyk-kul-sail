@@ -40,7 +40,7 @@ body.touchdev.heli #hint{bottom:calc(206px + env(safe-area-inset-bottom,0px))}
 #hland{left:50%;top:40%;transform:translateX(-50%);background:rgba(8,22,48,.5);border-radius:10px;padding:4px 12px;font:800 clamp(18px,4vmin,28px) var(--ui);letter-spacing:.05em;text-shadow:0 2px 10px rgba(0,0,0,.7)}#hland.ok{color:#9fe0a0}#hland.go{color:#ffd27a}#hland.bad{color:#ff5a3a}
 @media (max-width:640px),(max-height:440px){#hhud{max-width:calc(100vw - 196px);padding:4px 8px}#hhud b.v{font-size:30px}#hhud small{font-size:11px}#hhud .r{font-size:12px;margin-top:1px}#hhud .r2,#hhud .r4,#hhud .lg{display:none}
 #hscore{top:58px;padding:2px 8px}#hscore b{font-size:19px}}
-@media (max-width:640px){#hmis{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}#hwarn{top:64%;font-size:17px;white-space:nowrap}#hmis{top:104px;width:calc(100vw - 24px);max-width:none;font-size:13px;padding:4px 10px}#hmis b{font-size:15px}#harr{top:178px}#harr i{font-size:44px;line-height:44px}
+@media (max-width:640px){#hland{font-size:15px;letter-spacing:.02em;padding:3px 10px;white-space:nowrap;max-width:calc(100vw - 24px);overflow:hidden;text-overflow:ellipsis}#hwarn{font-size:15px!important;transform:translateX(-50%)}#hmis{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}#hwarn{top:64%;font-size:17px;white-space:nowrap}#hmis{top:104px;width:calc(100vw - 24px);max-width:none;font-size:13px;padding:4px 10px}#hmis b{font-size:15px}#harr{top:178px}#harr i{font-size:44px;line-height:44px}
 #hcr{top:auto;bottom:calc(300px + env(safe-area-inset-bottom,0px));width:130px}#hpop{top:36%}#hland{top:46%}}
 @media (max-height:440px) and (min-width:641px){#hwarn{top:40%;font-size:18px}#hmis{top:8px;max-width:min(420px,44vw);font-size:12px;padding:3px 10px}#hmis b{font-size:14px}#harr{top:60px;font-size:12px}#harr i{font-size:34px;line-height:34px}
 #hcr{top:auto;bottom:calc(200px + env(safe-area-inset-bottom,0px))}#hcoach{bottom:calc(12px + env(safe-area-inset-bottom,0px));width:min(420px,50vw);font-size:14px;padding:8px 12px}}
@@ -362,7 +362,7 @@ export function makeHeliMode(A) {
     if (!camInit) { F.cyaw = Hc.th; camInit = true; F.cam = null; }
     const want = Hc.th + wrapA(vdir - Hc.th) * 0.6 * fl; F.cyaw += wrapA(want - F.cyaw) * Math.min(1, dt * (1.6 + 1.4 * fl)); clook.set(Math.sin(F.cyaw), 0, -Math.cos(F.cyaw));
     const tall = window.innerHeight / Math.max(1, window.innerWidth), wl = F.w && F.w.L > 1 && F.w.init ? (F.wl = Math.min(1, (F.wl || 0) + dt)) : (F.wl = Math.max(0, (F.wl || 0) - dt)); // лебёдка: камера выше, видно крюк и людей
-    F.camD += ((32 + 22 * sm2(10, 70, Vg)) * G.zoom * Math.min(1.7, Math.max(1, tall * 0.8)) - F.camD) * Math.min(1, dt * 1.2); const d = F.camD * (1 + 0.15 * wl);
+    F.camD += ((32 + 22 * sm2(10, 70, Vg)) * clampA(G.zoom, 0.8, 2.5) * Math.min(1.7, Math.max(1, tall * 0.8)) - F.camD) * Math.min(1, dt * 1.2); const d = F.camD * (1 + 0.15 * wl);
     const yaw = F.cyaw + G.orbit, el = Math.min(1.45, Math.max(-0.05, 0.19 - 0.05 * fl + G.orbitP + 0.35 * wl)), ce = Math.cos(el), se = Math.sin(el), fx = Math.sin(yaw), fy = Math.cos(yaw);
     const la = Math.min(1, 0.9 * fl), tx = Hc.X + clampA(Hc.vx * 0.8, -50, 50) * la + Math.sin(Hc.th) * 5, ty = Hc.Y + clampA(Hc.vy * 0.8, -50, 50) * la + Math.cos(Hc.th) * 5, tz = Hc.Z + 3; // смотрим вперёд по движению
     v3.set(Hc.X - fx * d * ce, tz + d * se, -(Hc.Y - fy * d * ce));
@@ -400,8 +400,13 @@ export function makeHeliMode(A) {
   // отладка лётной модели: ` (обратная кавычка) или ?helidbg
   function dbg() { const el = $('hdbg'); if (!F.dbg) { el.hidden = true; return; } el.hidden = false; const w = wind(Hc.X, Hc.Y, Hc.Z), f = (v, n = 1) => (+v || 0).toFixed(n);
     el.textContent = `V ${f(Hc.speed)} м/с  vx ${f(Hc.vx)} vy ${f(Hc.vy)} vz ${f(Hc.vz)}\nнос ${f(Hc.th * 57.3 % 360, 0)}°  движение ${f(Math.atan2(Hc.vx, Hc.vy) * 57.3, 0)}°  занос ${f(Hc.slip * 57.3, 0)}°\nтангаж ${f(Hc.pitch * 57.3)}°  крен ${f(Hc.roll * 57.3)}° (вираж ${f(Hc.bank * 57.3)})  рыск ${f(Hc.yr, 2)} рад/с\nускор ${f(Hc.ax)} / ${f(Hc.ay)} м/с²\nветер ${f(w.x)} / ${f(w.y)} / ${f(w.z)}  порыв ${f(w.gx || 0)}/${f(w.gy || 0)}  болт ${f(w.tb, 2)}\nвисение ${f(Hc.hov, 2)}  автомат ${f(Hc.assistA, 2)} м/с²  интеграл ${f(Hc.iF, 2)} / ${f(Hc.iS, 2)}\nшаг ${f(Hc.col, 2)}  запрос ${f(Hc.dem, 2)}  тяга/вес ${f(Hc.Tmax / (Hc.mass * 9.81), 2)}  σ ${f(Hc.sig, 2)}  ETL ${f(Hc.etl, 2)}`; }
+  // телефон стоймя: задание, строка поиска, подсказка, тревога и стрелка -- одной колонкой под заданием, без наложения
+  function stack() { const ids = ['sclock', 'sshoot', 'hland', 'hwarn', 'harr'], el = ids.map((i) => $(i)).filter(Boolean);
+    if (window.innerWidth > 640) { for (const e of el) if (e.style.top) e.style.top = ''; return; }
+    const m = $('hmis'); let y = m && !m.hidden ? m.getBoundingClientRect().bottom + 6 : 104;
+    for (const e of el) { if (e.hidden || !e.getClientRects().length) continue; e.style.top = y + 'px'; y += e.offsetHeight + 4; } }
   function hud(dt) { if (!on) return; if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; }
-    pointMark(); if (F.sar) SAR.hud(); vec(); hudT -= dt; if (hudT > 0) return; hudT = 0.1; dbg();
+    pointMark(); if (F.sar) SAR.hud(); vec(); stack(); hudT -= dt; if (hudT > 0) return; hudT = 0.1; dbg();
     const kmh = Math.round(Hc.speed * 3.6), alt = Math.round(Hc.Z + 1607), agl = Math.round(Math.max(0, Hc.agl)), m = Hc.mass, tw = Hc.Tmax / (m * 9.81), pw = Math.min(1.15, Hc.power);
     const cls = pw > 1 ? 'red' : pw > 0.92 ? 'hot' : '';
     $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>км/ч</small></div><div class="r"><b>${alt}</b> м<span class="lg"> над морем</span> · ${agl} м<span class="lg"> над землёй</span> · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)} м/с</div>
