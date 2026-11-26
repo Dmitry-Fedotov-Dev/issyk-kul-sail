@@ -12,7 +12,7 @@ import { playSarToon } from './sartoon.js';
 const CSS = `
 #sarw{position:fixed;inset:0;pointer-events:none;z-index:3}#sarw>*{pointer-events:auto}
 #sclock{left:50%;top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:rgba(8,22,48,.62);border-radius:12px;padding:4px 12px;font-size:14px;text-align:center;white-space:nowrap}#sclock b{font-size:17px}
-#smini{position:fixed;left:max(10px,env(safe-area-inset-left,0px));top:160px;width:170px;height:170px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.4);cursor:pointer;touch-action:none}body.sardr #smini{top:auto;bottom:calc(220px + env(safe-area-inset-bottom,0px))}
+#smini{position:fixed;left:max(10px,env(safe-area-inset-left,0px));top:160px;width:170px;height:170px;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.4);cursor:pointer;touch-action:none}body.sardr #smini{top:auto;bottom:calc(220px + env(safe-area-inset-bottom,0px))}
 #sbtns{position:fixed;right:calc(108px + env(safe-area-inset-right,0px));bottom:calc(40px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
 body:not(.touchdev) #sbtns{right:16px;bottom:70px}
 #sbtns button{min-width:62px;height:54px;border-radius:14px;border:2px solid rgba(255,255,255,.6);background:rgba(10,30,60,.6);color:#fff;font:700 14px var(--ui);padding:0 10px;touch-action:none}
@@ -22,7 +22,7 @@ body:not(.touchdev) #sbtns{right:16px;bottom:70px}
 @media (max-width:640px){#sshoot{bottom:auto;top:196px;font-size:13px}}
 #sflash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .35s}
 #sframe{position:fixed;inset:12% 10%;border:2px solid rgba(255,255,255,.55);border-radius:6px;pointer-events:none;box-shadow:0 0 0 2000px rgba(0,0,0,.12)}#sframe i{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px;border:2px solid rgba(255,255,255,.7);border-radius:50%}
-body.sardr #hhud,body.sardr #hscore,body.sardr #harr,body.sardr #hland,body.sardr #mark,body.sardr #hcr{display:none!important}
+body.sarrun #hscore,body.sardr #hhud,body.sardr #hscore,body.sardr #harr,body.sardr #hland,body.sardr #mark,body.sardr #hcr{display:none!important}
 #sgim{position:absolute;left:8px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:auto}#sgim button{width:44px;height:44px;border-radius:50%;border:2px solid rgba(255,255,255,.6);background:rgba(10,30,60,.55);color:#fff;font:700 18px var(--ui);touch-action:none}#sgim span{font:700 12px var(--ui);color:#fff;text-shadow:0 1px 4px #000;text-align:center}
 #sframe b{position:absolute;left:8px;top:6px;font:700 13px var(--ui);color:#fff;text-shadow:0 1px 4px #000}
 .spanel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(620px,94vw);max-height:92vh;overflow:auto;background:rgba(8,22,48,.94);border:2px solid #ff8a2a;border-radius:18px;padding:14px 16px;color:#fff;font-size:14px;line-height:1.35}
@@ -32,12 +32,14 @@ body.sardr #hhud,body.sardr #hscore,body.sardr #harr,body.sardr #hland,body.sard
 .spanel .go{display:block;width:100%;margin-top:12px;border:0;border-radius:14px;background:#ff8a2a;color:#1b0e00;font:800 18px var(--ui);padding:12px}
 .spanel .plan{margin:2px 0;padding-left:18px}.spanel input{font:15px var(--ui);border-radius:10px;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.1);color:#fff;padding:6px 8px;width:7.5em;text-transform:uppercase}
 .spanel .x{position:sticky;top:0;float:right;border:0;background:rgba(255,255,255,.15);color:#fff;border-radius:50%;width:34px;height:34px;font-size:18px}
-#smap{width:100%;aspect-ratio:1/1;border-radius:12px;touch-action:none;display:block;margin-top:6px;background:#203050}
+#smap{width:100%;aspect-ratio:1/1;border-radius:4px;touch-action:none;display:block;margin-top:6px;background:#efe6cc;box-shadow:0 0 0 3px #efe6cc,0 0 0 4px #1d1d1d}
 #slog div{border-top:1px solid rgba(255,255,255,.1);padding:4px 0}#slog i{font-style:normal;color:#ffb07a}
 #steams{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}#steams button{border-radius:10px;border:2px solid rgba(255,255,255,.35);background:rgba(60,140,255,.18);color:#fff;font:600 13px var(--ui);padding:4px 8px}#steams button.on{border-color:#6cf}
 #snoteb{display:flex;gap:6px;margin-top:6px}#snoteb input{flex:1;width:auto;text-transform:none}
 .sbad{color:#ff7a5a}.sok{color:#9fe0a0}
-@media (max-width:640px){#smini{top:auto;bottom:calc(210px + env(safe-area-inset-bottom,0px));width:120px;height:120px}#sframe{inset:200px 8px 250px 8px}#sbtns{right:calc(100px + env(safe-area-inset-right,0px));bottom:calc(24px + env(safe-area-inset-bottom,0px));gap:8px}#sbtns button{min-width:54px;height:46px;font-size:13px}#sclock{bottom:auto;top:150px;font-size:12px}}
+#smini.big{width:min(300px,60vmin);height:min(300px,60vmin)}
+@media (max-height:440px) and (min-width:641px){#smini{top:96px;width:104px;height:104px}#smini.big{width:200px;height:200px}#sclock{font-size:12px;padding:2px 10px}#sclock b{font-size:14px}.sdet{display:none}#sbtns{gap:6px;bottom:calc(10px + env(safe-area-inset-bottom,0px))}#sbtns button{min-width:52px;height:42px;font-size:12px}#sbtns button small{font-size:9px}#sshoot{bottom:auto;top:60px;font-size:13px}}
+@media (max-width:640px){.sdet{display:none}#smini{top:auto;bottom:calc(250px + env(safe-area-inset-bottom,0px));width:100px;height:100px}#smini.big{width:220px;height:220px}#sframe{inset:200px 8px 250px 8px}#sbtns{right:calc(100px + env(safe-area-inset-right,0px));bottom:calc(24px + env(safe-area-inset-bottom,0px));gap:8px}#sbtns button{min-width:54px;height:46px;font-size:13px}#sclock{bottom:auto;top:150px;font-size:12px;padding:3px 10px;white-space:normal;width:max-content;max-width:calc(100vw - 24px)}#sclock b{font-size:14px}#sshoot{top:196px}}
 `;
 const NIGHT = (hr) => hr < 6 || hr > 20.5;
 const CLUEICON = { wand: '🚩', note: '📝', tent: '⛺', pole: '🦯', glove: '🧤', debris: '❄', rope: '〰', pack: '🎒', axe: '⛏', track: '👣', cave: '🕳', cornice: '⚠', helmet: '⛑', rocks: '🪨', mirror: '✨', wrap: '🍫', bivy: '💤' };
@@ -52,12 +54,12 @@ export function makeSar(K) {
   // ---- сборка интерфейса ----
   function build() { if (built) return; built = true; const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     const w = document.createElement('div'); w.id = 'sarw'; w.hidden = true;
-    w.innerHTML = `<div id="sclock" class="hud"></div><canvas id="smini" title="Дело: карта"></canvas><div id="sframe" hidden><b></b><i></i><div id="sgim"><button id="sgu">▲</button><span></span><button id="sgd">▼</button></div></div><div id="sflash"></div><div id="sshoot" class="hud" hidden>📷 В КАДРЕ ЧТО-ТО ЕСТЬ — СНИМАЙ!</div>
+    w.innerHTML = `<div id="sclock" class="hud"></div><canvas id="smini" title="Касание -- крупнее/мельче; дело -- кнопка 🗺"></canvas><div id="sframe" hidden><b></b><i></i><div id="sgim"><button id="sgu">▲</button><span></span><button id="sgd">▼</button></div></div><div id="sflash"></div><div id="sshoot" class="hud" hidden>📷 В КАДРЕ ЧТО-ТО ЕСТЬ — СНИМАЙ!</div>
       <div id="sbtns"><button id="sphoto">📷<small>снимок</small></button><button id="sdrone">🛸<small>дрон</small></button><button id="sjb">🗺<small>дело</small></button><button id="sfast" hidden>⏩<small>к цели</small></button><button id="sact" hidden></button></div>
       <div id="sbrief" class="spanel" hidden></div><div id="sjour" class="spanel" hidden></div>`;
     document.body.appendChild(w);
     const tap = (id, f) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); f(); });
-    tap('sphoto', photo); tap('smini', () => journal(true)); tap('sdrone', () => (S && S.dr ? recall() : launch())); tap('sjb', () => journal(!$('sjour').hidden ? false : true)); tap('sact', act); tap('sfast', fast);
+    tap('sphoto', photo); tap('smini', () => $('smini').classList.toggle('big')); tap('sdrone', () => (S && S.dr ? recall() : launch())); tap('sjb', () => journal(!$('sjour').hidden ? false : true)); tap('sact', act); tap('sfast', fast);
     // подвес камеры дрона: тянуть пальцем/мышью по картинке вверх-вниз, колесо мыши, Q (к горизонту) / E (вниз), кнопки ▴▾
     let gp = null; const gim = (dg) => { if (!S || !S.dr) return; S.dr.gim = S.gim = Math.max(0, Math.min(90, (S.dr.gim ?? 35) + dg)); };
     window.addEventListener('pointerdown', (e) => { if (S && S.dr && e.target.tagName === 'CANVAS' && !e.target.closest('#sjour')) { gp = { id: e.pointerId, y: e.clientY }; } }, true);
@@ -106,7 +108,7 @@ export function makeSar(K) {
       <p style="margin-top:10px"><small>Присоединиться к чужой операции:</small> <input id="sjoin" maxlength="5" placeholder="КОД"> <button class="ch" id="sjoinb" style="flex:none;display:inline-block;min-width:0">Войти</button></p>`;
     for (const b of el.querySelectorAll('.ch[data-k]')) b.onclick = () => { S.res[b.dataset.k] = +b.dataset.v; brief(); };
     $('sgo').onclick = start; $('stoon').onclick = () => film(); $('sjoinb').onclick = () => { const v = $('sjoin').value.trim().toUpperCase(); if (seedOf(v) === null) { toast('Код — 5 знаков, например K7QZA'); return; } stopWorld(); begin(v); }; }
-  function start() { $('sbrief').hidden = true; S.run = true; $('smini').hidden = false; S.bats = S.res.drone ? 3 : 0; const b = K.base();
+  function start() { $('sbrief').hidden = true; S.run = true; document.body.classList.add('sarrun'); $('smini').hidden = false; S.bats = S.res.drone ? 3 : 0; const b = K.base();
     const lc = S.c.pts[Math.max(0, S.c.legIdx)]; // отряды уже заброшены в последний лагерь группы
     for (let i = 0; i < S.res.men / 4; i++) S.teams.push({ id: i + 1, n: 4, X: lc.X + 20 + i * 12, Y: lc.Y - 25, tgt: null, carry: null, risk: 0, spr: teamSprite() });
     const hk = S.c.hook && S.c.clues[S.c.hook.id]; if (hk) { S.found.add(hk.id); const tx = S.c.last.kind === 'ping' ? S.c.last.X : hk.X, ty = S.c.last.kind === 'ping' ? S.c.last.Y : hk.Y; hop(tx, ty, 700, 140, false, true); }
@@ -281,11 +283,14 @@ export function makeSar(K) {
   // ---- приборы ----
   function hud() { if (!S || !S.on) return; const el = $('sclock'); if (!S.run) { el.hidden = true; return; } el.hidden = false;
     const sc = scoreOf(tally()), tb = Math.max(0, Math.round(1800 - S.t * 2.5));
-    const hurt = S.c.victims.filter((v) => v.foundT !== undefined && !v.dead && !v.saved).map((v) => { const m = Math.max(0, v.left + (v.kit ? 360 : 0) - (v.foundT + (S.t - v.foundT) / 3)) * 3; return ` · 🩺 ${v.name}: <span class="${m < 120 ? 'sbad' : ''}">${fmtT(m)}</span>`; }).join('');
+    const hurt = S.c.victims.filter((v) => v.foundT !== undefined && !v.dead && !v.saved).map((v) => ({ v, m: Math.max(0, v.left + (v.kit ? 360 : 0) - (v.foundT + (S.t - v.foundT) / 3)) * 3 })).sort((a, b) => a.m - b.m).slice(0, 1).map(({ v, m }) => `🩺 ${v.name} продержится <span class="${m < 120 ? 'sbad' : ''}">${fmtT(m)}</span>`).join('');
     const since = (S.c.since + S.t) / 60, hope = since < 12 ? '<span class="sok">высокий</span>' : since < 30 ? 'средний' : '<span class="sbad">низкий</span>', hr = clockNow();
-    const t = `<b>Т+ ${fmtT(S.t)}</b> · ${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.floor(hr % 1 * 60)).padStart(2, '0')}${NIGHT(hr) ? ' 🌙' : ''} · шанс найти живыми: ${hope}<br><b style="color:#ffd24a">${sc.total}</b> очков · за время ещё +${tb}${hurt}<br>улик ${S.found.size} · найдено ${S.c.victims.filter((v) => v.foundT !== undefined).length}/${S.c.victims.length}${S.saved ? ` · спасено ${S.saved}` : ''}${S.rescuerLost ? ` · <span class="sbad">потери ${S.rescuerLost}</span>` : ''}`;
+    const nf = S.c.victims.filter((v) => v.foundT !== undefined).length, hhmm = `${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.floor(hr % 1 * 60)).padStart(2, '0')}${NIGHT(hr) ? ' 🌙' : ''}`;
+    // коротко: время, очки, находки; вторая строка -- только когда кто-то ждёт помощи (самый срочный). Подробности -- в деле (🗺)
+    const t = `<b>Т+ ${fmtT(S.t)}</b> · ${hhmm} · <b style="color:#ffd24a">${sc.total}</b> оч · 🔎${S.found.size} · 👤${nf}/${S.c.victims.length}${S.rescuerLost ? ` · <span class="sbad">−${S.rescuerLost}</span>` : ''}${hurt ? `<br>${hurt}` : `<span class="sdet"><br>шанс найти живыми: ${hope} · за время ещё +${tb}</span>`}`;
     if (el.innerHTML !== t) el.innerHTML = t;
     if (S.dr) { const d = S.dr, L = Math.hypot(d.X - d.L.X, d.Y - d.L.Y), tx = `ДРОН · батарея ${Math.max(0, Math.round(d.bat * 100))}% · ${Math.round(d.Z - H(d.X, d.Y))} м над землёй · ${(L / 1000).toFixed(1)} км${NIGHT(hr) ? ' · ТЕПЛОВИЗОР' : ''}`; const b = $('sframe').firstChild; if (b.textContent !== tx) b.textContent = tx;  const gs = $('sgim').querySelector('span'), gt = `камера\n${Math.round(d.gim ?? 35)}°`; if (gs.textContent !== gt) { gs.textContent = gt; gs.style.whiteSpace = 'pre'; } }
+    if (window.innerWidth <= 640) { const m = $('hmis'), y0 = m && !m.hidden ? m.getBoundingClientRect().bottom + 6 : 104, sh = $('sshoot'); el.style.top = y0 + 'px'; sh.style.top = (y0 + el.offsetHeight + 6) + 'px'; const ar = $('harr'); if (ar) ar.style.top = (y0 + el.offsetHeight + (S.shoot ? 44 : 4)) + 'px'; } else { el.style.top = ''; $('sshoot').style.top = ''; if ($('harr')) $('harr').style.top = ''; } // телефон стоймя: друг под другом, без наложения
     $('sphoto').classList.toggle('pulse', !!S.shoot); { const sh = $('sshoot'); sh.hidden = !S.shoot; }
     const dl = $('sdrone'); dl.hidden = !S.res.drone; dl.classList.toggle('on', !!S.dr); dl.innerHTML = S.dr ? '🛸<small>домой</small>' : `🛸<small>дрон · ${S.bats}</small>`;
     { const q = fastTarget(), h = K.heli(), fb = $('sfast'), far = q && !S.dr && Math.hypot(q.X - h.X, q.Y - h.Y) > 1500; fb.hidden = !far; if (far) { const t = `⏩<small>к цели · ${Math.round(Math.hypot(q.X - h.X, q.Y - h.Y) / 3300 + 2)} мин</small>`; if (fb.innerHTML !== t) fb.innerHTML = t; } }
@@ -294,37 +299,67 @@ export function makeSar(K) {
   // ---- дело: карта (рельеф района), маршрут по дням, улики, люди, отряды, заметки, лог ----
   function bbox() { const c = S.c; let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (const p of c.pts) { x0 = Math.min(x0, p.X); x1 = Math.max(x1, p.X); y0 = Math.min(y0, p.Y); y1 = Math.max(y1, p.Y); }
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, R = Math.max(x1 - x0, y1 - y0) / 2 + 4500; return { x0: cx - R, x1: cx + R, y0: cy - R, y1: cy + R }; }
-  function relief(B, N) { const cv = document.createElement('canvas'); cv.width = cv.height = N; const x = cv.getContext('2d'), img = x.createImageData(N, N), k = (B.x1 - B.x0) / N;
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const X = B.x0 + i * k, Y = B.y1 - j * k, z = H(X, Y) + ASL, sx = H(X + k, Y) - H(X - k, Y), sy = H(X, Y + k) - H(X, Y - k), sh = Math.max(0, Math.min(1, 0.62 + (-sx + sy) / (4 * k) * 0.9)), o = (j * N + i) * 4;
-      const snow = z > 4300 ? 1 : z > 3700 ? (z - 3700) / 600 : 0, r = (120 + 120 * snow) * sh, g = (112 + 128 * snow) * sh, b = (104 + 146 * snow) * sh; img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255; }
-    x.putImageData(img, 0, 0); return cv; }
+  // рельеф в духе советской топокарты: бумага, отмывка с северо-запада, горизонтали через 100 м (каждая пятая -- утолщённая с отметкой),
+  // ледники и фирн -- белые с синими горизонталями, скалы -- серо-коричневые, ниже 3000 м -- зелень
+  function relief(B, N) { const cv = document.createElement('canvas'); cv.width = cv.height = N; const x = cv.getContext('2d'), img = x.createImageData(N, N), k = (B.x1 - B.x0) / N, M = N + 1, Z = new Float32Array(M * M);
+    for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) Z[j * M + i] = H(B.x0 + i * k, B.y1 - j * k) + ASL;
+    const CI = 100, lab = [];
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const z = Z[j * M + i], zr = Z[j * M + i + 1], zd = Z[(j + 1) * M + i], sx = (zr - z) / k, sy = (z - zd) / k, sl = Math.hypot(sx, sy), o = (j * N + i) * 4;
+      const ice = z > 4000 && sl < 0.75 || z > 4600 && sl < 1.0, rock = !ice && z > 3300 && sl > 0.55;
+      let r = 244, g = 238, bl = 220; // бумага
+      if (ice) { r = 246; g = 250; bl = 252; } else if (rock) { r = 226; g = 214; bl = 196; } else if (z < 3000) { r = 222; g = 236; bl = 200; }
+      const sh = Math.max(0.72, Math.min(1.06, 0.94 + (-sx - sy) * 0.12)); r *= sh; g *= sh; bl *= sh;
+      const c0 = Math.floor(z / CI), c1 = Math.floor(zr / CI), c2 = Math.floor(zd / CI);
+      if (c0 !== c1 || c0 !== c2) { const top = Math.max(c0, c1, c2), idx = top % 5 === 0, a = idx ? 0.95 : 0.6; const [cr, cg, cb] = ice ? [40, 110, 190] : [150, 85, 40];
+        r = r * (1 - a) + cr * a; g = g * (1 - a) + cg * a; bl = bl * (1 - a) + cb * a; if (idx && (i * 7 + j * 13) % 9973 === 0) lab.push([i, j, top * CI]); }
+      if (rock && (i + j) % 6 === 0 && sl > 0.9) { r *= 0.8; g *= 0.78; bl *= 0.76; } // штриховка скал
+      img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = bl; img.data[o + 3] = 255; }
+    x.putImageData(img, 0, 0);
+    // утолщаем индексные горизонтали вторым проходом -- по отметке 500 м
+    x.fillStyle = 'rgba(150,85,40,.55)'; for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const z = Z[j * M + i], zr = Z[j * M + i + 1], zd = Z[(j + 1) * M + i]; if (Math.floor(z / 500) !== Math.floor(zr / 500) || Math.floor(z / 500) !== Math.floor(zd / 500)) x.fillRect(i - 0.5, j - 0.5, 1.6, 1.6); }
+    // отметки высот на вершинах -- как на топокарте: точка и число
+    x.font = 'italic 700 11px Georgia,serif'; x.textAlign = 'left'; let marks = 0; const S2 = 48;
+    for (let j = S2 / 2; j < N && marks < 14; j += S2) for (let i = S2 / 2; i < N; i += S2) { let bi = i, bj = j; for (let q = 0; q < 6; q++) { let best = Z[bj * M + bi], ni = bi, nj = bj; for (let dj = -4; dj <= 4; dj += 2) for (let di = -4; di <= 4; di += 2) { const ii = bi + di, jj = bj + dj; if (ii < 0 || jj < 0 || ii >= N || jj >= N) continue; const v = Z[jj * M + ii]; if (v > best) { best = v; ni = ii; nj = jj; } } if (ni === bi && nj === bj) break; bi = ni; bj = nj; }
+      const z = Z[bj * M + bi]; let peak = z > 4800; for (let dj = -14; dj <= 14 && peak; dj += 7) for (let di = -14; di <= 14; di += 7) { const ii = bi + di, jj = bj + dj; if (ii >= 0 && jj >= 0 && ii < N && jj < N && Z[jj * M + ii] > z) { peak = false; break; } }
+      if (peak && !lab.some((l) => l.pk && Math.hypot(l[0] - bi, l[1] - bj) < 40)) { const t = String(Math.round(z)); lab.push(Object.assign([bi, bj, 0], { pk: 1 })); x.fillStyle = '#1a1a1a'; x.beginPath(); x.arc(bi, bj, 1.8, 0, 7); x.fill(); x.strokeStyle = 'rgba(246,240,224,.85)'; x.lineWidth = 3; x.strokeText(t, bi + 4, bj - 3); x.fillText(t, bi + 4, bj - 3); marks++; } }
+    x.font = 'italic 9px Georgia,serif'; x.fillStyle = 'rgb(140,80,38)'; for (const [i, j, z] of lab) if (z) { x.save(); x.translate(i, j); x.fillStyle = 'rgba(244,238,220,.9)'; x.fillRect(-11, -6, 22, 10); x.fillStyle = 'rgb(140,80,38)'; x.textAlign = 'center'; x.fillText(String(z), 0, 2); x.restore(); }
+    return cv; }
   // вид карты: центр и половина ширины (м); по умолчанию -- весь маршрут. Рельеф рисуется один раз и растягивается по виду
   const homeView = () => { const B = bbox(); return { cx: (B.x0 + B.x1) / 2, cy: (B.y0 + B.y1) / 2, R: (B.x1 - B.x0) / 2 }; };
+  // километровая сетка, как на топокарте: тонкие линии каждые 1-2 км, подписи у рамки (только в деле)
+  function grid(x, B, P, N, u, mini) { const span = B.x1 - B.x0, st = span > 14000 ? 2000 : span > 5000 ? 1000 : 500; x.strokeStyle = 'rgba(30,40,60,.28)'; x.lineWidth = Math.max(1, 0.8 * u); x.beginPath();
+    for (let X = Math.ceil(B.x0 / st) * st; X < B.x1; X += st) { const [a] = P(X, 0); x.moveTo(a, 0); x.lineTo(a, N); }
+    for (let Y = Math.ceil(B.y0 / st) * st; Y < B.y1; Y += st) { const [, b] = P(0, Y); x.moveTo(0, b); x.lineTo(N, b); } x.stroke();
+    if (mini) return; x.font = `italic ${9 * u}px Georgia,serif`; x.fillStyle = 'rgba(30,40,60,.75)'; x.textAlign = 'left';
+    for (let X = Math.ceil(B.x0 / st) * st; X < B.x1; X += st) { const [a] = P(X, 0); x.fillText(String(((Math.round(X / 1000) + 50) % 100 + 100) % 100).padStart(2, '0'), a + 2 * u, 10 * u); }
+    for (let Y = Math.ceil(B.y0 / st) * st; Y < B.y1; Y += st) { const [, b] = P(0, Y); x.fillText(String(((Math.round(Y / 1000) + 50) % 100 + 100) % 100).padStart(2, '0'), 2 * u, b - 2 * u); }
+    x.strokeStyle = '#1d1d1d'; x.lineWidth = 2 * u; x.strokeRect(u, u, N - 2 * u, N - 2 * u); }
   function drawMap(cv = $('smap'), view = S.view, mini = false) { if (!cv || !S) return; const Wc = cv.clientWidth || (mini ? 150 : 360), dpr = Math.min(2, window.devicePixelRatio || 1); if (cv.width !== Math.round(Wc * dpr)) { cv.width = cv.height = Math.round(Wc * dpr); }
     const HB = bbox(); if (!mapImg) mapImg = relief(HB, 512); view = view || (S.view = homeView());
     const B = { x0: view.cx - view.R, x1: view.cx + view.R, y0: view.cy - view.R, y1: view.cy + view.R }, x = cv.getContext('2d'), N = cv.width, P = (X, Y) => [(X - B.x0) / (B.x1 - B.x0) * N, (B.y1 - Y) / (B.y1 - B.y0) * N], u = N / (mini ? 190 : 360), m2p = N / (B.x1 - B.x0);
-    x.fillStyle = '#3a4258'; x.fillRect(0, 0, N, N); { const [a, b] = P(HB.x0, HB.y1), [c2, d2] = P(HB.x1, HB.y0); x.drawImage(mapImg, a, b, c2 - a, d2 - b); } const c = S.c;
+    x.fillStyle = '#efe6cc'; x.fillRect(0, 0, N, N); { const [a, b] = P(HB.x0, HB.y1), [c2, d2] = P(HB.x1, HB.y0); x.drawImage(mapImg, a, b, c2 - a, d2 - b); } const c = S.c;
+    grid(x, B, P, N, u, mini);
     // маршрут по плану: дни
-    x.lineWidth = 3 * u; x.strokeStyle = 'rgba(255,138,42,.9)'; x.setLineDash([8 * u, 6 * u]); x.beginPath(); c.pts.forEach((p, i) => { const [a, b] = P(p.X, p.Y); i ? x.lineTo(a, b) : x.moveTo(a, b); }); x.stroke(); x.setLineDash([]);
-    x.font = `700 ${11 * u}px sans-serif`; x.textAlign = 'left'; c.pts.forEach((p, i) => { const [a, b] = P(p.X, p.Y); x.fillStyle = '#ff8a2a'; x.beginPath(); x.arc(a, b, 4 * u, 0, 7); x.fill(); if (mini) return; x.fillStyle = '#fff'; x.strokeStyle = 'rgba(0,0,0,.6)'; x.lineWidth = 3 * u; const t = i ? `Д${i} · ${p.n}` : p.n; x.strokeText(t, a + 6 * u, b - 4 * u); x.fillText(t, a + 6 * u, b - 4 * u); });
-    if (c.last.kind === 'ping') { const [a, b] = P(c.last.X, c.last.Y); x.strokeStyle = '#4ab0ff'; x.lineWidth = 2 * u; x.beginPath(); x.arc(a, b, Math.max(4 * u, 200 * m2p), 0, 7); x.stroke(); if (!mini) { x.fillStyle = '#4ab0ff'; x.fillText('SOS трекера', a + 6 * u, b + 14 * u); } }
-    if (c.last.kind === 'radio' && !mini) { const [a, b] = P(c.last.X, c.last.Y); x.strokeStyle = '#4ab0ff'; x.lineWidth = 2 * u; x.beginPath(); x.arc(a, b, 9 * u, 0, 7); x.stroke(); x.fillStyle = '#4ab0ff'; x.fillText('последняя связь', a + 8 * u, b + 14 * u); }
-    if (S.area) { const [a, b] = P(S.area.X, S.area.Y), r = Math.max(5 * u, S.area.R * m2p); x.fillStyle = 'rgba(255,210,74,.18)'; x.strokeStyle = '#ffd24a'; x.lineWidth = 2.5 * u; x.setLineDash([6 * u, 5 * u]); x.beginPath(); x.arc(a, b, r, 0, 7); x.fill(); x.stroke(); x.setLineDash([]); if (!mini) { x.fillStyle = '#ffd24a'; x.font = `700 ${11 * u}px sans-serif`; x.textAlign = 'center'; x.fillText('искать здесь', a, b - r - 4 * u); } }
+    x.lineWidth = 3 * u; x.strokeStyle = 'rgba(200,30,40,.85)'; x.setLineDash([8 * u, 6 * u]); x.beginPath(); c.pts.forEach((p, i) => { const [a, b] = P(p.X, p.Y); i ? x.lineTo(a, b) : x.moveTo(a, b); }); x.stroke(); x.setLineDash([]);
+    x.font = `italic 700 ${12 * u}px Georgia,serif`; x.textAlign = 'left'; c.pts.forEach((p, i) => { const [a, b] = P(p.X, p.Y); x.fillStyle = '#c81e28'; x.strokeStyle = '#fff8e6'; x.lineWidth = 1.5 * u; x.beginPath(); x.arc(a, b, 4 * u, 0, 7); x.fill(); x.stroke(); if (mini) return; x.fillStyle = '#7a0f16'; x.strokeStyle = 'rgba(246,240,224,.92)'; x.lineWidth = 3 * u; const t = i ? `Д${i} · ${p.n}` : p.n; x.strokeText(t, a + 6 * u, b - 4 * u); x.fillText(t, a + 6 * u, b - 4 * u); });
+    if (c.last.kind === 'ping') { const [a, b] = P(c.last.X, c.last.Y); x.strokeStyle = '#1f5fbf'; x.lineWidth = 2 * u; x.beginPath(); x.arc(a, b, Math.max(4 * u, 200 * m2p), 0, 7); x.stroke(); if (!mini) { x.fillStyle = '#1f5fbf'; x.fillText('SOS трекера', a + 6 * u, b + 14 * u); } }
+    if (c.last.kind === 'radio' && !mini) { const [a, b] = P(c.last.X, c.last.Y); x.strokeStyle = '#1f5fbf'; x.lineWidth = 2 * u; x.beginPath(); x.arc(a, b, 9 * u, 0, 7); x.stroke(); x.fillStyle = '#1f5fbf'; x.fillText('последняя связь', a + 8 * u, b + 14 * u); }
+    if (S.area) { const [a, b] = P(S.area.X, S.area.Y), r = Math.max(5 * u, S.area.R * m2p); x.fillStyle = 'rgba(200,30,40,.08)'; x.strokeStyle = '#c81e28'; x.lineWidth = 2.5 * u; x.setLineDash([6 * u, 5 * u]); x.beginPath(); x.arc(a, b, r, 0, 7); x.fill(); x.stroke(); x.setLineDash([]); if (!mini) { x.fillStyle = '#9a0f18'; x.font = `italic 700 ${11 * u}px Georgia,serif`; x.textAlign = 'center'; x.fillText('искать здесь', a, b - r - 4 * u); } }
     else if (S.goalTxt && K.goal()) { const g = K.goal(), [a, b] = P(g.X, g.Y); x.fillStyle = '#ff8a2a'; x.beginPath(); x.arc(a, b, 6 * u, 0, 7); x.fill(); x.strokeStyle = '#fff'; x.lineWidth = 2 * u; x.stroke(); }
     x.font = `${14 * u}px serif`; x.textAlign = 'center'; for (const q of c.clues) if (S.found.has(q.id)) { const [a, b] = P(q.X, q.Y); x.globalAlpha = q.fake ? 0.45 : 1; x.fillText(CLUEICON[q.k] || '•', a, b + 5 * u); x.globalAlpha = 1; }
-    for (const v of c.victims) if (v.foundT !== undefined) { const [a, b] = P(v.X, v.Y); x.fillStyle = v.saved ? '#9fe0a0' : v.dead ? '#8a96a8' : '#3cff6a'; x.beginPath(); x.arc(a, b, 6 * u, 0, 7); x.fill(); if (!mini) { x.fillStyle = '#fff'; x.font = `700 ${11 * u}px sans-serif`; x.fillText(v.name + (v.dead ? ' ✖' : v.saved ? ' ✓' : ''), a, b - 9 * u); x.font = `${14 * u}px serif`; } }
+    for (const v of c.victims) if (v.foundT !== undefined) { const [a, b] = P(v.X, v.Y); x.fillStyle = v.saved ? '#2e9a3c' : v.dead ? '#6a6a6a' : '#16c43a'; x.strokeStyle = '#1d1d1d'; x.lineWidth = 1.5 * u; x.beginPath(); x.arc(a, b, 6 * u, 0, 7); x.fill(); x.stroke(); if (!mini) { x.fillStyle = '#1d1d1d'; x.font = `italic 700 ${11 * u}px Georgia,serif`; x.fillText(v.name + (v.dead ? ' ✖' : v.saved ? ' ✓' : ''), a, b - 9 * u); x.font = `${14 * u}px serif`; } }
     for (const n of S.notes) { const [a, b] = P(n.X, n.Y); x.fillStyle = '#ffe14a'; x.strokeStyle = '#3a2a00'; x.lineWidth = 1.5 * u; x.beginPath(); x.moveTo(a, b); x.lineTo(a - 6 * u, b - 14 * u); x.lineTo(a + 6 * u, b - 14 * u); x.closePath(); x.fill(); x.stroke();
-      if (!mini) { x.font = `700 ${11 * u}px sans-serif`; const t = (n.n && n.n !== 'вы' ? n.n + ': ' : '') + n.txt.slice(0, 28); x.lineWidth = 3 * u; x.strokeStyle = 'rgba(0,0,0,.7)'; x.strokeText(t, a, b - 18 * u); x.fillText(t, a, b - 18 * u); } }
-    for (const t of S.teams) if (t.n > 0 && !t.onboard) { const [a, b] = P(t.X, t.Y); if (t.tgt) { const [e, f] = P(t.tgt[0], t.tgt[1]); x.strokeStyle = 'rgba(100,200,255,.9)'; x.lineWidth = 2 * u; x.setLineDash([4 * u, 4 * u]); x.beginPath(); x.moveTo(a, b); x.lineTo(e, f); x.stroke(); x.setLineDash([]); }
-      x.fillStyle = S.selTeam === t.id ? '#fff' : '#6cf'; x.fillRect(a - 5 * u, b - 5 * u, 10 * u, 10 * u); if (!mini) { x.fillStyle = '#fff'; x.font = `700 ${10 * u}px sans-serif`; x.fillText(`О${t.id}·${t.n}`, a, b + 16 * u); } }
+      if (!mini) { x.font = `italic 700 ${11 * u}px Georgia,serif`; const t = (n.n && n.n !== 'вы' ? n.n + ': ' : '') + n.txt.slice(0, 28); x.lineWidth = 3 * u; x.strokeStyle = 'rgba(246,240,224,.92)'; x.strokeText(t, a, b - 18 * u); x.fillText(t, a, b - 18 * u); } }
+    for (const t of S.teams) if (t.n > 0 && !t.onboard) { const [a, b] = P(t.X, t.Y); if (t.tgt) { const [e, f] = P(t.tgt[0], t.tgt[1]); x.strokeStyle = 'rgba(31,95,191,.9)'; x.lineWidth = 2 * u; x.setLineDash([4 * u, 4 * u]); x.beginPath(); x.moveTo(a, b); x.lineTo(e, f); x.stroke(); x.setLineDash([]); }
+      x.fillStyle = S.selTeam === t.id ? '#fff' : '#1f5fbf'; x.fillRect(a - 5 * u, b - 5 * u, 10 * u, 10 * u); if (!mini) { x.fillStyle = '#1d1d1d'; x.font = `italic 700 ${10 * u}px Georgia,serif`; x.fillText(`О${t.id}·${t.n}`, a, b + 16 * u); } }
     for (const [n, p] of S.peers) if (performance.now() - p.t < 8000) { const [a, b] = P(p.X, p.Y); x.fillStyle = '#c78bff'; x.beginPath(); x.arc(a, b, 5 * u, 0, 7); x.fill(); if (!mini) x.fillText(n, a, b - 8 * u); }
     if (S.dr) { const [e, f] = P(S.dr.X, S.dr.Y), [g0, g1] = P(S.dr.L.X, S.dr.L.Y); x.strokeStyle = 'rgba(80,220,255,.5)'; x.lineWidth = 1.5 * u; x.beginPath(); x.arc(g0, g1, 6000 * m2p, 0, 7); x.stroke(); x.fillStyle = '#5df'; x.beginPath(); x.arc(e, f, 5 * u, 0, 7); x.fill(); if (!mini) { x.fillStyle = '#5df'; x.fillText('дрон', e, f - 9 * u); } }
     // вы: вертолёт -- оранжевая стрелка по курсу с пульсом; вне карты -- стрелка у края
     const h = K.heli(); let [a, b] = P(h.X, h.Y); const out = a < 0 || b < 0 || a > N || b > N; if (out) { a = Math.max(10 * u, Math.min(N - 10 * u, a)); b = Math.max(10 * u, Math.min(N - 10 * u, b)); }
     const pr = (performance.now() / 1000 % 1.2) / 1.2; x.strokeStyle = `rgba(255,106,26,${1 - pr})`; x.lineWidth = 3 * u; x.beginPath(); x.arc(a, b, (8 + pr * 18) * u, 0, 7); x.stroke();
     x.save(); x.translate(a, b); x.rotate(h.th); x.fillStyle = '#ff6a1a'; x.strokeStyle = '#fff'; x.lineWidth = 2 * u; x.beginPath(); x.moveTo(0, -11 * u); x.lineTo(7 * u, 8 * u); x.lineTo(0, 4 * u); x.lineTo(-7 * u, 8 * u); x.closePath(); x.fill(); x.stroke(); x.restore();
-    x.font = `900 ${11 * u}px sans-serif`; x.textAlign = 'center'; x.lineWidth = 3 * u; x.strokeStyle = 'rgba(0,0,0,.8)'; x.fillStyle = '#ffb07a'; const lab = out ? 'ВЫ ↗' : 'ВЫ'; x.strokeText(lab, a, b + 22 * u); x.fillText(lab, a, b + 22 * u);
-    if (mini) { x.strokeStyle = 'rgba(255,255,255,.6)'; x.lineWidth = 2; x.strokeRect(1, 1, N - 2, N - 2); x.fillStyle = '#fff'; x.font = `700 ${10 * u}px sans-serif`; x.textAlign = 'left'; x.fillText('С ↑', 5 * u, 13 * u); x.textAlign = 'right'; x.fillText(`${(view.R * 2 / 1000).toFixed(0)} км`, N - 5 * u, N - 6 * u); } }
+    x.font = `italic 900 ${11 * u}px Georgia,serif`; x.textAlign = 'center'; x.lineWidth = 3 * u; x.strokeStyle = 'rgba(246,240,224,.95)'; x.fillStyle = '#c84a00'; const lab = out ? 'ВЫ ↗' : 'ВЫ'; x.strokeText(lab, a, b + 22 * u); x.fillText(lab, a, b + 22 * u);
+    if (mini) { x.strokeStyle = 'rgba(255,255,255,.6)'; x.lineWidth = 2; x.strokeRect(1, 1, N - 2, N - 2); x.fillStyle = '#1d1d1d'; x.font = `italic 700 ${10 * u}px Georgia,serif`; x.textAlign = 'left'; x.fillText('С ↑', 5 * u, 13 * u); x.textAlign = 'right'; x.fillText(`${(view.R * 2 / 1000).toFixed(0)} км`, N - 5 * u, N - 6 * u); } }
   function course() { const c = S.c, tr = traces(), got = tr.filter((q) => S.found.has(q.id)).length, keyF = c.clues.some((q) => q.key && S.found.has(q.id)), fv = c.victims.filter((v) => v.foundT !== undefined).length, n = c.victims.length;
     const li = (ok, t) => `<div>${ok ? '✅' : '⬜'} ${t}</div>`, g = S.goalTxt;
     return `<h3>Курс дела</h3>${g ? `<p style="background:rgba(255,138,42,.18);border-radius:10px;padding:6px 10px"><b>Сейчас: ${g.t}</b><br>${g.d}</p>` : ''}
@@ -374,7 +409,7 @@ export function makeSar(K) {
   function tally() { const c = S.c; return { saved: S.saved, alive: c.victims.filter((v) => v.alive0).length, aliveFound: c.victims.filter((v) => v.foundT !== undefined && !v.dead && !v.saved).length, dead: c.victims.filter((v) => v.foundT !== undefined && v.dead).length,
     clues: [...S.found].filter((i) => !c.clues[i].fake).length, minutes: S.t, rescuerLost: S.rescuerLost, droneLost: S.droneLost, heliCrash: !!K.heli().crash, comm: c.comm,
     extra: [[`горячий след`, S.hot || 0], ['ночные полёты', -(S.nightPen || 0)]] }; }
-  function end() { if (!S || S.ended) return; S.ended = true; S.run = false; journal(false); if (S.dr) { S.dr = null; drone.g.visible = false; } $('sframe').hidden = true; document.body.classList.remove('sardr'); $('sbtns').hidden = true; $('sclock').hidden = true; $('smini').hidden = true; const c = S.c;
+  function end() { if (!S || S.ended) return; S.ended = true; S.run = false; journal(false); if (S.dr) { S.dr = null; drone.g.visible = false; } $('sframe').hidden = true; document.body.classList.remove('sardr', 'sarrun'); $('sbtns').hidden = true; $('sclock').hidden = true; $('smini').hidden = true; const c = S.c;
     const o = tally();
     const sc = scoreOf(o), rec = sc.total > (store.get('sarBest') || 0); if (rec) store.set('sarBest', sc.total); store.set('sarDone', 1); const rc = store.get('sarRecent') || []; rc.push(c.scen); store.set('sarRecent', rc.slice(-6));
     const truth = c.victims.map((v) => `${v.name}: ${v.saved ? gw(v, 'спасён', 'спасена') : v.foundT !== undefined ? (v.dead ? gw(v, 'найден погибшим', 'найдена погибшей') : gw(v, 'найден живым, но не эвакуирован', 'найдена живой, но не эвакуирована')) : v.alive0 && !v.dead ? gw(v, 'не найден — а был ещё жив…', 'не найдена — а была ещё жива…') : gw(v, 'не найден', 'не найдена')}`).join(' · ');
@@ -382,6 +417,6 @@ export function makeSar(K) {
     $('rs').innerHTML = `<b>Что случилось:</b> ${c.cause}. <small>${c.real}</small><br>${truth}`;
     $('rt').innerHTML = sc.parts.map(([t, v]) => `<tr><td>${t}</td><td style="text-align:right">${v > 0 ? '+' : ''}${v}</td></tr>`).join('') + (sc.k > 1 ? `<tr><td>сложность: ${c.comm.name}</td><td style="text-align:right">×${sc.k}</td></tr>` : '');
     $('ragain').textContent = 'Новое дело'; setTimeout(() => { if (S && S.on) $('result').hidden = false; }, 600); }
-  function stop() { if (!S) return; S.on = false; stopWorld(); if (drone) drone.g.visible = false; if (ping) ping.visible = false; $('sarw').hidden = true; const cv = document.querySelector('canvas'); if (cv) cv.style.filter = ''; NETHOOK.sar = null; document.body.classList.remove('sardr'); const n = net(); if (n && n.sarLeave) n.sarLeave(); S = null; }
+  function stop() { if (!S) return; S.on = false; stopWorld(); if (drone) drone.g.visible = false; if (ping) ping.visible = false; $('sarw').hidden = true; if ($('harr')) $('harr').style.top = ''; const cv = document.querySelector('canvas'); if (cv) cv.style.filter = ''; NETHOOK.sar = null; document.body.classList.remove('sardr', 'sarrun'); const n = net(); if (n && n.sarLeave) n.sarLeave(); S = null; }
   return { begin, tick, cam, hud, stop, missionDone, end, get on() { return !!(S && S.on); }, get S() { return S; }, get drone() { return !!(S && S.dr); }, get running() { return !!(S && S.run); } };
 }

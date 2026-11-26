@@ -186,11 +186,12 @@ export function makeJetMode(A) {
     M.fp(G.cam === 1);
     if (G.cam === 1) { camera.position.copy(pos).addScaledVector(f, 2.3).addScaledVector(u, 1.12); camera.up.copy(u); m4.makeBasis(r, u, f.clone().negate()); camera.quaternion.setFromRotationMatrix(m4); if (J.mode === 'air') camera.rotateX((J.aoa || 0) + (Math.random() - 0.5) * (J.buf || 0) * 0.01); camera.rotateY(-G.orbit); camera.rotateX(-0.06 - G.orbitP * 0.8);
       camera.fov += (clamp(70 * G.zoom, 35, 95) + J.V * 0.03 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); return; }
-    const far = G.cam === 2, d = (far ? 70 : (22 + J.V * 0.04) * (1 + 0.5 * (F ? F.bk : 0))) * G.zoom, upB = far ? 0.15 : 0.5; 
+    const far = G.cam === 2, tallK = Math.min(1.6, Math.max(1, window.innerHeight / Math.max(1, window.innerWidth) * 0.8)), d = (far ? 70 : (26 + J.V * 0.04) * (1 + 0.5 * (F ? F.bk : 0))) * G.zoom * tallK, upB = far ? 0.08 : 0.15; 
     const UP = new THREE.Vector3(0, 1, 0), cu = UP.clone().lerp(u, upB).normalize(); // «верх» камеры -- между небом и кабиной: крен чувствуется, а горизонт не кувыркается
     // позиция -- жёстко от самолёта (на 250 м/с любое запаздывание уносит его из кадра), сглаживается только направление
-    if (!camInit) { clook.copy(f); cup.copy(cu); camInit = true; } else { clook.lerp(f, Math.min(1, dt * 5)).normalize(); cup.lerp(cu, Math.min(1, dt * 4)).normalize(); }
-    const back = clook.clone().applyAxisAngle(cup, G.orbit).negate();
+    const fl = f.clone(); fl.y *= 0.55; fl.normalize(); // тангаж камера повторяет наполовину -- горизонт не скачет, а набор/снижение видно
+    if (!camInit) { clook.copy(fl); cup.copy(cu); camInit = true; } else { clook.lerp(fl, Math.min(1, dt * 3.5)).normalize(); cup.lerp(cu, Math.min(1, dt * 2.5)).normalize(); }
+    const back = clook.clone().applyAxisAngle(UP, G.orbit).negate();
     F.lean = (F.lean || 0) + ((J.mode === 'air' ? clamp((J.n - 1) / 7, -0.4, 1) : 0) - (F.lean || 0)) * Math.min(1, dt * 3); // перегрузка: самолёт «уходит» вверх по кадру
     v3.copy(pos).addScaledVector(back, d).addScaledVector(cup, d * ((far ? 0.35 : 0.24) - 0.12 * F.lean) + G.orbitP * d);
     const gy = Math.max(0, H(v3.x, -v3.z)) + 3; if (v3.y < gy) v3.y = gy;

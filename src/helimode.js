@@ -35,9 +35,9 @@ body.touchdev.heli #hint{bottom:calc(206px + env(safe-area-inset-bottom,0px))}
 #hland{left:50%;top:40%;transform:translateX(-50%);background:rgba(8,22,48,.5);border-radius:10px;padding:4px 12px;font:800 clamp(18px,4vmin,28px) var(--ui);letter-spacing:.05em;text-shadow:0 2px 10px rgba(0,0,0,.7)}#hland.ok{color:#9fe0a0}#hland.go{color:#ffd27a}#hland.bad{color:#ff5a3a}
 @media (max-width:640px),(max-height:440px){#hhud{max-width:calc(100vw - 196px);padding:4px 8px}#hhud b.v{font-size:30px}#hhud small{font-size:11px}#hhud .r{font-size:12px;margin-top:1px}#hhud .r2,#hhud .r4,#hhud .lg{display:none}
 #hscore{top:58px;padding:2px 8px}#hscore b{font-size:19px}}
-@media (max-width:640px){#hmis{top:104px;width:calc(100vw - 24px);max-width:none;font-size:13px;padding:4px 10px}#hmis b{font-size:15px}#harr{top:178px}#harr i{font-size:44px;line-height:44px}
+@media (max-width:640px){#hmis{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}#hwarn{top:64%;font-size:17px;white-space:nowrap}#hmis{top:104px;width:calc(100vw - 24px);max-width:none;font-size:13px;padding:4px 10px}#hmis b{font-size:15px}#harr{top:178px}#harr i{font-size:44px;line-height:44px}
 #hcr{top:auto;bottom:calc(300px + env(safe-area-inset-bottom,0px));width:130px}#hpop{top:36%}#hland{top:46%}}
-@media (max-height:440px) and (min-width:641px){#hmis{top:8px;max-width:min(420px,44vw);font-size:12px;padding:3px 10px}#hmis b{font-size:14px}#harr{top:60px;font-size:12px}#harr i{font-size:34px;line-height:34px}
+@media (max-height:440px) and (min-width:641px){#hwarn{top:40%;font-size:18px}#hmis{top:8px;max-width:min(420px,44vw);font-size:12px;padding:3px 10px}#hmis b{font-size:14px}#harr{top:60px;font-size:12px}#harr i{font-size:34px;line-height:34px}
 #hcr{top:auto;bottom:calc(200px + env(safe-area-inset-bottom,0px))}#hcoach{bottom:calc(12px + env(safe-area-inset-bottom,0px));width:min(420px,50vw);font-size:14px;padding:8px 12px}}
 `;
 
@@ -333,23 +333,26 @@ export function makeHeliMode(A) {
 
   // ---- камера: за вертолётом, чуть сверху; на висении -- ближе, на скорости -- дальше ----
   let camInit = false;
+  const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
   function cam(dt) { if (camera.view && camera.view.enabled) camera.clearViewOffset();
     M.root.position.set(Hc.X, Hc.Z, -Hc.Y); M.root.rotation.set(0, 0, 0); M.root.rotateY(-Hc.th); M.root.rotateX(-Hc.pitch); M.root.rotateZ(-Hc.roll);
     F.rpm += ((Hc.crash ? 0 : Hc.ground && Hc.col < 0.05 && F.t < 2 ? 0.4 : Hc.rpm) - F.rpm) * Math.min(1, dt * 0.8); M.spin(dt, F.rpm); if (SAR && SAR.cam(dt)) { if (reticle) reticle.visible = false; return; }
     if (Hc.crash) { v3.set(Hc.X + 40, Hc.Z + 25, -Hc.Y + 40); camera.position.lerp(v3, Math.min(1, dt * 2)); camera.up.set(0, 1, 0); camera.lookAt(Hc.X, Hc.Z + 3, -Hc.Y); camera.updateProjectionMatrix(); return; }
-    const fx = Math.sin(Hc.th), fy = Math.cos(Hc.th), want = new THREE.Vector3(fx, 0, -fy);
-    if (!camInit) { clook.copy(want); camInit = true; } else clook.lerp(want, Math.min(1, dt * 1.6)).normalize();
-    F.camD += ((26 + Hc.speed * 0.25) * G.zoom - F.camD) * Math.min(1, dt * 1.5); const d = F.camD, back = clook.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), G.orbit).negate();
-    const wl = F.w && F.w.L > 1 && F.w.init ? (F.wl = Math.min(1, (F.wl || 0) + dt)) : (F.wl = Math.max(0, (F.wl || 0) - dt)); // лебёдка: камера выше, видно крюк и людей
-    v3.set(Hc.X, Hc.Z + 3, -Hc.Y).addScaledVector(back, d * (1 + 0.1 * wl)); v3.y += d * (0.32 + G.orbitP + 0.22 * wl);
-    const gy = Math.max(0, H(v3.x, -v3.z)) + 3; if (v3.y < gy) v3.y = gy;
-    const sh = Hc.shake * 0.25 + Math.max(0, G.shake - 0) * 0.5, jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh; G.shake = Math.max(0, G.shake - dt * 1.4);
-    // камера на пружине: тяжёлая машина «уезжает» при разгоне и наклоняет горизонт в вираже -- масса чувствуется
-    if (!F.cam) F.cam = v3.clone(); else { const k = Math.min(1, dt * 3.2); F.cam.lerp(v3, k); } if (F.cam.distanceTo(v3) > d * 1.5) F.cam.copy(v3);
-    camera.position.copy(F.cam); camera.position.x += jx; camera.position.y += jy; camera.up.set(-Math.sin(Hc.roll) * 0.22 * Math.cos(Hc.th), 1, -Math.sin(Hc.roll) * 0.22 * Math.sin(Hc.th)).normalize(); cpos.set(Hc.X, Hc.Z + 3, -Hc.Y).addScaledVector(clook, 12); if (wl > 0 && F.w) cpos.lerp(v3.set(F.w.p[0], F.w.p[2], -F.w.p[1]), 0.4 * wl); camera.lookAt(cpos);
-    // FOV: скорость и рывок разгона растягивают кадр -- чувство мощи; ЧР -- ещё шире
+    // камера как у яхты: ходит по сфере вокруг машины (орбита пальцем/мышью, колесо -- дальше-ближе), за курсом поворачивает плавно,
+    // позиция жёстко привязана к вертолёту -- кадр не «уезжает» и не болтается; горизонт ровный, крен -- лёгким наклоном
+    if (!camInit) { F.cyaw = Hc.th; camInit = true; F.cam = null; } F.cyaw += wrapA(Hc.th - F.cyaw) * Math.min(1, dt * (1.2 + Math.min(1.2, Hc.speed * 0.03))); clook.set(Math.sin(F.cyaw), 0, -Math.cos(F.cyaw));
+    const tall = window.innerHeight / Math.max(1, window.innerWidth), wl = F.w && F.w.L > 1 && F.w.init ? (F.wl = Math.min(1, (F.wl || 0) + dt)) : (F.wl = Math.max(0, (F.wl || 0) - dt)); // лебёдка: камера выше, видно крюк и людей
+    F.camD += ((34 + Math.min(30, Hc.speed * 0.3)) * G.zoom * Math.min(1.7, Math.max(1, tall * 0.8)) - F.camD) * Math.min(1, dt * 1.5); const d = F.camD * (1 + 0.15 * wl);
+    const yaw = F.cyaw + G.orbit, el = Math.min(1.45, Math.max(-0.05, 0.2 + G.orbitP + 0.35 * wl)), ce = Math.cos(el), se = Math.sin(el), fx = Math.sin(yaw), fy = Math.cos(yaw);
+    const tx = Hc.X + Math.sin(Hc.th) * 6, ty = Hc.Y + Math.cos(Hc.th) * 6, tz = Hc.Z + 3; // смотрим чуть вперёд машины
+    v3.set(tx - fx * d * ce, tz + d * se, -(ty - fy * d * ce));
+    const gy = Math.max(0, H(v3.x, -v3.z)) + 6; F.cgy = Math.max(gy, (F.cgy || gy) + (gy - (F.cgy || gy)) * Math.min(1, dt * 4)); if (v3.y < F.cgy) v3.y = F.cgy; // склон под камерой -- приподнимаем плавно
+    const sh = Hc.shake * 0.25 + Math.max(0, G.shake) * 0.5, jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh; G.shake = Math.max(0, G.shake - dt * 1.4);
+    camera.position.copy(v3); camera.position.x += jx; camera.position.y += jy; camera.up.set(0, 1, 0);
+    cpos.set(tx, tz + (tall > 1.2 ? -2 : 1), -ty); if (wl > 0 && F.w) cpos.lerp(v3.set(F.w.p[0], F.w.p[2], -F.w.p[1]), 0.4 * wl); camera.lookAt(cpos);
+    F.croll = (F.croll || 0) + (Hc.roll * 0.18 * Math.cos(G.orbit) - (F.croll || 0)) * Math.min(1, dt * 3); camera.rotateZ(-F.croll); // вираж чуть наклоняет горизонт
     const acc = Math.hypot(Hc.vx - (F.pvx ?? Hc.vx), Hc.vy - (F.pvy ?? Hc.vy)) / Math.max(dt, 1e-3); F.pvx = Hc.vx; F.pvy = Hc.vy; F.kick = Math.max((F.kick || 0) - dt * 1.5, Math.min(1, acc / 6));
-    camera.fov += (56 + Math.min(10, Hc.speed * 0.13) + F.kick * 5 + Hc.cr * 4 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix();
+    camera.fov += (55 + Math.min(6, Hc.speed * 0.08) + F.kick * 2 - camera.fov) * Math.min(1, dt * 2); camera.updateProjectionMatrix();
     // прицел посадки на земле
     if (reticle) { const show = !Hc.crash && Hc.agl < 120 && Hc.agl > 0.8; reticle.visible = show; if (show) { const gz = H(Hc.X, Hc.Y), mi = F.mis[F.mi], d = mi ? Math.hypot(Hc.X - mi.to.X, Hc.Y - mi.to.Y) : 99, sc = 14 + Hc.agl * 0.12;
       reticle.position.set(Hc.X, gz + 0.4, -Hc.Y); reticle.scale.set(sc, sc, 1); reticle.material.color.setHex(d < 5 ? 0x6cff7a : d < 15 ? 0xffe14a : 0xffffff); reticle.material.opacity = 0.35 + 0.5 * (1 - Hc.agl / 120); } } }
@@ -387,8 +390,8 @@ export function makeHeliMode(A) {
     ld.hidden = !t; if (ld.textContent !== t) ld.textContent = t; ld.className = 'hud ' + c; }
   function pointMark() { const mk = $('mark'), mi = F && (F.mis[F.mi] || F.goal); if (!mi || Hc.crash) { mk.hidden = true; return; } const tg = [mi.to.X, mi.to.Y, mi.to.z + 6], w = window.innerWidth, hh = window.innerHeight;
     v3.set(tg[0], tg[2], -tg[1]).project(camera); const behind = v3.z > 1; let mx = (v3.x * 0.5 + 0.5) * w, my = (1 - (v3.y * 0.5 + 0.5)) * hh; if (behind) { mx = w - mx; my = hh * 0.5; mx = mx < w / 2 ? 0 : w; }
-    const cx = clamp(mx, 74, w - 74), cy = clamp(my, 150, hh - 150), off = behind || cx !== mx || cy !== my; mk.hidden = false; mk.className = 'hud' + (off ? ' off' : ''); mk.style.transform = `translate(${cx}px,${cy}px) translate(-50%,-100%)`;
-    if (G.frame % 6 === 0) { const d = Math.hypot(tg[0] - Hc.X, tg[1] - Hc.Y), lab = mi.to.name || 'цель', t = `${off && cx < w / 2 ? '◀ ' : ''}${lab} · ${d >= 1000 ? (d / 1000).toFixed(1) + ' км' : Math.round(d) + ' м'}${off && cx > w / 2 ? ' ▶' : ''}`; if ($('markd').textContent !== t) $('markd').textContent = t; } }
+    const half = Math.max(40, mk.offsetWidth / 2 + 8), cx = clamp(mx, half, w - half), cy = clamp(my, 150, hh - (hh > w ? 320 : 150)), off = behind || cx !== mx || cy !== my; mk.hidden = false; mk.className = 'hud' + (off ? ' off' : ''); mk.style.transform = `translate(${cx}px,${cy}px) translate(-50%,-100%)`;
+    if (G.frame % 6 === 0) { const d = Math.hypot(tg[0] - Hc.X, tg[1] - Hc.Y), lab = off ? '' : (mi.to.name || 'цель') + ' · ', t = `${off && cx < w / 2 ? '◀ ' : ''}${lab}${d >= 1000 ? (d / 1000).toFixed(1) + ' км' : Math.round(d) + ' м'}${off && cx > w / 2 ? ' ▶' : ''}`; if ($('markd').textContent !== t) $('markd').textContent = t; } }
   // звук: турбины по шагу, свист винта -- по оборотам, поток -- по скорости
   function sound() { if (!on) return; audio.jet && audio.jet(Hc.crash ? 0 : 0.45 + 0.4 * Math.min(1, Hc.power), 40 + Hc.speed * 0.6 * F.rpm, !Hc.crash); audio.airflow(Math.min(60, 12 + Hc.speed * 0.4), Math.min(1, Hc.shake), 0, !Hc.crash); }
 
