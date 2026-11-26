@@ -123,12 +123,27 @@ export function makeAudio() {
   function foot(wind = 4) { if (!ctx || ctx.state !== 'running') return; set(L.low.g.gain, 0.02 + wind * wind * 0.0008, 0.4); set(L.mid.g.gain, wind * wind * 0.0004, 0.4); for (const k of ['whistle', 'rush', 'bubble', 'flap']) set(L[k].g.gain, 0, 0.3); }
   // реактивный: рёв (шум через фильтр, громче и ярче с тягой) и свист турбины (тон растёт с оборотами)
   let jt = null;
+  // Ми-8: несущий винт 5 лопастей x 3.2 об/с -- «чоп» ~16 Гц: шум, промодулированный проходом лопастей. Нагрузка (шаг)
+  // делает удары плотнее и ниже, вираж и вихревое кольцо -- «шлепок» лопастей (slap), скорость -- шире полоса.
+  // Сверху -- свист двух турбин ТВ3-117 (тон растёт с мощностью) и жужжание хвостового винта.
+  let rt = null;
+  function rotor(rpm = 1, load = 0.6, V = 0, slap = 0, on = true) { if (!ctx || ctx.state !== 'running') return;
+    if (!rt) { if (!on) return; const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 300; fl.Q.value = 0.8;
+      const am = ctx.createGain(); am.gain.value = 0.55; const g = ctx.createGain(); g.gain.value = 0; s.connect(fl); fl.connect(am); am.connect(g); g.connect(master); s.start();
+      const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.type = 'sawtooth'; lfo.frequency.value = 16; lg.gain.value = 0.4; lfo.connect(lg); lg.connect(am.gain); lfo.start();
+      const o = ctx.createOscillator(), of = ctx.createBiquadFilter(), og = ctx.createGain(); o.type = 'triangle'; o.frequency.value = 1400; of.type = 'bandpass'; of.frequency.value = 1900; of.Q.value = 4; og.gain.value = 0; o.connect(of); of.connect(og); og.connect(master); o.start();
+      const t = ctx.createOscillator(), tf = ctx.createBiquadFilter(), tg = ctx.createGain(); t.type = 'sawtooth'; t.frequency.value = 95; tf.type = 'lowpass'; tf.frequency.value = 420; tg.gain.value = 0; t.connect(tf); tf.connect(tg); tg.connect(master); t.start();
+      rt = { g, fl, lfo, lg, o, og, t, tg }; }
+    const k = on ? 1 : 0, L = Math.max(0, Math.min(1.2, load)), sl = Math.max(0, Math.min(1, slap));
+    set(rt.g.gain, k * (0.09 + 0.15 * L + 0.08 * sl), 0.25); set(rt.fl.frequency, 200 + 240 * L + Math.min(300, V * 3) + sl * 500, 0.3);
+    set(rt.lfo.frequency, 16 * rpm, 0.5); set(rt.lg.gain, 0.28 + 0.22 * L + 0.25 * sl, 0.2);
+    set(rt.og.gain, k * (0.005 + 0.012 * L), 0.4); set(rt.o.frequency, 1250 + 550 * L * rpm, 0.8); set(rt.tg.gain, k * 0.012, 0.4); set(rt.t.frequency, 95 * rpm, 0.5); }
   function jet(thr = 0, V = 0, on = true) { if (!ctx || ctx.state !== 'running') return;
     if (!jt) { if (!on) return; const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; const fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 400; const g = ctx.createGain(); g.gain.value = 0; s.connect(fl); fl.connect(g); g.connect(master); s.start();
       const o = ctx.createOscillator(), og = ctx.createGain(), of = ctx.createBiquadFilter(); o.type = 'triangle'; o.frequency.value = 2000; of.type = 'bandpass'; of.frequency.value = 3000; of.Q.value = 3; og.gain.value = 0; o.connect(of); of.connect(og); og.connect(master); o.start(); jt = { g, fl, og, o }; }
     const k = on ? thr : 0; set(jt.g.gain, on ? 0.04 + 0.2 * k : 0, 0.3); set(jt.fl.frequency, 300 + 1500 * k + V * 3, 0.3); set(jt.og.gain, on ? 0.008 + 0.025 * k : 0, 0.4); set(jt.o.frequency, 1800 + 2600 * k, 0.8); }
   return {
-    start, update, engine, siren, vario, airflow, winch, beach, find, foot, jet,
+    start, update, engine, siren, vario, airflow, winch, beach, find, foot, jet, rotor,
     plop(p = 1) { noise(700, 1.2, 0.5, 0.3 * p, 0, 180); tone(300, 0.15, 'sine', 0.12 * p, 120); },
     paddle() { noise(900 + Math.random() * 400, 1, 0.22, 0.04, (Math.random() - 0.5) * 0.4, 400); },
     shake() { for (let i = 0; i < 6; i++) setTimeout(() => noise(3500, 1.5, 0.07, 0.05, i % 2 ? 0.4 : -0.4), i * 45); },

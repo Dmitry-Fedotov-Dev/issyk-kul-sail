@@ -108,7 +108,7 @@ export function makeSar(K) {
       <p style="margin-top:10px"><small>Присоединиться к чужой операции:</small> <input id="sjoin" maxlength="5" placeholder="КОД"> <button class="ch" id="sjoinb" style="flex:none;display:inline-block;min-width:0">Войти</button></p>`;
     for (const b of el.querySelectorAll('.ch[data-k]')) b.onclick = () => { S.res[b.dataset.k] = +b.dataset.v; brief(); };
     $('sgo').onclick = start; $('stoon').onclick = () => film(); $('sjoinb').onclick = () => { const v = $('sjoin').value.trim().toUpperCase(); if (seedOf(v) === null) { toast('Код — 5 знаков, например K7QZA'); return; } stopWorld(); begin(v); }; }
-  function start() { $('sbrief').hidden = true; S.run = true; document.body.classList.add('sarrun'); $('smini').hidden = false; S.bats = S.res.drone ? 3 : 0; const b = K.base();
+  function start() { $('sbrief').hidden = true; S.run = true; G.spyMore = spyTargets; document.body.classList.add('sarrun'); $('smini').hidden = false; S.bats = S.res.drone ? 3 : 0; const b = K.base();
     const lc = S.c.pts[Math.max(0, S.c.legIdx)]; // отряды уже заброшены в последний лагерь группы
     for (let i = 0; i < S.res.men / 4; i++) S.teams.push({ id: i + 1, n: 4, X: lc.X + 20 + i * 12, Y: lc.Y - 25, tgt: null, carry: null, risk: 0, spr: teamSprite() });
     const hk = S.c.hook && S.c.clues[S.c.hook.id]; if (hk) { S.found.add(hk.id); const tx = S.c.last.kind === 'ping' ? S.c.last.X : hk.X, ty = S.c.last.kind === 'ping' ? S.c.last.Y : hk.Y; hop(tx, ty, 700, 140, false, true); }
@@ -133,12 +133,23 @@ export function makeSar(K) {
     for (const q of c.clues) { if (q.k === 'debris') { // лавинный вынос: комья снега пятном вдоль ската
         const cv = document.createElement('canvas'); cv.width = cv.height = 128; const x = cv.getContext('2d'); for (let i = 0; i < 260; i++) { const r = 2 + Math.random() * 7, px = 64 + (Math.random() - 0.5) * 110 * Math.random() ** 0.5, py = 64 + (Math.random() - 0.5) * 120; x.fillStyle = `rgba(${200 + Math.random() * 40},${210 + Math.random() * 35},${230 + Math.random() * 25},0.85)`; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill(); x.strokeStyle = 'rgba(90,110,150,.35)'; x.stroke(); }
         const t = new THREE.CanvasTexture(cv), m = new THREE.Mesh(new THREE.PlaneGeometry(150, 260), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6 })); m.rotation.order = 'YXZ'; m.rotation.y = Math.atan2(q.dir[0], q.dir[1]); m.rotation.x = -Math.PI / 2; m.position.set(q.X, H(q.X, q.Y) + 2, -q.Y); root.add(m); }
-      if (q.path && q.k === 'track') { const pts = q.path.map(([X, Y]) => new THREE.Vector3(X, H(X, Y) + 0.6, -Y)), l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineDashedMaterial({ color: 0x334055, dashSize: 3, gapSize: 4 })); l.computeLineDistances(); root.add(l); }
+      if (q.path && q.k === 'track') root.add(footprints(q.path)); // цепочка следов -- отпечатки на снегу, а не тёмная линия
       const s = clueSprite(q); s.position.set(q.X, H(q.X, q.Y), -q.Y); root.add(s); q.spr = s; }
     for (const v of c.victims) { const fr = ['goth0', 'goth1', 'goth2', 'goth3', 'goth4', 'blond0', 'blond1', 'blond2', 'blond3', 'blond4'][v.frame % 10], s = K.personSprite(fr);
       if (v.pose === 'lie' || !v.alive0) { s.material.rotation = Math.PI / 2; s.center.set(0.5, 0.5); } if (v.pose === 'sit') s.scale.y *= 0.62; if (!v.alive0) s.material.color.setHex(0x8a96a8);
-      s.visible = !(v.pose === 'buried' || v.pose === 'crev'); root.add(s); v.spr = s; placeVictim(v); } }
-  function placeVictim(v) { const [X, Y] = v.walker && v.foundT === undefined && aliveNow(v) ? walkerPos(v, S.c.since + S.t, S.c.clock0) : [v.X, v.Y]; v.X = X; v.Y = Y; v.spr.position.set(X, H(X, Y) + (v.spr.material.rotation ? 0.3 : 0), -Y); }
+      s.visible = !(v.pose === 'buried' || v.pose === 'crev'); root.add(s); v.spr = s;
+      // живой и в сознании -- машет оранжевой тряпкой на палке: яркая точка, которую видно сверху и в бинокль
+      if (v.alive0 && s.visible && v.pose !== 'lie') { const f = new THREE.Group(), pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.2, 5), new THREE.MeshBasicMaterial({ color: 0x333333 })); pole.position.y = 1.1;
+        const cl = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.7), new THREE.MeshBasicMaterial({ color: 0xff5a14, side: THREE.DoubleSide })); cl.position.set(0.55, 1.85, 0); f.add(pole, cl); f.userData.cl = cl; root.add(f); v.flag = f; }
+      placeVictim(v); } }
+  // следы: отпечатки парами вдоль пути, плоско на снегу (инстансы)
+  let fpTex = null;
+  function footprints(path) { if (!fpTex) { const cv = document.createElement('canvas'); cv.width = 32; cv.height = 64; const x = cv.getContext('2d'); x.fillStyle = 'rgba(60,80,120,.85)'; for (const [cx, cy] of [[10, 18], [22, 46]]) { x.beginPath(); x.ellipse(cx, cy, 6, 11, 0, 0, 7); x.fill(); } fpTex = new THREE.CanvasTexture(cv); }
+    const pts = []; for (let i = 1; i < path.length; i++) { const [x0, y0] = path[i - 1], [x1, y1] = path[i], L = Math.hypot(x1 - x0, y1 - y0); for (let d = 0; d < L; d += 2.6) pts.push([x0 + (x1 - x0) * d / L, y0 + (y1 - y0) * d / L, Math.atan2(x1 - x0, y1 - y0)]); }
+    const im = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.9, 1.8), new THREE.MeshBasicMaterial({ map: fpTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 }), pts.length), m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), e = new THREE.Euler(0, 0, 0, 'YXZ'), sc = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    pts.forEach(([X, Y, a], i) => { e.set(-Math.PI / 2, -a, 0, 'YXZ'); e.set(-Math.PI / 2, 0, 0); q4.setFromEuler(new THREE.Euler(0, -a, 0)).multiply(new THREE.Quaternion().setFromEuler(e)); p.set(X, H(X, Y) + 0.15, -Y); m4.compose(p, q4, sc); im.setMatrixAt(i, m4); });
+    return im; }
+  function placeVictim(v) { const [X, Y] = v.walker && v.foundT === undefined && aliveNow(v) ? walkerPos(v, S.c.since + S.t, S.c.clock0) : [v.X, v.Y]; v.X = X; v.Y = Y; v.spr.position.set(X, H(X, Y) + (v.spr.material.rotation ? 0.3 : 0), -Y); if (v.flag) { v.flag.position.set(X + 0.8, H(X + 0.8, Y), -Y); v.flag.visible = !v.dead && !v.saved && v.spr.visible; v.flag.userData.cl.rotation.y = Math.sin(performance.now() / 180 + v.id) * 0.6; } }
   function stopWorld() { if (S && S.root) { scene.remove(S.root); S.root.traverse((o) => { if (o.material) { if (o.material.map && !o.isSprite) o.material.map.dispose(); o.material.dispose(); } if (o.geometry) o.geometry.dispose(); }); S.root = null; } }
   function teamSprite() { const g = new THREE.Group(); for (let i = 0; i < 3; i++) { const s = K.personSprite(['goth3', 'blond3', 'goth1'][i], 1.75); s.material.color.setHex(0xff9a5a); s.position.set(i * 1.3 - 1.3, 0, (i % 2) * 1.2); g.add(s); } const f = K.flagPole(); f.scale.setScalar(0.6); g.add(f); S.root.add(g); return g; }
   const aliveNow = (v) => !v.dead && aliveAt(v, S.t);
@@ -164,11 +175,22 @@ export function makeSar(K) {
     for (const v of S.c.victims) { if (v.foundT !== undefined) continue; const z = H(v.X, v.Y), d = Math.hypot(v.X - from.X, v.Y - from.Y, z - from.Z); if (!look(v.X, v.Y, z)) continue;
       if (Math.random() < pod({ ...v, buried: v.buried || v.pose === 'crev' }, d, agl, night, kind)) { foundV(v, kind); got++; } }
     if (!got) K.pop('ПУСТО', agl > 160 ? 'слишком высоко: снижайтесь до 60-120 м' : seen ? 'что-то есть — ближе!' : 'в кадре ничего'); }
+  // бинокль с борта (Z / 🔭): улики и люди -- цели для опознания. Крупное (палатка, рюкзак, вынос, следы, человек) засчитывается
+  // сразу; мелочь (записка, обёртка, перчатка) бинокль только замечает -- «снимите вблизи». Дальность -- 2.5 км, мелкое -- на большой кратности
+  const SMALL = { note: 1, wrap: 1, glove: 1, mirror: 1, helmet: 1, axe: 1, pole: 1 }, SIZE = { debris: 80, tent: 5, bivy: 3, track: 8, cave: 6, cornice: 20, rocks: 10, pack: 1.6, rope: 3, wand: 1.6 };
+  function spyTargets() { if (!S || !S.run) return []; const h = K.heli(), out = [];
+    for (const q of S.c.clues) { if (Math.hypot(q.X - h.X, q.Y - h.Y) > 2600) continue; const got = S.found.has(q.id), sm = SMALL[q.k];
+      out.push({ id: 'sar:' + q.id, cat: 'Поиск', name: got ? `${CLUEICON[q.k] || ''} уже в деле` : sm ? `${CLUEICON[q.k] || ''} что-то лежит — снимите вблизи 📷` : `${CLUEICON[q.k] || ''} улика!`, X: q.X, Y: q.Y, y: H(q.X, q.Y) + 1, size: SIZE[q.k] || 1.2, far: 2600,
+        onLock: () => { if (!got && !sm && !S.found.has(q.id)) found(q); } }); }
+    for (const v of S.c.victims) { if (!v.spr || !v.spr.visible || Math.hypot(v.X - h.X, v.Y - h.Y) > 2600) continue;
+      out.push({ id: 'sarv:' + v.id, cat: 'Поиск', name: v.foundT !== undefined ? v.name : 'человек!', X: v.X, Y: v.Y, y: H(v.X, v.Y) + 1, size: 2.2, far: 2600, onLock: () => { if (v.foundT === undefined) foundV(v, 'spy'); } }); }
+    for (const t of S.teams) if (t.n > 0 && !t.onboard && t.spr) out.push({ id: 'sart:' + t.id, cat: 'Поиск', name: `отряд ${t.id} · ${t.n} чел.`, X: t.X, Y: t.Y, y: H(t.X, t.Y) + 1, size: 4, far: 4000, onLock: () => {} });
+    return out; }
   function found(q) { S.found.add(q.id); share({ k: 'clue', id: q.id });
     if (q.fake) K.pop('ЛОЖНЫЙ СЛЕД', 'старьё чужой экспедиции — время потеряно'); else { S.streak = S.t - (S.lastClue ?? -99) < 25 ? Math.min(4, (S.streak || 1) + 1) : 1; S.lastClue = S.t; const b = 40 * (S.streak - 1); S.hot = (S.hot || 0) + b;
       K.pop(S.streak > 1 ? `+${40 + b} ГОРЯЧИЙ СЛЕД ×${S.streak}` : '+40 УЛИКА', q.t.length > 60 ? q.t.slice(0, 58) + '…' : q.t); K.buzz(30); } say(`${CLUEICON[q.k] || ''} ${q.t}`, false); audio.chime && audio.chime(); }
   function foundV(v, how) { const alive = aliveNow(v); v.foundT = S.t; if (!alive) v.dead = true; share({ k: 'vic', id: v.id, alive }); K.buzz(alive ? [60, 40, 60, 40, 120] : 80);
-    if (alive) { K.score(600, `${v.name.toUpperCase()} ${gw(v, 'ЖИВ', 'ЖИВА')}!`, how === 'team' ? 'нашёл пеший отряд' : 'на снимке — машет!'); G.shake = Math.max(G.shake, 0.3); }
+    if (alive) { K.score(600, `${v.name.toUpperCase()} ${gw(v, 'ЖИВ', 'ЖИВА')}!`, how === 'team' ? 'нашёл пеший отряд' : how === 'spy' ? 'в бинокль — машет!' : 'на снимке — машет!'); G.shake = Math.max(G.shake, 0.3); }
     else K.pop(`${v.name}: ${gw(v, 'ПОГИБ', 'ПОГИБЛА')}`, 'опоздали — или шансов не было');
     say(alive ? `✅ ${v.name} ${gw(v, 'найден живым', 'найдена живой')}. ${v.injured ? 'Травмы — нужна эвакуация' : 'Нужна эвакуация'}` : `✖ ${v.name}: ${gw(v, 'найден погибшим', 'найдена погибшей')}`, false); evacPlan(v); }
   // эвакуация: живого -- вертолётом (если высота позволяет) лебёдкой или посадкой и на базу; выше -- пешие спускают
@@ -234,7 +256,7 @@ export function makeSar(K) {
   function tick(dt, c) { if (!S || !S.on) return { lock: false }; if (!S.run || S.ended || S.film) return { lock: !!S.dr };
     const dm = dt; S.t += dm; // секунда -- минута операции
     for (const v of S.c.victims) { if (!v.dead && v.alive0 && !aliveAt(v, S.t) && !v.saved && !v.onboard) { v.dead = true; if (v.foundT !== undefined) { K.pop('ПОТЕРЯЛИ', `${v.name} — не ${gw(v, 'дождался', 'дождалась')}`); say(`✖ ${v.name} ${gw(v, 'умер', 'умерла')}, не дождавшись эвакуации`); } }
-      if (v.walker && v.foundT === undefined) placeVictim(v); }
+      if (v.walker && v.foundT === undefined) placeVictim(v); else if (v.flag) { v.flag.visible = !v.dead && !v.saved && !v.onboard && v.spr.visible; if (v.flag.visible) v.flag.userData.cl.rotation.y = Math.sin(performance.now() / 180 + (v.id || 0)) * 0.6; } }
     if (S.dr) droneTick(dt, c); teamsTick(dm);
     // вертолёт видит человека сам: низко и близко -- «вижу человека!»
     const h = K.heli(); for (const v of S.c.victims) if (v.foundT === undefined && !(v.buried || v.pose === 'crev') && Math.hypot(v.X - h.X, v.Y - h.Y) < 70 && h.agl < 90) foundV(v, 'heli');
@@ -409,7 +431,7 @@ export function makeSar(K) {
   function tally() { const c = S.c; return { saved: S.saved, alive: c.victims.filter((v) => v.alive0).length, aliveFound: c.victims.filter((v) => v.foundT !== undefined && !v.dead && !v.saved).length, dead: c.victims.filter((v) => v.foundT !== undefined && v.dead).length,
     clues: [...S.found].filter((i) => !c.clues[i].fake).length, minutes: S.t, rescuerLost: S.rescuerLost, droneLost: S.droneLost, heliCrash: !!K.heli().crash, comm: c.comm,
     extra: [[`горячий след`, S.hot || 0], ['ночные полёты', -(S.nightPen || 0)]] }; }
-  function end() { if (!S || S.ended) return; S.ended = true; S.run = false; journal(false); if (S.dr) { S.dr = null; drone.g.visible = false; } $('sframe').hidden = true; document.body.classList.remove('sardr', 'sarrun'); $('sbtns').hidden = true; $('sclock').hidden = true; $('smini').hidden = true; const c = S.c;
+  function end() { if (!S || S.ended) return; S.ended = true; S.run = false; G.spyMore = null; journal(false); if (S.dr) { S.dr = null; drone.g.visible = false; } $('sframe').hidden = true; document.body.classList.remove('sardr', 'sarrun'); $('sbtns').hidden = true; $('sclock').hidden = true; $('smini').hidden = true; const c = S.c;
     const o = tally();
     const sc = scoreOf(o), rec = sc.total > (store.get('sarBest') || 0); if (rec) store.set('sarBest', sc.total); store.set('sarDone', 1); const rc = store.get('sarRecent') || []; rc.push(c.scen); store.set('sarRecent', rc.slice(-6));
     const truth = c.victims.map((v) => `${v.name}: ${v.saved ? gw(v, 'спасён', 'спасена') : v.foundT !== undefined ? (v.dead ? gw(v, 'найден погибшим', 'найдена погибшей') : gw(v, 'найден живым, но не эвакуирован', 'найдена живой, но не эвакуирована')) : v.alive0 && !v.dead ? gw(v, 'не найден — а был ещё жив…', 'не найдена — а была ещё жива…') : gw(v, 'не найден', 'не найдена')}`).join(' · ');
@@ -417,6 +439,6 @@ export function makeSar(K) {
     $('rs').innerHTML = `<b>Что случилось:</b> ${c.cause}. <small>${c.real}</small><br>${truth}`;
     $('rt').innerHTML = sc.parts.map(([t, v]) => `<tr><td>${t}</td><td style="text-align:right">${v > 0 ? '+' : ''}${v}</td></tr>`).join('') + (sc.k > 1 ? `<tr><td>сложность: ${c.comm.name}</td><td style="text-align:right">×${sc.k}</td></tr>` : '');
     $('ragain').textContent = 'Новое дело'; setTimeout(() => { if (S && S.on) $('result').hidden = false; }, 600); }
-  function stop() { if (!S) return; S.on = false; stopWorld(); if (drone) drone.g.visible = false; if (ping) ping.visible = false; $('sarw').hidden = true; if ($('harr')) $('harr').style.top = ''; const cv = document.querySelector('canvas'); if (cv) cv.style.filter = ''; NETHOOK.sar = null; document.body.classList.remove('sardr', 'sarrun'); const n = net(); if (n && n.sarLeave) n.sarLeave(); S = null; }
+  function stop() { if (!S) return; S.on = false; G.spyMore = null; stopWorld(); if (drone) drone.g.visible = false; if (ping) ping.visible = false; $('sarw').hidden = true; if ($('harr')) $('harr').style.top = ''; const cv = document.querySelector('canvas'); if (cv) cv.style.filter = ''; NETHOOK.sar = null; document.body.classList.remove('sardr', 'sarrun'); const n = net(); if (n && n.sarLeave) n.sarLeave(); S = null; }
   return { begin, tick, cam, hud, stop, missionDone, end, get on() { return !!(S && S.on); }, get S() { return S; }, get drone() { return !!(S && S.dr); }, get running() { return !!(S && S.run); } };
 }

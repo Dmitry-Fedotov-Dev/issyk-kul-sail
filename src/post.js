@@ -70,7 +70,9 @@ void main(){
 }` });
   const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat); quad.frustumCulled = false; scene.add(quad);
   let ok = true, checked = false; const size = new THREE.Vector2();
-  return { get ok() { return ok; }, setSun(x, y, a, c) { u.uSunP.value.set(x, y, a); if (c) u.uSunC.value.set(c.x, 0.12 + 0.88 * c.y, 0.08 + 0.92 * c.z); }, // засветка -- цвета солнца: на закате оранжевая setSpy(a, b) { u.uSpy.value = a; u.uSpyB.value = b; },
+  return { get ok() { return ok; }, setSun(x, y, a, c) { u.uSunP.value.set(x, y, a); if (c) u.uSunC.value.set(c.x, 0.12 + 0.88 * c.y, 0.08 + 0.92 * c.z); }, // засветка -- цвета солнца: на закате оранжевая
+    setSpy(a, b) { u.uSpy.value = a; u.uSpyB.value = b; },
+    setInk(k) { u.uInk.value = k; }, // плотность обводки: в горах с воздуха -- тоньше (иначе гребни и склоны тонут в туши)
     resize() { renderer.getDrawingBufferSize(size); rt.setSize(Math.max(2, size.x), Math.max(2, size.y)); u.uPx.value.set(1 / size.x, 1 / size.y); u.uK.value = Math.max(0.75, size.y / 720); checked = false; },
     render(sc, camera) {
       if (!ok) { renderer.render(sc, camera); return; }

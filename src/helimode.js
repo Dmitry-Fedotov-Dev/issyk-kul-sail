@@ -11,6 +11,8 @@ import { NPCART } from './npcart.js';
 import { KCAMPS } from './khanosm.js';
 import { clamp, wrapPi } from './sim.js';
 import { makeSar } from './sarmode.js';
+import { makeHeliAir } from './heliair.js';
+import { INK_U } from './ridges.js';
 
 const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const AIRPORT = { X: -4385, Y: 1809 };
@@ -19,6 +21,8 @@ body.heli #speed>b,body.heli #speed>small,body.heli #pos,body.heli #wear,body.he
 #hhud{left:max(10px,env(safe-area-inset-left,0px));top:10px;line-height:1.15;background:rgba(8,22,48,.55);border-radius:12px;padding:6px 10px}#hhud b.v{font-size:44px;font-weight:300;letter-spacing:-1px}#hhud small{font-size:13px;color:var(--dim);margin-left:4px}
 #hhud .r{font-size:14px;margin-top:3px}#hhud .r b{font-weight:600}#hhud .bar{display:inline-block;width:86px;height:7px;border-radius:4px;background:rgba(255,255,255,.18);vertical-align:middle;margin:0 6px;overflow:hidden}#hhud .bar i{display:block;height:100%;background:#9fe0a0}#hhud .bar i.hot{background:#ff8a2a}#hhud .bar i.red{background:#ff4a3a}
 #hwarn{left:50%;top:28%;transform:translateX(-50%);font:800 clamp(20px,4.6vmin,34px) var(--ui);color:#ff5a3a;text-shadow:0 2px 12px rgba(0,0,0,.7);letter-spacing:.06em;animation:jblink .5s steps(2) infinite}
+body.spy #hwrap,body.spy #sarw,body.spy #mark,body.spy #hint,body.spy #hvec{display:none!important}
+#hvec{position:fixed;width:110px;height:110px;pointer-events:none;z-index:4}#hdbg{left:auto;right:12px;top:120px;font:11px/1.35 ui-monospace,monospace;background:rgba(0,0,0,.6);padding:6px 8px;border-radius:8px;white-space:pre;color:#cfe}
 #hmis{left:50%;top:10px;transform:translateX(-50%);text-align:center;font-size:14px;max-width:min(560px,60vw);background:rgba(8,22,48,.55);border-radius:12px;padding:6px 12px}#hmis b{font-size:17px}
 #hcol{position:fixed;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(40px + env(safe-area-inset-bottom,0px));display:none;flex-direction:column;gap:14px;z-index:2}
 #hcol button{width:76px;height:76px;border-radius:50%;border:2px solid rgba(255,255,255,.6);background:rgba(10,30,60,.45);color:#fff;font:800 26px var(--ui);touch-action:none;-webkit-user-select:none;user-select:none}
@@ -43,7 +47,7 @@ body.touchdev.heli #hint{bottom:calc(206px + env(safe-area-inset-bottom,0px))}
 
 export function makeHeliMode(A) {
   const { G, scene, camera, $, store, toast, audio, TOUCH, input, ach, showGame, resetView, fmt } = A; let SAR = null, lastMode = '';
-  let on = false, built = false, Hc = null, M = null, P = null, prev = null, F = null, boom = null, marks = null, people = null, beacon = null, reticle = null;
+  let AIRFX = null, on = false, built = false, Hc = null, M = null, P = null, prev = null, F = null, boom = null, marks = null, people = null, beacon = null, reticle = null;
   const v3 = new THREE.Vector3(), cpos = new THREE.Vector3(), clook = new THREE.Vector3(0, 0, -1);
   const H = (x, y) => G.h(x, y);
 
@@ -83,7 +87,7 @@ export function makeHeliMode(A) {
 
   function build() { if (built) return; built = true;
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    const w = document.createElement('div'); w.id = 'hwrap'; w.hidden = true; w.innerHTML = '<div id="hhud" class="hud"></div><div id="hwarn" class="hud" hidden></div><div id="hmis" class="hud" hidden></div><div id="harr" class="hud" hidden><i>⬆</i><div></div></div><div id="hland" class="hud" hidden></div><div id="hcoach" class="hud" hidden></div><div id="hpop" class="hud" hidden></div><div id="hscore" class="hud"></div><div id="hcr" class="hud" hidden></div><div id="hcol"><button id="hup">▲</button><button id="hdn">▼</button></div>'; $('game').appendChild(w);
+    const w = document.createElement('div'); w.id = 'hwrap'; w.hidden = true; w.innerHTML = '<div id="hhud" class="hud"></div><div id="hwarn" class="hud" hidden></div><div id="hmis" class="hud" hidden></div><div id="harr" class="hud" hidden><i>⬆</i><div></div></div><div id="hland" class="hud" hidden></div><div id="hcoach" class="hud" hidden></div><div id="hpop" class="hud" hidden></div><div id="hscore" class="hud"></div><div id="hcr" class="hud" hidden></div><canvas id="hvec" width="180" height="180"></canvas><pre id="hdbg" class="hud" hidden></pre><div id="hcol"><button id="hup">▲</button><button id="hdn">▼</button></div>'; $('game').appendChild(w);
     for (const [id, k] of [['hup', 'hu'], ['hdn', 'hd']]) { const b = $(id); const set = (v) => (e) => { e.preventDefault(); e.stopPropagation(); input[k] = v; b.classList.toggle('on', v); };
       b.addEventListener('pointerdown', set(true)); b.addEventListener('pointerup', set(false)); b.addEventListener('pointercancel', set(false)); b.addEventListener('pointerleave', set(false)); }
     SAR = makeSar({ G, scene, camera, $, store, toast, audio, TOUCH, input, H, net: A.net, personSprite, flagPole, pop: (t, sub) => pop(t, sub), score: (p, t, sub) => score(p, t, sub), buzz: (ms) => buzz(ms),
@@ -92,7 +96,7 @@ export function makeHeliMode(A) {
       setGoal(g) { F.goal = g ? { ...g, to: { X: g.X, Y: g.Y, z: H(g.X, g.Y), name: g.name || g.t } } : null; }, busy: () => F.mi < F.mis.length, resetCam: () => { camInit = false; F.cam = null; }, mission: () => F.mis[F.mi] || null, goal: () => F.goal && { X: F.goal.to.X, Y: F.goal.to.Y },
       hasMission: (k) => F.mis.slice(F.mi).some((m) => (k === 'base' ? m.base : false)) });
     Hc = new Heli(); M = makeHeli(); scene.add(M.root); M.root.visible = false; boom = makeBoom();
-    marks = new THREE.Group(); scene.add(marks); people = []; beacon = makeBeacon(); reticle = makeReticle();
+    marks = new THREE.Group(); scene.add(marks); people = []; beacon = makeBeacon(); reticle = makeReticle(); AIRFX = makeHeliAir({ scene, H }); window.addEventListener('keydown', (e) => { if (on && F && e.code === 'Backquote') F.dbg = !F.dbg; });
     P = { id: 'heli', name: 'Вы', b: { X: 0, Y: 0, th: 0, speed: 0, base: 0, y: 0, tws: 0, vx: 0, vy: 0 }, model: { root: M.root }, wake: { pts: [], mesh: { visible: false }, reset() {}, update() {} }, time: 0, leg: 0 }; }
 
   // ---- места: площадка (база), лагерь на леднике, люди на склоне ----
@@ -218,8 +222,8 @@ export function makeHeliMode(A) {
     if (prev && prev.model && prev.model.root) prev.model.root.visible = false; if (prev && prev.wake && prev.wake.mesh) prev.wake.mesh.visible = false;
     G.player = P; G.race = null; G.mode = 'heli'; M.root.visible = true; boom.m.visible = false; marks.visible = true;
     document.body.classList.add('heli'); document.body.classList.remove('motor', 'para', 'jet'); $('hwrap').hidden = false; $('mark').hidden = true; $('result').hidden = true; $('brief').hidden = true;
-    F = { t: 0, ended: false, msg: {}, mis: [], mi: 0, hold: 0, crashT: 0, rpm: 0, camD: 34, coach: store.get('heliCoach') ? undefined : 0, cam: null, score: 0, combo: 1, lowT: 0, touches: 0, hard: 0, soft: 0, wasGround: true }; showGame(true); resetView(); G.cam = 0; camInit = false; WB.t = -1; }
-  function startFree(mode = '') { begin(); lastMode = mode; F.mis = missions(mode); const b = F.base; if (mode === 'sar') { F.sar = true; F.coach = undefined; }
+    F = { dbg: /helidbg/.test(location.search), t: 0, ended: false, msg: {}, mis: [], mi: 0, hold: 0, crashT: 0, rpm: 0, camD: 34, coach: store.get('heliCoach') ? undefined : 0, cam: null, score: 0, combo: 1, lowT: 0, touches: 0, hard: 0, soft: 0, wasGround: true }; showGame(true); resetView(); G.cam = 0; camInit = false; WB.t = -1; }
+  function startFree(mode = '') { begin(); G.spyAir = true; if (A.post && A.post.setInk) A.post.setInk(0.55); lastMode = mode; F.mis = missions(mode); const b = F.base; if (mode === 'sar') { F.sar = true; F.coach = undefined; }
     if (mode === 'merz' && G.merz) { const o = G.merz.out, c = G.merz.center, a = Math.atan2(c.X - o.X, c.Y - o.Y), X = c.X + Math.sin(a) * 600, Y = c.Y + Math.cos(a) * 600;
       Hc.reset(X, Y, Math.max(H(X, Y), G.merz.top) + 150, a + Math.PI, false); Hc.load = 0; F.mi = 0; toast('Озеро Мерцбахера. Слышите? Это лёд'); return; }
     Hc.reset(b.X + 4, b.Y - 6, H(b.X + 4, b.Y - 6), G.khan ? Math.atan2(G.khan.poi.khan.X - b.X, G.khan.poi.khan.Y - b.Y) : 0, true); Hc.load = 0; F.mi = 0;
@@ -228,8 +232,8 @@ export function makeHeliMode(A) {
     if (F.sar) { SAR.begin(); return; }
     const cl = hoverCeiling(Hc.mass); toast(G.khan ? `База ${Math.round(b.z + 1607)} м · висеть можно до ${Math.round(cl)} м` : 'Ми-8 на площадке. Пробел — вверх, стрелки — наклон и поворот');
     setTimeout(() => { if (on) announce(); }, 4500); }
-  function stop() { if (!on) return; on = false; if (SAR) SAR.stop(); if (streak) streak.m.visible = false; winchDraw(null); M.root.visible = false; marks.visible = false; beacon.g.visible = false; reticle.visible = false; boom.m.visible = false; document.body.classList.remove('heli'); $('hwrap').hidden = true; camera.up.set(0, 1, 0);
-    $('hint').hidden = true; $('mark').hidden = true; audio.jet && audio.jet(0, 0, false); audio.airflow(0, 0, 0, false); input.hu = input.hd = false; if (prev) G.player = prev; F = null; }
+  function stop() { if (!on) return; on = false; G.spyAir = false; if (A.post && A.post.setInk) A.post.setInk(1); INK_U.uK.value = Math.max(0.75, INK_U.uRes.value.y / 720); if (SAR) SAR.stop(); if (AIRFX) AIRFX.hide(); if (streak) streak.m.visible = false; winchDraw(null); M.root.visible = false; marks.visible = false; beacon.g.visible = false; reticle.visible = false; boom.m.visible = false; document.body.classList.remove('heli'); $('hwrap').hidden = true; camera.up.set(0, 1, 0);
+    $('hint').hidden = true; $('mark').hidden = true; audio.jet && audio.jet(0, 0, false); audio.rotor && audio.rotor(1, 0, 0, 0, false); audio.airflow(0, 0, 0, false); input.hu = input.hd = false; if (prev) G.player = prev; F = null; }
 
   // ---- ветер Центрального Тянь-Шаня: слоями по высоте, как в настоящих горах ----
   //  * Свободная атмосфера -- западный перенос (с 260°): у дна долин ~3 м/с, на 5 км ~13, на 6-7 км -- 20-30 м/с
@@ -300,7 +304,7 @@ export function makeHeliMode(A) {
   function ctl() { let x = (input.right ? 1 : 0) - (input.left ? 1 : 0), y = (input.sin ? 1 : 0) - (input.flare ? 1 : 0);
     if (input.joy) { const j = input.joy, ex = (v) => (Math.abs(v) < 0.08 ? 0 : Math.sign(v) * Math.pow((Math.abs(v) - 0.08) / 0.92, 1.25)); x = ex(j.x); y = -ex(j.y); }
     const up = (input.bar || input.hu ? 1 : 0) - (input.shift || input.hd ? 1 : 0);
-    return { fwd: y, side: x, up }; }
+    return { fwd: y, side: x, up, strafe: (input.sr ? 1 : 0) - (input.sl ? 1 : 0) }; }
 
   function tick(dt) { if (!on) return; F.t += dt;
     if (Hc.crash) { crashTick(dt); return; }
@@ -333,26 +337,38 @@ export function makeHeliMode(A) {
 
   // ---- камера: за вертолётом, чуть сверху; на висении -- ближе, на скорости -- дальше ----
   let camInit = false;
-  const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-  function cam(dt) { if (camera.view && camera.view.enabled) camera.clearViewOffset();
+  const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a)), clampA = (v, a, b) => Math.max(a, Math.min(b, v)), sm2 = (a, b, x) => { const t = clampA((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  // расстояние до склона сбоку/впереди (для ощущения скорости у стены): лучи в 4 стороны на 30-80 м
+  function wallDist() { let best = 999; for (let k = 0; k < 6; k++) { const a = Hc.th + (k - 2.5) * 0.9; for (const r of [30, 55, 80]) if (H(Hc.X + Math.sin(a) * r, Hc.Y + Math.cos(a) * r) > Hc.Z - 8) { best = Math.min(best, r); break; } } return best; }
+  function cam(dt) { if (camera.view && camera.view.enabled) camera.clearViewOffset(); INK_U.uK.value = Math.max(0.75, INK_U.uRes.value.y / 720) * 0.55; // хребты с воздуха -- тонким пером if (M && !M.root.visible && on && !Hc.crash && F && F.spyHid) { M.root.visible = true; F.spyHid = false; }
     M.root.position.set(Hc.X, Hc.Z, -Hc.Y); M.root.rotation.set(0, 0, 0); M.root.rotateY(-Hc.th); M.root.rotateX(-Hc.pitch); M.root.rotateZ(-Hc.roll);
     F.rpm += ((Hc.crash ? 0 : Hc.ground && Hc.col < 0.05 && F.t < 2 ? 0.4 : Hc.rpm) - F.rpm) * Math.min(1, dt * 0.8); M.spin(dt, F.rpm); if (SAR && SAR.cam(dt)) { if (reticle) reticle.visible = false; return; }
     if (Hc.crash) { v3.set(Hc.X + 40, Hc.Z + 25, -Hc.Y + 40); camera.position.lerp(v3, Math.min(1, dt * 2)); camera.up.set(0, 1, 0); camera.lookAt(Hc.X, Hc.Z + 3, -Hc.Y); camera.updateProjectionMatrix(); return; }
-    // камера как у яхты: ходит по сфере вокруг машины (орбита пальцем/мышью, колесо -- дальше-ближе), за курсом поворачивает плавно,
-    // позиция жёстко привязана к вертолёту -- кадр не «уезжает» и не болтается; горизонт ровный, крен -- лёгким наклоном
-    if (!camInit) { F.cyaw = Hc.th; camInit = true; F.cam = null; } F.cyaw += wrapA(Hc.th - F.cyaw) * Math.min(1, dt * (1.2 + Math.min(1.2, Hc.speed * 0.03))); clook.set(Math.sin(F.cyaw), 0, -Math.cos(F.cyaw));
+    // камера полёта: сфера вокруг машины, как у яхты (орбита пальцем/мышью, колесо -- дальше-ближе), но живая:
+    //  * на скорости смотрит туда, куда машина ЛЕТИТ (между носом и вектором скорости) -- занос виден, нос «гуляет» в кадре;
+    //  * точка взгляда -- впереди по движению (look-ahead), камера на пружине с запаздыванием ~0.15 с: разгон оттягивает её назад;
+    //  * на скорости отъезжает и расширяет кадр (FOV 55 -> 70), рывок разгона -- короткий «удар» FOV;
+    //  * вираж наклоняет горизонт; тряска -- только от турбулентности, ЧР и пролёта у самого склона
+    const Vg = Hc.speed, vdir = Math.atan2(Hc.vx, Hc.vy), fl = sm2(12, 35, Vg);
+    if (!camInit) { F.cyaw = Hc.th; camInit = true; F.cam = null; }
+    const want = Hc.th + wrapA(vdir - Hc.th) * 0.6 * fl; F.cyaw += wrapA(want - F.cyaw) * Math.min(1, dt * (1.6 + 1.4 * fl)); clook.set(Math.sin(F.cyaw), 0, -Math.cos(F.cyaw));
     const tall = window.innerHeight / Math.max(1, window.innerWidth), wl = F.w && F.w.L > 1 && F.w.init ? (F.wl = Math.min(1, (F.wl || 0) + dt)) : (F.wl = Math.max(0, (F.wl || 0) - dt)); // лебёдка: камера выше, видно крюк и людей
-    F.camD += ((34 + Math.min(30, Hc.speed * 0.3)) * G.zoom * Math.min(1.7, Math.max(1, tall * 0.8)) - F.camD) * Math.min(1, dt * 1.5); const d = F.camD * (1 + 0.15 * wl);
-    const yaw = F.cyaw + G.orbit, el = Math.min(1.45, Math.max(-0.05, 0.2 + G.orbitP + 0.35 * wl)), ce = Math.cos(el), se = Math.sin(el), fx = Math.sin(yaw), fy = Math.cos(yaw);
-    const tx = Hc.X + Math.sin(Hc.th) * 6, ty = Hc.Y + Math.cos(Hc.th) * 6, tz = Hc.Z + 3; // смотрим чуть вперёд машины
-    v3.set(tx - fx * d * ce, tz + d * se, -(ty - fy * d * ce));
+    F.camD += ((32 + 22 * sm2(10, 70, Vg)) * G.zoom * Math.min(1.7, Math.max(1, tall * 0.8)) - F.camD) * Math.min(1, dt * 1.2); const d = F.camD * (1 + 0.15 * wl);
+    const yaw = F.cyaw + G.orbit, el = Math.min(1.45, Math.max(-0.05, 0.19 - 0.05 * fl + G.orbitP + 0.35 * wl)), ce = Math.cos(el), se = Math.sin(el), fx = Math.sin(yaw), fy = Math.cos(yaw);
+    const la = Math.min(1, 0.9 * fl), tx = Hc.X + clampA(Hc.vx * 0.8, -50, 50) * la + Math.sin(Hc.th) * 5, ty = Hc.Y + clampA(Hc.vy * 0.8, -50, 50) * la + Math.cos(Hc.th) * 5, tz = Hc.Z + 3; // смотрим вперёд по движению
+    v3.set(Hc.X - fx * d * ce, tz + d * se, -(Hc.Y - fy * d * ce));
     const gy = Math.max(0, H(v3.x, -v3.z)) + 6; F.cgy = Math.max(gy, (F.cgy || gy) + (gy - (F.cgy || gy)) * Math.min(1, dt * 4)); if (v3.y < F.cgy) v3.y = F.cgy; // склон под камерой -- приподнимаем плавно
-    const sh = Hc.shake * 0.25 + Math.max(0, G.shake) * 0.5, jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh; G.shake = Math.max(0, G.shake - dt * 1.4);
-    camera.position.copy(v3); camera.position.x += jx; camera.position.y += jy; camera.up.set(0, 1, 0);
+    // пружина: относительно машины (иначе на 70 м/с камера отстаёт на десятки метров) -- запаздывание чувствуется только при рывках
+    const rel = F.crel || (F.crel = new THREE.Vector3()), tgt = v3.clone().sub(M.root.position); if (!F.cam) rel.copy(tgt); else rel.lerp(tgt, Math.min(1, dt * 6)); F.cam = true;
+    // у склона на скорости: лёгкая дрожь и шире кадр -- скорость видна по близкой стене
+    const near = Vg > 25 ? sm2(90, 25, Math.min(Hc.agl, wallDist())) : 0; F.near = (F.near || 0) + (near - (F.near || 0)) * Math.min(1, dt * 3);
+    const sh = Hc.shake * 0.22 + Math.max(0, G.shake) * 0.5 + F.near * 0.12 + (Hc.tb || 0) * 0.15, jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh; G.shake = Math.max(0, G.shake - dt * 1.4);
+    camera.position.copy(M.root.position).add(rel); camera.position.x += jx; camera.position.y += jy; camera.up.set(0, 1, 0);
     cpos.set(tx, tz + (tall > 1.2 ? -2 : 1), -ty); if (wl > 0 && F.w) cpos.lerp(v3.set(F.w.p[0], F.w.p[2], -F.w.p[1]), 0.4 * wl); camera.lookAt(cpos);
-    F.croll = (F.croll || 0) + (Hc.roll * 0.18 * Math.cos(G.orbit) - (F.croll || 0)) * Math.min(1, dt * 3); camera.rotateZ(-F.croll); // вираж чуть наклоняет горизонт
-    const acc = Math.hypot(Hc.vx - (F.pvx ?? Hc.vx), Hc.vy - (F.pvy ?? Hc.vy)) / Math.max(dt, 1e-3); F.pvx = Hc.vx; F.pvy = Hc.vy; F.kick = Math.max((F.kick || 0) - dt * 1.5, Math.min(1, acc / 6));
-    camera.fov += (55 + Math.min(6, Hc.speed * 0.08) + F.kick * 2 - camera.fov) * Math.min(1, dt * 2); camera.updateProjectionMatrix();
+    F.croll = (F.croll || 0) + (Hc.roll * 0.22 * Math.cos(G.orbit) - (F.croll || 0)) * Math.min(1, dt * 3); camera.rotateZ(-F.croll); // вираж наклоняет горизонт
+    const acc = Math.hypot(Hc.ax || 0, Hc.ay || 0); F.kick = Math.max((F.kick || 0) - dt * 1.5, Math.min(1, Math.max(0, acc - 3) / 4) * (Hc.pitch < -0.1 ? 1 : 0));
+    camera.fov += (55 + 15 * sm2(15, 75, Vg) + F.kick * 3 + F.near * 4 + Hc.cr * 3 - camera.fov) * Math.min(1, dt * 2); camera.updateProjectionMatrix();
+    if (AIRFX) AIRFX.tick(dt, Hc, wind(Hc.X, Hc.Y, Hc.Z), camera);
     // прицел посадки на земле
     if (reticle) { const show = !Hc.crash && Hc.agl < 120 && Hc.agl > 0.8; reticle.visible = show; if (show) { const gz = H(Hc.X, Hc.Y), mi = F.mis[F.mi], d = mi ? Math.hypot(Hc.X - mi.to.X, Hc.Y - mi.to.Y) : 99, sc = 14 + Hc.agl * 0.12;
       reticle.position.set(Hc.X, gz + 0.4, -Hc.Y); reticle.scale.set(sc, sc, 1); reticle.material.color.setHex(d < 5 ? 0x6cff7a : d < 15 ? 0xffe14a : 0xffffff); reticle.material.opacity = 0.35 + 0.5 * (1 - Hc.agl / 120); } } }
@@ -360,8 +376,23 @@ export function makeHeliMode(A) {
 
   // ---- приборы: скорость, высоты, вертикальная, масса и запас тяги, обороты, топливо ----
   let hudT = 0;
+  // вектор полёта: вид сверху, «вверх» -- куда смотрит камера. Белый силуэт -- нос, оранжевая стрелка -- куда машина
+  // реально летит (длина -- скорость), голубая -- ветер. Видно занос и снос: нос повернул, а машина ещё идёт по-старому
+  function vec() { const cv = $('hvec'); if (!cv) return; const hh = $('hhud').getBoundingClientRect(), phone = window.innerWidth <= 640; cv.hidden = phone || TOUCH || Hc.crash || document.body.classList.contains('sardr');
+    if (cv.hidden) return; cv.style.left = '16px'; cv.style.bottom = '16px'; cv.style.top = 'auto';
+    const x = cv.getContext('2d'), R = 90, cyaw = Math.atan2(clook.x, -clook.z) + G.orbit; x.clearRect(0, 0, 180, 180); x.save(); x.translate(90, 90);
+    x.fillStyle = 'rgba(8,22,48,.55)'; x.beginPath(); x.arc(0, 0, R - 2, 0, 7); x.fill(); x.strokeStyle = 'rgba(255,255,255,.25)'; x.lineWidth = 2; for (const r of [30, 60]) { x.beginPath(); x.arc(0, 0, r, 0, 7); x.stroke(); }
+    const arrow = (a, L, c, w) => { x.save(); x.rotate(a); x.strokeStyle = c; x.fillStyle = c; x.lineWidth = w; x.lineCap = 'round'; x.beginPath(); x.moveTo(0, 0); x.lineTo(0, -L); x.stroke(); x.beginPath(); x.moveTo(0, -L - 10); x.lineTo(8, -L + 4); x.lineTo(-8, -L + 4); x.closePath(); x.fill(); x.restore(); };
+    const wv = WB.U || 0; if (wv > 1) arrow(Math.atan2(WB.x, WB.y) - cyaw, Math.min(70, 14 + wv * 2.2), 'rgba(110,190,255,.85)', 4);
+    const V = Hc.speed; if (V > 1) arrow(Math.atan2(Hc.vx, Hc.vy) - cyaw, Math.min(78, 12 + V * 0.95), '#ff8a2a', 7);
+    x.save(); x.rotate(Hc.th - cyaw); x.fillStyle = '#fff'; x.strokeStyle = '#0b1a33'; x.lineWidth = 3; x.beginPath(); x.moveTo(0, -24); x.lineTo(9, 10); x.lineTo(0, 5); x.lineTo(-9, 10); x.closePath(); x.stroke(); x.fill(); x.restore();
+    x.font = '700 22px system-ui,sans-serif'; x.textAlign = 'center'; x.fillStyle = Hc.hov > 0.5 && V < 3 ? '#9fe0a0' : '#ffd27a';
+    const st = Hc.ground ? 'НА ЗЕМЛЕ' : Hc.hov > 0.5 && V < 3 ? 'ВИСЕНИЕ' : Math.abs(Hc.slip) > 0.25 && V > 12 ? 'ЗАНОС' : ''; if (st) x.fillText(st, 0, 78); x.restore(); }
+  // отладка лётной модели: ` (обратная кавычка) или ?helidbg
+  function dbg() { const el = $('hdbg'); if (!F.dbg) { el.hidden = true; return; } el.hidden = false; const w = wind(Hc.X, Hc.Y, Hc.Z), f = (v, n = 1) => (+v || 0).toFixed(n);
+    el.textContent = `V ${f(Hc.speed)} м/с  vx ${f(Hc.vx)} vy ${f(Hc.vy)} vz ${f(Hc.vz)}\nнос ${f(Hc.th * 57.3 % 360, 0)}°  движение ${f(Math.atan2(Hc.vx, Hc.vy) * 57.3, 0)}°  занос ${f(Hc.slip * 57.3, 0)}°\nтангаж ${f(Hc.pitch * 57.3)}°  крен ${f(Hc.roll * 57.3)}° (вираж ${f(Hc.bank * 57.3)})  рыск ${f(Hc.yr, 2)} рад/с\nускор ${f(Hc.ax)} / ${f(Hc.ay)} м/с²\nветер ${f(w.x)} / ${f(w.y)} / ${f(w.z)}  порыв ${f(w.gx || 0)}/${f(w.gy || 0)}  болт ${f(w.tb, 2)}\nвисение ${f(Hc.hov, 2)}  автомат ${f(Hc.assistA, 2)} м/с²  интеграл ${f(Hc.iF, 2)} / ${f(Hc.iS, 2)}\nшаг ${f(Hc.col, 2)}  запрос ${f(Hc.dem, 2)}  тяга/вес ${f(Hc.Tmax / (Hc.mass * 9.81), 2)}  σ ${f(Hc.sig, 2)}  ETL ${f(Hc.etl, 2)}`; }
   function hud(dt) { if (!on) return; if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; }
-    pointMark(); if (F.sar) SAR.hud(); hudT -= dt; if (hudT > 0) return; hudT = 0.1;
+    pointMark(); if (F.sar) SAR.hud(); vec(); hudT -= dt; if (hudT > 0) return; hudT = 0.1; dbg();
     const kmh = Math.round(Hc.speed * 3.6), alt = Math.round(Hc.Z + 1607), agl = Math.round(Math.max(0, Hc.agl)), m = Hc.mass, tw = Hc.Tmax / (m * 9.81), pw = Math.min(1.15, Hc.power);
     const cls = pw > 1 ? 'red' : pw > 0.92 ? 'hot' : '';
     $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>км/ч</small></div><div class="r"><b>${alt}</b> м<span class="lg"> над морем</span> · ${agl} м<span class="lg"> над землёй</span> · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)} м/с</div>
@@ -393,8 +424,11 @@ export function makeHeliMode(A) {
     const half = Math.max(40, mk.offsetWidth / 2 + 8), cx = clamp(mx, half, w - half), cy = clamp(my, 150, hh - (hh > w ? 320 : 150)), off = behind || cx !== mx || cy !== my; mk.hidden = false; mk.className = 'hud' + (off ? ' off' : ''); mk.style.transform = `translate(${cx}px,${cy}px) translate(-50%,-100%)`;
     if (G.frame % 6 === 0) { const d = Math.hypot(tg[0] - Hc.X, tg[1] - Hc.Y), lab = off ? '' : (mi.to.name || 'цель') + ' · ', t = `${off && cx < w / 2 ? '◀ ' : ''}${lab}${d >= 1000 ? (d / 1000).toFixed(1) + ' км' : Math.round(d) + ' м'}${off && cx > w / 2 ? ' ▶' : ''}`; if ($('markd').textContent !== t) $('markd').textContent = t; } }
   // звук: турбины по шагу, свист винта -- по оборотам, поток -- по скорости
-  function sound() { if (!on) return; audio.jet && audio.jet(Hc.crash ? 0 : 0.45 + 0.4 * Math.min(1, Hc.power), 40 + Hc.speed * 0.6 * F.rpm, !Hc.crash); audio.airflow(Math.min(60, 12 + Hc.speed * 0.4), Math.min(1, Hc.shake), 0, !Hc.crash); }
+  // звук: «чоп» несущего винта (нагрузка, шлепок в вираже/вихревом кольце/болтанке), турбины, поток -- по скорости, болтанка -- рывками
+  function sound() { if (!on) return; const slap = Math.max(Hc.vrs, Math.max(0, Math.abs(Hc.roll) - 0.25) * 1.6, (Hc.tb || 0) * 0.6, Math.max(0, Hc.col - 0.95) * 4);
+    if (audio.rotor) audio.rotor(F.rpm, Hc.crash ? 0 : Hc.col, Hc.speed, slap, !Hc.crash); else audio.jet && audio.jet(Hc.crash ? 0 : 0.45 + 0.4 * Math.min(1, Hc.power), 40 + Hc.speed * 0.6 * F.rpm, !Hc.crash);
+    audio.airflow(Math.min(60, 6 + Hc.speed * 0.55), Math.min(1, Hc.shake + (Hc.tb || 0) * 0.5), 0, !Hc.crash); }
 
-  return { get on() { return on; }, get heli() { return Hc; }, get F() { return F; }, get sar() { return SAR; }, startFree, stop, tick, camera: cam, hud, sound, resetCam,
+  return { spyEye() { if (M.root.visible) { M.root.visible = false; F.spyHid = true; } return { eyeW: [Hc.X, Hc.Z + 0.5, -Hc.Y], phi: Hc.roll * 0.4, p: Hc.shake * 0.3 + (Hc.tb || 0) * 0.4 }; }, get on() { return on; }, get heli() { return Hc; }, get F() { return F; }, get sar() { return SAR; }, startFree, stop, tick, camera: cam, hud, sound, resetCam,
     restart() { startFree(lastMode); }, again() { $('result').hidden = true; if (SAR) SAR.stop(); startFree(lastMode); } };
 }

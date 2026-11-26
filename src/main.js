@@ -153,7 +153,7 @@ async function init() {
   await late('пляж', () => { G.beach = makeBeach({ G, scene, camera, audio, toast }); G.finds = makeFinds({ G, scene, camera, beach: G.beach, audio, toast, store, ach: X.ach, onTake: (k) => FT && FT.found(k) }); });
   await late('пеший режим', () => { FT = makeFootMode({ G, scene, camera, $, input, audio, toast, TOUCH, beach: G.beach, store, ach: X.ach, finds: G.finds }); $('bfoot').onclick = () => footKey(); $('rfoot').onclick = () => footKey(); });
   await late('Як-130', () => { JM = makeJetMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt }); });
-  await late('Ми-8', () => { HM = makeHeliMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, net: () => X && X.net }); });
+  await late('Ми-8', () => { HM = makeHeliMode({ G, scene, camera, post, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, net: () => X && X.net }); });
   await late('параплан', () => { PG = makeParaMode({ G, scene, camera, $, store, toast, audio, TOUCH, input, ach: X.ach, showGame, resetView, fmt, lens }); });
   await loadStep(86, 'Рисуем облака…');
   const cap = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(r, ms))]); // не ждём вечно, если поток не ответил
@@ -385,7 +385,7 @@ function finishRace() {
 }
 
 // ---------- ввод ----------
-const KEY = { ShiftLeft: 'shift', ShiftRight: 'shift', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'ease', ArrowDown: 'ease', KeyS: 'ease', ArrowUp: 'sin', KeyW: 'sin' };
+const KEY = { ShiftLeft: 'shift', ShiftRight: 'shift', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'ease', ArrowDown: 'ease', KeyS: 'ease', ArrowUp: 'sin', KeyW: 'sin', KeyQ: 'sl', KeyE: 'sr' }; // Q/E -- вертолёт: боковое смещение
 window.addEventListener('keydown', (e) => {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return; // печатают имя -- не рулим
   if (e.code === 'Space') input.bar = true; if (e.code === 'ArrowDown' || e.code === 'KeyS') input.flare = true; // параплан: акселератор и обе клеванты
@@ -713,7 +713,7 @@ function envTick(b) {
 }
 
 function updateCamera(dt, b, sp) {
-  if (SPY && SPY.on && G.mode !== 'menu') { SPY.place(dt, b); G.sky.position.copy(camera.position); return; } // вид в подзорную трубу
+  if (SPY && SPY.on && G.mode !== 'menu') { SPY.place(dt, G.spyAir && AIR() && AIR().spyEye ? AIR().spyEye() : b); G.sky.position.copy(camera.position); return; } // вид в подзорную трубу
   if (FT && FT.on) { FT.camera(dt); G.sky.position.copy(camera.position); return; }
   if (PG && PG.on) { PG.camera(dt); G.sky.position.copy(camera.position); return; }
   if (AIR()) { AIR().camera(dt); G.sky.position.copy(camera.position); return; }

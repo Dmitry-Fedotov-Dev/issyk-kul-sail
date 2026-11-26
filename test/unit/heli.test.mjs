@@ -51,3 +51,18 @@ test('висение на ветру: отпустил ручку -- держи�
   const hl = new Heli().reset(0, 0, 300, 0, false); run(hl, 40, {}, flat(0), () => ({ x: 8, y: -5, z: 0 }));
   assert.ok(Math.hypot(hl.X, hl.Y) < 15, `снос ${Math.hypot(hl.X, hl.Y).toFixed(1)} м`);
 });
+test('высоко (5900 м): ручка вперёд разгоняет до 200 км/ч, а не «висит»', () => {
+  const Z0 = 5900 - 1607, hl = new Heli().reset(0, 0, Z0, 0, false); run(hl, 20, { fwd: 1 }, () => Z0 - 400);
+  assert.ok(hl.speed * 3.6 > 200, 'км/ч ' + (hl.speed * 3.6).toFixed(0));
+});
+test('вираж на скорости: скорость сохраняется, движение догоняет нос с заносом', () => {
+  const Z0 = 3000, hl = new Heli().reset(0, 0, Z0, 0, false), fl = () => Z0 - 400; run(hl, 10, { fwd: 1 }, fl); const v0 = hl.speed; let ms = 0;
+  run(hl, 5, (q) => { ms = Math.max(ms, Math.abs(q.slip)); return { fwd: 1, side: 1 }; }, fl);
+  const dir = Math.atan2(hl.vx, hl.vy); assert.ok(hl.speed > v0 * 0.85, `${v0.toFixed(0)} -> ${hl.speed.toFixed(0)}`); assert.ok(dir > 1.2, 'повернул: ' + dir.toFixed(2)); assert.ok(ms > 0.15 && ms < 0.7, 'занос ' + ms.toFixed(2));
+});
+test('ветер: 13 м/с автомат висения держит, 28 м/с -- сносит (держать ручкой)', () => {
+  const Z0 = 3000, fl = () => Z0 - 400, a = new Heli().reset(0, 0, Z0, 0, false), b = new Heli().reset(0, 0, Z0, 0, false);
+  run(a, 30, {}, fl, () => ({ x: 13, y: 0, z: 0 })); run(b, 30, {}, fl, () => ({ x: 28, y: 0, z: 0 }));
+  assert.ok(Math.abs(a.X) < 10, 'слабый снос ' + a.X.toFixed(0)); assert.ok(b.X > 60, 'сильный снос ' + b.X.toFixed(0));
+  const c = new Heli().reset(0, 0, Z0, 0, false); run(c, 30, (q) => ({ strafe: q.X > 0 ? -1 : 0 }), fl, () => ({ x: 28, y: 0, z: 0 })); assert.ok(Math.abs(c.X) < 40, 'ручкой удержал: ' + c.X.toFixed(0));
+});
