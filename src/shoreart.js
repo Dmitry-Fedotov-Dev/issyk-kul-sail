@@ -6,6 +6,7 @@
 // Урез озера и дороги -- тушью, тем же пером, что гребни гор (ridges.js): тонкая линия постоянной толщины на экране.
 import * as THREE from 'three';
 import { HOUSES, TREES, ROADS } from './shoredata.js';
+import { ROAD_ASPHALT, ROAD_DIRT } from './roaddata.js';
 import { FOREST_PTS } from './forestdata.js';
 import { CURVE, END, ENV, GLSL_COMMON } from './world.js';
 import { makeInk, inkMaterial, INK_U } from './ridges.js';
@@ -94,6 +95,21 @@ void main(){ vec3 c=(instanceMatrix*vec4(0.,0.,0.,1.)).xyz; float sx=length(inst
 void main(){ float d=length(vU), a=(1.-smoothstep(0.55,1.,d))*0.32*uSunI*(1.-uStorm)*smoothstep(0.2,0.6,uDay)*vF; if(a<0.01) discard; gl_FragColor=vec4(0.08,0.1,0.18,a); }` });
 }
 
+// полотна дорог Чолпон-Аты (OpenStreetMap, tools/town-roads.mjs): асфальт и грунтовки лентами по рельефу. Точки -- через ~8 м,
+// чтобы лента повторяла склон; высота -- рельеф + 0.15 м и сдвиг глубины к камере (не тонет в сетке рельефа).
+// Кривизна Земли -- та же, что у рельефа и домов (CURVE): вдали полотно не повисает над землёй
+function roadSurface(str, h, color, lift) { const pos = [], idx = []; let n = 0;
+  for (const s of str.split(';')) { const [w2, rest] = s.split(':'), v = rest.split(',').map(Number), w = +w2 / 4, P = [];
+    for (let i = 0; i + 1 < v.length; i += 2) P.push([v[i] * 2, v[i + 1] * 2]); if (P.length < 2) continue;
+    const Q = [P[0]]; for (let i = 1; i < P.length; i++) { const [a, b] = Q[Q.length - 1], [c, d] = P[i], L = Math.hypot(c - a, d - b), k = Math.ceil(L / 8); for (let j = 1; j <= k; j++) Q.push([a + (c - a) * j / k, b + (d - b) * j / k]); }
+    for (let i = 0; i < Q.length; i++) { const a = Q[Math.max(0, i - 1)], b = Q[Math.min(Q.length - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L * w, ny = dx / L * w, [X, Y] = Q[i];
+      for (const sg of [1, -1]) { const x = X + nx * sg, y = Y + ny * sg; pos.push(x, Math.max(0.2, h(x, y)) + lift, -y); }
+      if (i) idx.push(n - 2, n, n - 1, n - 1, n, n + 1); n += 2; } }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(n > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1)); g.computeVertexNormals(); g.computeBoundingSphere();
+  const m = new THREE.MeshLambertMaterial({ color, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6, side: THREE.DoubleSide });
+  m.onBeforeCompile = (sh) => { sh.vertexShader = CURVE + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed.y -= curve(transformed);'); };
+  const mesh = new THREE.Mesh(g, m); mesh.renderOrder = 0; mesh.receiveShadow = true; return mesh; }
+
 export function makeShoreArt(scene, h) {
   const g = new THREE.Group(), H = i16(HOUSES), T = i16(TREES), nH = H.length / 6, nT = T.length / 4;
   const geo = new THREE.PlaneGeometry(1, 1.06); geo.translate(0, 0.47, 0); // по высоте от -0.06 (низ эллипса) до 1
@@ -122,6 +138,7 @@ export function makeShoreArt(scene, h) {
       const e = 3, X = r[0], Y = r[2]; N.set(h(X - e, Y) - h(X + e, Y), 2 * e, -(h(X, Y - e) - h(X, Y + e))).normalize(); aN.set([N.x, N.y, N.z], i * 3); });
     mesh.geometry.setAttribute('aN', new THREE.InstancedBufferAttribute(aN, 3)); mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 60; mesh.renderOrder = 1; sprites.add(mesh); }
   g.add(sprites);
+  g.add(roadSurface(ROAD_DIRT, h, 0x8c6a42, 0.12)); g.add(roadSurface(ROAD_ASPHALT, h, 0x4c4f55, 0.16)); // грунтовки, поверх -- асфальт
   // ---- тушь: урез (двойной: берег тёмным, полоса прибоя на воде светлым) и дороги
   const lines = (lv, x0, x1, y0, y1, st) => { const nx = Math.round((x1 - x0) / st), ny = Math.round((y1 - y0) / st), v = new Float32Array((nx + 1) * (ny + 1));
     for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) v[j * (nx + 1) + i] = h(x0 + i * st, y0 + j * st);
