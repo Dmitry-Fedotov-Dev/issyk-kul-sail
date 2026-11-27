@@ -157,6 +157,17 @@ export function makeCase(code, h, opt = {}) {
   for (let i = 0; i <= legIdx; i++) { const L = legLen(i), n = Math.max(1, Math.floor(L / 900)), fmax = i < legIdx ? 1 : 0.3;
     for (let j = 1; j <= n; j++) { const f = (j / (n + 1)) * fmax; if (f <= 0.02) continue; const P = lerpP([pts[i].X, pts[i].Y], [pts[i + 1].X, pts[i + 1].Y], f); clues.push({ k: 'wand', X: P[0] + (r() - 0.5) * 30, Y: P[1] + (r() - 0.5) * 30, t: `Вешка с оранжевой лентой группы — шли здесь (день ${i + 1})`, day: i + 1 }); } }
   for (let i = 1; i <= legIdx; i++) clues.push({ k: 'note', X: pts[i].X + (r() - 0.5) * 30, Y: pts[i].Y + (r() - 0.5) * 30, t: `Запись в журнале лагеря «${pts[i].n}»: «День ${i}, группа ${group[0].name} — все в порядке, идём выше»`, day: i, camp: 1 });
+  // туры (каменные пирамидки) -- общие ориентиры маршрута всех групп: видно, где тропа; о пропавших не говорят (marker)
+  for (let i = 0; i < pts.length - 1; i++) { const L = legLen(i), n = Math.max(1, Math.round(L / 650)); for (let j = 1; j <= n; j++) { const P = lerpP([pts[i].X, pts[i].Y], [pts[i + 1].X, pts[i + 1].Y], (j - 0.5) / n + (r() - 0.5) * 0.08);
+    clues.push({ k: 'cairn', X: P[0] + (r() - 0.5) * 20, Y: P[1] + (r() - 0.5) * 20, t: `Тур на маршруте дня ${i + 1} — тропа здесь. Сложен давно, общий для всех групп`, marker: 1 }); } }
+  // в части туров группа оставила свой флажок (след), а в туре у лагеря -- записку с датой и временем (дату подставит дело)
+  { let k = 0; for (const q of clues) if (q.k === 'wand' && k++ % 2 === 1) { q.k = 'cairnflag'; q.t = `Тур с оранжевым флажком группы ${group[0].name} — шли здесь (день ${q.day})`; } }
+  for (let i = 0; i <= legIdx; i++) { const f = i < legIdx ? 0.85 : 0.25, P = lerpP([pts[i].X, pts[i].Y], [pts[i + 1].X, pts[i + 1].Y], f), hr = 9 + Math.floor(r() * 6) + (i < legIdx ? 4 : 0) + r() * 0.9;
+    clues.push({ k: 'cairnnote', X: P[0] + (r() - 0.5) * 25, Y: P[1] + (r() - 0.5) * 25, day: i + 1, hr, dated: 1, t: `Записка в туре: «Группа ${group[0].name}, ${group.length} чел. {date}. Идём на «${pts[i + 1].n}», все в порядке»` }); }
+  // провешенный путь: цепочка вешек через ~25 м -- группа обходила трещины, уходя с тропы к месту происшествия: показывает направление
+  if (t.zone) { const s0 = lerpP([pts[legIdx].X, pts[legIdx].Y], [pts[legIdx + 1].X, pts[legIdx + 1].Y], 0.35), dx = t.zone.X - s0[0], dy = t.zone.Y - s0[1], D = Math.hypot(dx, dy);
+    if (D > 120) { const len = Math.min(D * 0.6, 420), path = []; for (let d = 0; d <= len; d += 25) path.push([s0[0] + dx / D * d + Math.sin(d / 60) * 6, s0[1] + dy / D * d + Math.cos(d / 70) * 6]);
+      const mid = path[path.length >> 1]; clues.push({ k: 'wandline', X: mid[0], Y: mid[1], path, day: legIdx + 1, t: `Провешенный путь: вешки группы через 25 м уходят с тропы — обходили трещины, шли к месту, где что-то случилось` }); } }
   for (const q of t.clues) clues.push({ ...q, key: 1 });
   const nFake = 1 + Math.floor(r() * 2); for (let i = 0; i < nFake; i++) { const li = Math.floor(r() * (pts.length - 1)), P = around(r, lerpP([pts[li].X, pts[li].Y], [pts[li + 1].X, pts[li + 1].Y], r()), 250);
     clues.push({ k: ['pack', 'tent', 'glove'][Math.floor(r() * 3)], X: P[0], Y: P[1], t: ['Выцветший рюкзак — лежит здесь не первый год. Не наш', 'Рваная старая палатка, вмёрзла в лёд. Это чужая, давняя', 'Старая перчатка, истлевшая. Не по нашему делу'][Math.floor(r() * 3)], fake: 1 }); }

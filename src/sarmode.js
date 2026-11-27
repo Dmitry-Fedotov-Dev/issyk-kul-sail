@@ -55,7 +55,7 @@ const MON = ['января', 'февраля', 'марта', 'апреля', 'м
 const dateOf = (day, wd = false) => { const d = new Date(START + Math.floor(day) * 86400000); return `${d.getUTCDate()} ${MON[d.getUTCMonth()]}${wd ? ', ' + WD[d.getUTCDay()] : ''}`; };
 const hhmm = (h) => { const x = ((h % 24) + 24) % 24; return `${String(Math.floor(x)).padStart(2, '0')}:${String(Math.floor(x % 1 * 60)).padStart(2, '0')}`; };
 const QC = '<svg class="qc" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M7.5 7.5l9 9M16.5 7.5l-9 9"/><circle cx="5" cy="5" r="3.2"/><circle cx="19" cy="5" r="3.2"/><circle cx="5" cy="19" r="3.2"/><circle cx="19" cy="19" r="3.2"/><rect x="9.6" y="9.6" width="4.8" height="4.8" rx="1" fill="currentColor"/></svg>'; // квадрокоптер: X-рама, четыре винта
-const CLUEICON = { wand: '🚩', note: '📝', tent: '⛺', pole: '🦯', glove: '🧤', debris: '❄', rope: '〰', pack: '🎒', axe: '⛏', track: '👣', cave: '🕳', cornice: '⚠', helmet: '⛑', rocks: '🪨', mirror: '✨', wrap: '🍫', bivy: '💤' };
+const CLUEICON = { cairn: '🗿', cairnflag: '🚩', cairnnote: '📜', wandline: '🚩',  wand: '🚩', note: '📝', tent: '⛺', pole: '🦯', glove: '🧤', debris: '❄', rope: '〰', pack: '🎒', axe: '⛏', track: '👣', cave: '🕳', cornice: '⚠', helmet: '⛑', rocks: '🪨', mirror: '✨', wrap: '🍫', bivy: '💤' };
 
 export function makeSar(K) {
   const { G, scene, camera, $, store, toast, audio, TOUCH, input, H } = K;
@@ -102,6 +102,7 @@ export function makeSar(K) {
     { const D0 = G.day || 0, alarmAbs = D0 * 24 + alarm, incAbs = alarmAbs - c.since / 60, incDay = Math.floor(incAbs / 24), day1 = incDay - c.legIdx, startAbs = alarmAbs + wait / 60;
       const L = c.last, contactAbs = L.kind === 'ping' ? incAbs : L.kind === 'radio' ? (L.camp ? (day1 + L.camp - 1) * 24 + 19.3 : day1 * 24 + 7) : null;
       c.cal = { day1, alarmAbs, startAbs, contactAbs, incDay }; G.day = Math.floor(startAbs / 24); }
+    for (const q of c.clues) if (q.dated && q.t.includes('{date}')) q.t = q.t.replace('{date}', `${dateOf(c.cal.day1 + q.day - 1)}, ${hhmm(q.hr)}`); // записки в турах -- с настоящей датой
     if (wait) { c.since += wait; for (const v of c.victims) { v.left = Math.max(0, v.left - wait); v.alive0 = v.left > 0; } }
     G.clock = wait ? 6.5 : alarm;
     for (const v of c.victims) { v.foundT = undefined; v.saved = false; v.kit = 0; v.dead = false; v.inEvac = false; }
@@ -151,13 +152,21 @@ export function makeSar(K) {
 
   // ---- мир: улики, люди (спрайты), следы ----
   const iconTex = new Map();
+  // тур: 3-4 плоских камня горкой ~1.3 м; с флажком группы -- шест с оранжевой лентой (видно сверху и в фотоаппарат)
+  const stoneGeo = new THREE.DodecahedronGeometry(0.5, 0), stoneMat = new THREE.MeshLambertMaterial({ color: 0x6b6660, flatShading: true }), poleMat = new THREE.MeshBasicMaterial({ color: 0x2a2a2a }), tapeMat = new THREE.MeshBasicMaterial({ color: 0xff6a14, side: THREE.DoubleSide });
+  function cairnMesh(flag, seed) { const g = new THREE.Group(); let y = 0; for (let i = 0; i < 4; i++) { const k = 1 - i * 0.2, st = new THREE.Mesh(stoneGeo, stoneMat); st.scale.set(1.4 * k, 0.55 * k, 1.2 * k); st.position.y = y + 0.25 * k; st.rotation.y = (seed * 1.7 + i) % 6; y += 0.42 * k; g.add(st); }
+    if (flag) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.8, 5), poleMat); p.position.y = y + 0.8; const t = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.35), tapeMat); t.position.set(0.36, y + 1.5, 0); g.add(p, t); } return g; }
+  // вешка провешенного пути: тонкий шест 1.6 м с лентой
+  function wandMesh() { const g = new THREE.Group(), p = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.6, 4), poleMat), t = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.32), tapeMat); p.position.y = 0.8; t.position.set(0.35, 1.42, 0); g.add(p, t); return g; }
   function clueSprite(q) { let t = iconTex.get(q.k); if (!t) { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); x.font = '46px serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(CLUEICON[q.k] || '•', 32, 36); t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; iconTex.set(q.k, t); }
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); const sz = q.big ? 4 : 1.6; s.scale.set(sz, sz, 1); s.center.set(0.5, 0.1); return s; }
   function worldObjects() { stopWorld(); const c = S.c, root = new THREE.Group(); scene.add(root); S.root = root;
     for (const q of c.clues) { if (q.k === 'debris') { // лавинный вынос: комья снега пятном вдоль ската
         const cv = document.createElement('canvas'); cv.width = cv.height = 128; const x = cv.getContext('2d'); for (let i = 0; i < 260; i++) { const r = 2 + Math.random() * 7, px = 64 + (Math.random() - 0.5) * 110 * Math.random() ** 0.5, py = 64 + (Math.random() - 0.5) * 120; x.fillStyle = `rgba(${200 + Math.random() * 40},${210 + Math.random() * 35},${230 + Math.random() * 25},0.85)`; x.beginPath(); x.arc(px, py, r, 0, 7); x.fill(); x.strokeStyle = 'rgba(90,110,150,.35)'; x.stroke(); }
         const t = new THREE.CanvasTexture(cv), m = new THREE.Mesh(new THREE.PlaneGeometry(150, 260), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6 })); m.rotation.order = 'YXZ'; m.rotation.y = Math.atan2(q.dir[0], q.dir[1]); m.rotation.x = -Math.PI / 2; m.position.set(q.X, H(q.X, q.Y) + 2, -q.Y); root.add(m); }
-      if (q.path && q.k === 'track') root.add(footprints(q.path)); // цепочка следов -- отпечатки на снегу, а не тёмная линия
+      if (q.path && q.k === 'track') root.add(footprints(q.path));
+      if (q.k === 'cairn' || q.k === 'cairnflag' || q.k === 'cairnnote') { const g = cairnMesh(q.k !== 'cairn', q.id); g.scale.setScalar(1.6); g.position.set(q.X, H(q.X, q.Y), -q.Y); root.add(g); q.spr = g; continue; } // тур -- камнями, не значком
+      if (q.k === 'wandline' && q.path) { const g = new THREE.Group(); for (const [X, Y] of q.path) { const w = wandMesh(); w.scale.setScalar(1.8); w.position.set(X, H(X, Y), -Y); g.add(w); } root.add(g); q.spr = g; continue; } // цепочка следов -- отпечатки на снегу, а не тёмная линия
       const s = clueSprite(q); s.position.set(q.X, H(q.X, q.Y), -q.Y); root.add(s); q.spr = s; }
     for (const v of c.victims) { const fr = ['goth0', 'goth1', 'goth2', 'goth3', 'goth4', 'blond0', 'blond1', 'blond2', 'blond3', 'blond4'][v.frame % 10], s = K.personSprite(fr);
       if (v.pose === 'lie' || !v.alive0) { s.material.rotation = Math.PI / 2; s.center.set(0.5, 0.5); } if (v.pose === 'sit') s.scale.y *= 0.62; if (!v.alive0) s.material.color.setHex(0x8a96a8);
@@ -197,7 +206,7 @@ export function makeSar(K) {
   // Зум приближает: дальность обнаружения растёт как 1 + 0.4·(зум − 1) (24× -- примерно в 10 раз), но сквозь склон не видно.
   // Каждый кадр -- в фотоархив дела: миниатюра, время, зум, высота и подписи ко всему, что в кадре.
   // тип объекта для подписи снимка -- по виду улики (не выдумываем: только то, что есть в деле)
-  const CTYPE = { track: 'следы', tent: 'лагерь', bivy: 'лагерь', cave: 'укрытие', pack: 'снаряжение', axe: 'снаряжение', rope: 'снаряжение', glove: 'снаряжение', helmet: 'снаряжение', pole: 'снаряжение', mirror: 'снаряжение', wrap: 'снаряжение', wand: 'ориентир', note: 'записка', debris: 'след происшествия', cornice: 'след происшествия', rocks: 'след происшествия' };
+  const CTYPE = { cairn: 'ориентир', cairnflag: 'ориентир', cairnnote: 'записка', wandline: 'следы', track: 'следы', tent: 'лагерь', bivy: 'лагерь', cave: 'укрытие', pack: 'снаряжение', axe: 'снаряжение', rope: 'снаряжение', glove: 'снаряжение', helmet: 'снаряжение', pole: 'снаряжение', mirror: 'снаряжение', wrap: 'снаряжение', wand: 'ориентир', note: 'записка', debris: 'след происшествия', cornice: 'след происшествия', rocks: 'след происшествия' };
   const ctype = (q) => (q.fake ? 'старое снаряжение' : CTYPE[q.k] || 'неизвестный объект');
   function photo(o) { if (!S || !S.run || S.ended) return; if (!o) { const fl = $('sflash'); fl.style.transition = 'none'; fl.style.opacity = 0.85; void fl.offsetWidth; fl.style.transition = 'opacity .35s'; fl.style.opacity = 0; audio.beep && audio.beep(false); }
     const from = o ? o.eye : S.dr ? { X: S.dr.X, Y: S.dr.Y, Z: S.dr.Z } : { X: K.heli().X, Y: K.heli().Y, Z: K.heli().Z }, agl = from.Z - H(from.X, from.Y), kind = S.dr ? 'drone' : 'heli', night = NIGHT(clockNow()), zk = o ? 1 + (o.zoom - 1) * 0.4 : 1; let got = 0, seen = 0, unk = 0; const items = [];
@@ -213,16 +222,16 @@ export function makeSar(K) {
     (S.photos || (S.photos = [])).push(ph); if (S.photos.length > 40) S.photos.shift(); if (!got) say(`📷 Снимок ${ph.hh}${ph.zoom >= 1.5 ? ' · ' + Math.round(ph.zoom) + '×' : ''}: ${caps.length ? caps.join('; ').replace(/<[^>]+>/g, '') : 'пусто'}`, false); else refreshJournal(); }
   // бинокль с борта (Z / 🔭): улики и люди -- цели для опознания. Крупное (палатка, рюкзак, вынос, следы, человек) засчитывается
   // сразу; мелочь (записка, обёртка, перчатка) бинокль только замечает -- «снимите вблизи». Дальность -- 2.5 км, мелкое -- на большой кратности
-  const SMALL = { note: 1, wrap: 1, glove: 1, mirror: 1, helmet: 1, axe: 1, pole: 1 }, SIZE = { debris: 80, tent: 5, bivy: 3, track: 8, cave: 6, cornice: 20, rocks: 10, pack: 1.6, rope: 3, wand: 1.6 };
+  const SMALL = { cairnnote: 1, note: 1, wrap: 1, glove: 1, mirror: 1, helmet: 1, axe: 1, pole: 1 }, SIZE = { cairn: 1.5, cairnflag: 2, wandline: 25, debris: 80, tent: 5, bivy: 3, track: 8, cave: 6, cornice: 20, rocks: 10, pack: 1.6, rope: 3, wand: 1.6 };
   function spyTargets() { if (!S || !S.run) return []; const h = K.heli(), out = [];
     for (const q of S.c.clues) { if (Math.hypot(q.X - h.X, q.Y - h.Y) > 2600) continue; const got = S.found.has(q.id), sm = SMALL[q.k];
-      out.push({ id: 'sar:' + q.id, cat: 'Поиск', name: got ? `${CLUEICON[q.k] || ''} уже в деле` : sm ? `${CLUEICON[q.k] || ''} что-то лежит — снимите вблизи 📷` : `${CLUEICON[q.k] || ''} улика!`, X: q.X, Y: q.Y, y: H(q.X, q.Y) + 1, size: SIZE[q.k] || 1.2, far: 2600,
+      out.push({ id: 'sar:' + q.id, cat: 'Поиск', name: q.marker ? '🗿 тур — тропа здесь' : got ? `${CLUEICON[q.k] || ''} уже в деле` : sm ? `${CLUEICON[q.k] || ''} что-то лежит — снимите вблизи 📷` : `${CLUEICON[q.k] || ''} улика!`, X: q.X, Y: q.Y, y: H(q.X, q.Y) + 1, size: SIZE[q.k] || 1.2, far: 2600,
         onLock: () => { if (!got && !sm && !S.found.has(q.id)) found(q); } }); }
     for (const v of S.c.victims) { if (!v.spr || !v.spr.visible || Math.hypot(v.X - h.X, v.Y - h.Y) > 2600) continue;
       out.push({ id: 'sarv:' + v.id, cat: 'Поиск', name: v.foundT !== undefined ? v.name : 'человек!', X: v.X, Y: v.Y, y: H(v.X, v.Y) + 1, size: 2.2, far: 2600, onLock: () => { if (v.foundT === undefined) foundV(v, 'spy'); } }); }
     for (const t of S.teams) if (t.n > 0 && !t.onboard && t.spr) out.push({ id: 'sart:' + t.id, cat: 'Поиск', name: `отряд ${t.id} · ${t.n} чел.`, X: t.X, Y: t.Y, y: H(t.X, t.Y) + 1, size: 4, far: 4000, onLock: () => {} });
     return out; }
-  function found(q) { S.found.add(q.id); share({ k: 'clue', id: q.id });
+  function found(q) { S.found.add(q.id); share({ k: 'clue', id: q.id }); if (q.marker) { say(`${CLUEICON[q.k]} ${q.t}`, false, 5); return; } // тур -- ориентир, не улика
     if (q.fake) K.pop('ЛОЖНЫЙ СЛЕД', 'старьё чужой экспедиции — время потеряно'); else { S.streak = S.t - (S.lastClue ?? -99) < 25 ? Math.min(4, (S.streak || 1) + 1) : 1; S.lastClue = S.t; const b = 40 * (S.streak - 1); S.hot = (S.hot || 0) + b;
       K.pop(S.streak > 1 ? `+${40 + b} ГОРЯЧИЙ СЛЕД ×${S.streak}` : '+40 УЛИКА', q.t.length > 60 ? q.t.slice(0, 58) + '…' : q.t); K.buzz(30); } say(`${CLUEICON[q.k] || ''} ${q.t}`, false); audio.chime && audio.chime(); }
   function foundV(v, how) { const alive = aliveNow(v); v.foundT = S.t; if (!alive) v.dead = true; share({ k: 'vic', id: v.id, alive }); K.buzz(alive ? [60, 40, 60, 40, 120] : 80);
@@ -319,7 +328,7 @@ export function makeSar(K) {
 
   // ---- курс дела: что делать сейчас -- одна цель, маяк и стрелка к ней. Улики сужают круг поиска ----
   const short = (t, n = 70) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
-  function traces() { const c = S.c; return c.clues.filter((q) => (q.k === 'wand' || q.camp) && !q.key && !q.fake).sort((a, b) => a.day - b.day || (a.camp ? 1 : 0) - (b.camp ? 1 : 0)); }
+  function traces() { const c = S.c; return c.clues.filter((q) => (q.k === 'wand' || q.k === 'cairnflag' || q.k === 'cairnnote' || q.camp) && !q.key && !q.fake).sort((a, b) => a.day - b.day || (a.camp ? 1 : 0) - (b.camp ? 1 : 0)); }
   function goal(t, d, X, Y, R = 0) { S.goalTxt = { t, d }; S.area = R ? { X, Y, R } : null; K.setGoal({ t, d, X, Y, name: t }); }
   function objective() { const c = S.c; if (K.busy()) { K.setGoal(null); S.goalTxt = null; return; }
     const unf = c.victims.filter((v) => v.foundT === undefined), wait = c.victims.find((v) => v.foundT !== undefined && !v.dead && !v.saved && !v.inEvac && !v.onboard);
@@ -339,7 +348,7 @@ export function makeSar(K) {
   // есть ли что-то в кадре, что снимок, скорее всего, найдёт -- подсказка «СНИМАЙ!»
   function canShoot() { const from = S.dr || K.heli(), agl = from.Z - H(from.X, from.Y), night = NIGHT(clockNow()), kind = S.dr ? 'drone' : 'heli', zk = !S.dr && K.vfOn && K.vfOn() ? 1 + (K.vfZoom() - 1) * 0.4 : 1; camera.updateMatrixWorld();
     const look = (X, Y, z) => { v3.set(X, z + 1, -Y).project(camera); return v3.z < 1 && Math.abs(v3.x) < 0.8 && Math.abs(v3.y) < 0.76; };
-    for (const q of S.c.clues) { if (S.found.has(q.id)) continue; const z = H(q.X, q.Y), d = Math.hypot(q.X - from.X, q.Y - from.Y, z - from.Z) / zk; if (d < 400 && pod(q, d, agl, night, kind) > 0.4 && look(q.X, q.Y, z)) return true; }
+    for (const q of S.c.clues) { if (S.found.has(q.id) || q.marker) continue; /* туры -- не повод мигать «снимай» */ const z = H(q.X, q.Y), d = Math.hypot(q.X - from.X, q.Y - from.Y, z - from.Z) / zk; if (d < 400 && pod(q, d, agl, night, kind) > 0.4 && look(q.X, q.Y, z)) return true; }
     for (const v of S.c.victims) { if (v.foundT !== undefined) continue; const z = H(v.X, v.Y), d = Math.hypot(v.X - from.X, v.Y - from.Y, z - from.Z) / zk; if (d < 400 && pod({ ...v, buried: v.buried || v.pose === 'crev' }, d, agl, night, kind) > 0.4 && look(v.X, v.Y, z)) return true; }
     return false; }
 
