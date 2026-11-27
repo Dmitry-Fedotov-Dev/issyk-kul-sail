@@ -48,6 +48,14 @@ body:not(.touchdev) #sbtns{right:16px!important;bottom:70px!important}
 @media (max-height:440px) and (min-width:641px){#sbtns{flex-direction:row!important;bottom:calc(24px + env(safe-area-inset-bottom,0px))!important}} /* лёжа: ряд у нижнего края, а не столбик до радара */
 @media (max-width:640px),(max-height:440px){body:not(.hdet) #sclock{display:none!important}#sshoot{display:none!important}#sbtns button{min-width:46px!important;height:46px!important}}
 #sphotos{display:grid;grid-template-columns:1fr 1fr;gap:8px}#sphotos .ph{margin:0;background:rgba(255,255,255,.06);border-radius:8px;overflow:hidden;cursor:pointer}#sphotos .ph.big{grid-column:1/-1}#sphotos img{display:block;width:100%;aspect-ratio:8/5;object-fit:cover}#sphotos figcaption{font-size:12px;line-height:1.3;padding:4px 6px}#sphotos figcaption i{color:#ffb07a;font-style:normal}#sphotos .nop{aspect-ratio:8/5;display:grid;place-items:center;color:#8fa3c4;font-size:12px}
+#sbrief{padding-bottom:0}#sbrief .bh h2{margin:0}#sbrief .bh p{margin:2px 0 0;color:#cfe0ff;font-size:14px}#sbrief .bst{display:inline-block;padding:0 8px;border-radius:8px;background:rgba(255,138,42,.22);color:#ffd0a8;font-size:12px}
+#sbrief .bwhat{margin:8px 0 0;font-size:15px}#sbrief .btask{font-size:15px;font-weight:600}#sbrief h3{margin:12px 0 3px}
+#sbrief .bplan{margin:0;padding-left:20px}#sbrief .bplan li{margin:2px 0}#sbrief .bcond{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:4px 10px;font-size:13px;color:#dbe5f7}
+#sbrief .bnote{margin:4px 0 8px;font-size:12px;color:#b9c6dc}#sbrief .ch small{font-size:11px}
+.bmat{margin:10px 0 4px;border-top:1px solid rgba(255,255,255,.12);padding-top:8px}.bmat summary{cursor:pointer;color:#ffb07a;font-size:13px;font-weight:600;list-style:none}.bmat summary::before{content:'▸ '}.bmat[open] summary::before{content:'▾ '}
+#sbrief .bgo{position:sticky;bottom:0;display:flex;gap:8px;align-items:stretch;margin:10px -16px 0;padding:10px 16px calc(12px + env(safe-area-inset-bottom,0px));background:linear-gradient(rgba(11,29,58,0),#0b1d3a 14px)}
+#sbrief .bgo .go{flex:1;margin:0}#sbrief .bgo .ch{flex:none;min-width:0;padding:0 12px}
+@media (max-height:440px){#sbrief h3{margin:8px 0 2px}#sbrief .bplan li{margin:0}}
 `;
 const NIGHT = (hr) => hr < 6 || hr > 20.5;
 // календарь игры: день 0 -- 23 июля 2026 (astro.js), G.day -- сколько дней прошло. Дело живёт в тех же датах
@@ -110,27 +118,38 @@ export function makeSar(K) {
     if (!store.get('sarToon')) { store.set('sarToon', 1); film(); } }
   // ролик-инструктаж: время операции на паузе, пока он идёт
   function film() { if (!S) return; S.film = true; playSarToon({ audio, TOUCH, onDone: () => { if (S) S.film = false; } }); }
-  function brief() { const c = S.c, el = $('sbrief'); el.hidden = false;
-    const ppl = c.group.map((p) => `<b>${p.name}</b> <small>${p.age}, ${p.city}</small>`).join(' · ');
-    const K0 = c.cal, plan = c.plan.map((d) => `<li>День ${d.day} · <b>${dateOf(K0.day1 + d.day - 1)}</b>: ${d.from} → <b>${d.to}</b> <small>${d.asl} м</small></li>`).join('');
-    const at = (abs) => `<b>${dateOf(Math.floor(abs / 24))}, ${hhmm(abs)}</b>`, dn = (abs) => Math.floor(abs / 24) - K0.day1 + 1;
-    const chron = `<h3>Хронология</h3><ul class="plan" style="list-style:none;padding-left:0">
-      <li>${at(K0.day1 * 24 + 7)} — группа вышла: ${c.plan[0] ? c.plan[0].from : 'база'} (день 1)</li>
+  // материалы дела: кто пропал, маршрут по дням с датами, хронология, связь, зацепка -- в брифинге (свёрнуто) и в деле
+  function materials() { const c = S.c, K0 = c.cal, at = (abs) => `<b>${dateOf(Math.floor(abs / 24))}, ${hhmm(abs)}</b>`, dn = (abs) => Math.floor(abs / 24) - K0.day1 + 1;
+    const ppl = c.group.map((p) => `<b>${p.name}</b> <small>${p.age}, ${p.city}</small>`).join(' · '), plan = c.plan.map((d) => `<li>День ${d.day} · <b>${dateOf(K0.day1 + d.day - 1)}</b>: ${d.from} → <b>${d.to}</b> <small>${d.asl} м</small></li>`).join('');
+    return `<h3>Пропали</h3><p>${ppl}</p><p>Маршрут: <b>${c.routeName}</b></p><ol class="plan">${plan}</ol>
+      <h3>Хронология</h3><ul class="plan" style="list-style:none;padding-left:0"><li>${at(K0.day1 * 24 + 7)} — группа вышла: ${c.plan[0] ? c.plan[0].from : 'база'} (день 1)</li>
       ${K0.contactAbs !== null ? `<li>${at(K0.contactAbs)} — ${c.last.kind === 'ping' ? 'сигнал SOS трекера' : 'последний сеанс связи'}${dn(K0.contactAbs) >= 1 ? ` (день ${dn(K0.contactAbs)} маршрута)` : ''}</li>` : ''}
       <li>${at(K0.alarmAbs)} — ${c.last.kind === 'ping' ? 'тревога: принят SOS' : c.last.kind === 'radio' ? 'тревога: группа не вышла на связь' : `соседи подняли тревогу: группа не пришла в «${c.pts[Math.min(c.pts.length - 1, c.legIdx + 1)].n}»`}</li>
-      <li>${at(K0.startAbs)} — вылет${c.wait ? ' (ночью Ми-8 в горах не летает — ждали рассвета)' : ''} · <b>сегодня</b>, ${dateOf(Math.floor(K0.startAbs / 24), true)}</li></ul>`;
+      <li>${at(K0.startAbs)} — вылет${c.wait ? ' (ночью Ми-8 в горах не летает — ждали рассвета)' : ''}</li></ul>
+      <h3>Связь: ${c.comm.name}</h3><p>${c.last.txt}</p>${c.hook ? `<p style="background:rgba(255,210,74,.16);border-left:4px solid #ffd24a;padding:6px 10px">🔎 <b>Зацепка:</b> ${c.hook.txt}</p>` : ''}
+      <p><small>Ми-8 не висит выше ~5900 м. Пешие отряды проходят везде, но медленно и рискуют: каждый потерянный спасатель — минус к итогу.</small></p>`; }
+  function brief() { const c = S.c, el = $('sbrief'); el.hidden = false;
+    const K0 = c.cal;
     const chip = (k, v, t, sub) => `<button class="ch" data-k="${k}" data-v="${v}" aria-pressed="${S.res[k] === v}">${t}<small>${sub}</small></button>`;
-    el.innerHTML = `<h2>Дело № ${c.code}</h2><p style="margin:2px 0 8px;font-size:16px">📅 Сегодня: <b>${dateOf(Math.floor(c.cal.startAbs / 24), true)}</b> · вылет <b>${hhmm(c.cal.startAbs)}</b></p>
-      <p style="background:rgba(255,138,42,.2);border-radius:10px;padding:8px 10px"><b>Задача: найти пропавших живыми и доставить на базу.</b> Время идёт — у каждого свои часы.<br>
-      1) Летите туда, куда ведёт <b>курс дела</b> (надпись наверху, оранжевый столб дыма, стрелка).<br>2) Снижайтесь и снимайте 📷 — вешки, палатки, следы. Улики сужают круг поиска.<br>3) Нашли живого — эвакуируйте (посадка или лебёдка) и везите на базу.</p>
-      <p><small>Совместная операция: друзья вводят код <b>${c.code}</b> — то же дело, общие находки и заметки</small></p>
-      <h3>Пропали</h3><p>${ppl}</p><p>Маршрут: <b>${c.routeName}</b></p><ol class="plan">${plan}</ol>${chron}
-      <h3>Связь: ${c.comm.name}</h3><p>${c.last.txt}</p>${c.hook ? `<p style="background:rgba(255,210,74,.16);border-left:4px solid #ffd24a;padding:6px 10px">🔎 <b>Зацепка:</b> ${c.hook.txt}</p>` : ''}<p><small>Погода: ${{ breeze: 'ясно, ветер слабый', santash: 'ветрено — на гребнях до 20 м/с', ulan: 'буран: ветер до 40 м/с, видимость плохая' }[G.preset] || 'переменная'}. Тревога — в ${hm(c.alarm)}${c.wait ? `${NIGHT(c.alarm) ? ', ночью' : ', под вечер'}: Ми-8 в горах ночью не летает — вылет утром, в 06:30` : ''}. Темнеет в 20:30</small></p>
-      <h3>Силы</h3><div class="row">${chip('men', 0, 'Без пеших', 'только с воздуха')}${chip('men', 4, '1 отряд', '4 спасателя')}${chip('men', 8, '2 отряда', '8 — быстрее, но риск')}</div>
-      <div class="row" style="margin-top:6px">${chip('drone', 0, 'Без дрона', '')}${chip('drone', 1, 'Дрон', '3 батареи · тепловизор')}</div>
-      <p><small>Ми-8 не висит выше ~5900 м. Дрон запускается с земли или прямо с вертолёта — в висении ниже 60 м — и возвращается на борт. Пешие отряды проходят везде, но медленно и рискуют: каждый потерянный спасатель — минус к итогу.</small></p>
-      <button class="go" id="sgo">Начать операцию</button><button class="ch" id="stoon" style="width:100%;margin-top:8px">🎬 Как это работает — ролик с Дымком</button>
-      <p style="margin-top:10px"><small>Присоединиться к чужой операции:</small> <input id="sjoin" maxlength="5" placeholder="КОД"> <button class="ch" id="sjoinb" style="flex:none;display:inline-block;min-width:0">Войти</button></p>`;
+    // оперативный брифинг: что случилось, задача, план из трёх шагов, условия, силы -- и «Начать» всегда на виду (внизу, липкая).
+    // Подробности (кто пропал, маршрут по дням, хронология, связь, зацепка, совместная операция) -- в «Материалах дела» (свёрнуто)
+    const names = c.group.map((p) => p.name).join(' и '), day0 = Math.floor(K0.startAbs / 24), dark = Math.max(0, 20.5 - (K0.startAbs % 24)), hi = Math.max(...c.pts.map((p) => p.asl || 0));
+    const what = c.last.kind === 'ping' ? `Сигнал SOS трекера ${dateOf(Math.floor(K0.contactAbs / 24))} в ${hhmm(K0.contactAbs)}` : c.last.kind === 'radio' ? 'Группа не вышла на связь' : 'Группа не пришла в лагерь в срок';
+    const step1 = c.last.kind === 'ping' ? 'Летите к точке SOS — трекер ошибается до 200 м' : c.hook ? 'Начните с зацепки — последней метки группы на маршруте' : 'Идите по следу группы вдоль маршрута';
+    const wx = { breeze: 'ясно, ветер слабый', santash: 'ветрено, на гребнях до 20 м/с', ulan: 'непогода, ветер до 40 м/с' }[G.preset] || 'переменная';
+    const cond = [`🌤 ${wx}`, `🌙 до темноты ${Math.floor(dark)} ч${dark % 1 >= 0.5 ? ' 30 мин' : ''}`, hi > 5900 ? '⛰ выше 5900 м Ми-8 не висит — нужны отряды' : '', c.wait ? `⏳ ждали рассвета — люди ${gw(c.group[0], 'провёл', 'провела')} ночь без помощи` : ''].filter(Boolean);
+    const menNote = { 0: 'Только с воздуха: выше 5900 м и в трещинах людей не достать', 4: `Отряд уже в лагере «${c.pts[Math.max(0, c.legIdx)].n}» — пошлёте по карте дела`, 8: 'Два отряда — вдвое шире поиск, но и риск потерь вдвое' }[S.res.men];
+    const drNote = S.res.drone ? 'Дрон: 3 батареи, тепловизор, взлёт с висения ниже 60 м' : 'Без дрона — ищете только с вертолёта и пешком';
+    el.innerHTML = `<header class="bh"><h2>Дело № ${c.code}</h2><p>${dateOf(day0, true)} · вылет <b>${hhmm(K0.startAbs)}</b> · <span class="bst">${c.comm.name}</span></p></header>
+      <p class="bwhat">${what}. ${c.group.length > 1 ? 'Пропали' : gw(c.group[0], 'Пропал', 'Пропала')}: <b>${names}</b>, маршрут «${c.routeName}».</p>
+      <h3>Задача</h3><p class="btask">Найти ${c.group.length > 1 ? 'их' : gw(c.group[0], 'его', 'её')} живыми и доставить на базу. У каждого свои часы.</p>
+      <h3>План</h3><ol class="bplan"><li>${step1}</li><li>Снижайтесь и снимайте 📷 — улики сужают круг поиска</li><li>Нашли живого — посадка или лебёдка, и на базу</li></ol>
+      <h3>Условия</h3><ul class="bcond">${cond.map((t) => `<li>${t}</li>`).join('')}</ul>
+      <h3>Силы</h3><div class="row">${chip('men', 0, 'Без пеших', 'с воздуха')}${chip('men', 4, '1 отряд', '4 чел.')}${chip('men', 8, '2 отряда', '8 чел.')}</div><p class="bnote">${menNote}</p>
+      <div class="row">${chip('drone', 0, 'Без дрона', '')}${chip('drone', 1, 'Дрон', 'тепловизор')}</div><p class="bnote">${drNote}</p>
+      <details class="bmat"><summary>Материалы дела — группа, маршрут, хронология, связь</summary>${materials()}
+        <h3>Совместная операция</h3><p><small>Друзья вводят код <b>${c.code}</b> — то же дело, общие находки и заметки.</small></p><p><small>Войти в чужую операцию:</small> <input id="sjoin" maxlength="5" placeholder="КОД"> <button class="ch" id="sjoinb" style="flex:none;display:inline-block;min-width:0">Войти</button></p></details>
+      <div class="bgo"><button class="go" id="sgo">Начать операцию</button><button class="ch" id="stoon">🎬 Ролик</button></div>`;
     for (const b of el.querySelectorAll('.ch[data-k]')) b.onclick = () => { S.res[b.dataset.k] = +b.dataset.v; brief(); };
     $('sgo').onclick = start; $('stoon').onclick = () => film(); $('sjoinb').onclick = () => { const v = $('sjoin').value.trim().toUpperCase(); if (seedOf(v) === null) { toast('Код — 5 знаков, например K7QZA'); return; } stopWorld(); begin(v); }; }
   function start() { $('sbrief').hidden = true; S.run = true; G.spyMore = spyTargets; document.body.classList.add('sarrun'); S.bats = S.res.drone ? 3 : 0; const b = K.base();
@@ -455,7 +474,7 @@ export function makeSar(K) {
       <div style="position:relative"><canvas id="smap"></canvas>
         <div style="position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:6px">${['＋', '－', '⊙', '⤢'].map((t, i) => `<button class="ch" data-z="${i}" style="flex:none;min-width:0;width:40px;height:40px;padding:0;font-size:20px" title="${['ближе', 'дальше', 'ко мне', 'весь маршрут'][i]}">${t}</button>`).join('')}</div>
         <div id="snoteb" hidden style="position:absolute;left:8px;right:56px;top:8px;background:rgba(8,22,48,.95);border:2px solid #ffd24a;border-radius:12px;padding:8px;display:flex;gap:6px"><input id="snote" maxlength="80" placeholder="заметка: что здесь?" style="flex:1;width:auto;text-transform:none" enterkeyhint="done"><button class="ch" id="snoteok" style="flex:none">OK</button><button class="ch" id="snotex" style="flex:none">✕</button></div></div>
-      <h3>Заметки</h3><div id="snotes">${p.notes}</div><h3>Улики</h3><div id="sclues">${p.clues}</div><h3>Фотоархив</h3><div id="sphotos">${p.photos}</div><h3>Журнал операции</h3><div id="slog">${p.log}</div>
+      <details class="bmat"><summary>Материалы дела — группа, маршрут, хронология, связь</summary>${materials()}</details><h3>Заметки</h3><div id="snotes">${p.notes}</div><h3>Улики</h3><div id="sclues">${p.clues}</div><h3>Фотоархив</h3><div id="sphotos">${p.photos}</div><h3>Журнал операции</h3><div id="slog">${p.log}</div>
       <button class="ch" id="stoon2" style="width:100%;margin-top:12px">🎬 Как это работает — ролик с Дымком</button><button class="go" id="send" style="background:#3a4a66;color:#fff;font-size:15px">Завершить операцию</button>`;
     $('sjx').onclick = () => journal(false); $('sphotos').dataset.n = String((S.photos || []).length); $('sphotos').onclick = (e) => { const f = e.target.closest('figure'); if (f) f.classList.toggle('big'); }; $('stoon2').onclick = () => film(); bindNotes();
     for (const b of el.querySelectorAll('#smode button')) b.onclick = () => { S.selTeam = +b.dataset.t || -1; for (const q of el.querySelectorAll('#smode button')) q.setAttribute('aria-pressed', q === b); $('smodeh').innerHTML = modeHint(); drawMap(); };
