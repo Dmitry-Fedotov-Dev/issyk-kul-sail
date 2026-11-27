@@ -6,6 +6,7 @@
 // (наполняется). Цикл -- по общим часам, у всех игроков одинаковый. force -- прорыв «сейчас» (старт «Мерцбахер»).
 import * as THREE from 'three';
 import { ENV, GLSL_COMMON, END } from './world.js';
+import { makeIcebergs } from './icebergs.js';
 
 const PERIOD = 7200; // с: час прорыва + час покоя
 export function merzPhase(now = Date.now(), force0 = 0) { const t = force0 ? (now - force0) / 1000 : (now / 1000) % PERIOD; return { active: t < 3600, k: (t % 3600) / 3600 }; }
@@ -54,23 +55,18 @@ void main(){ vec2 w=vec2(vP.x,-vP.z), uv=vec2((w.x-uB.x)*uB.z, (uB.y-w.y)*uB.w);
   c=applyFog(c, length(vP-cameraPosition), vP.y);
   gl_FragColor=vec4(c, smoothstep(0.3,2.,dep)*0.95); ${END} }` });
   const water = new THREE.Mesh(geo, mat); water.position.copy(org); water.renderOrder = 1; water.frustumCulled = false; scene.add(water); // вершины поднимаются на уровень в шейдере -- границы по плоскости на нуле врали: у воды озеро «выпадало из кадра»
-  // айсберги: глыбы с тушью, плавают; при спуске садятся на дно
-  const bergs = [], tex2 = (() => { const c = document.createElement('canvas'); c.width = 128; c.height = 96; const x = c.getContext('2d');
-    x.fillStyle = '#e9f4f8'; x.strokeStyle = '#1b2430'; x.lineWidth = 4; x.beginPath(); x.moveTo(6, 90); x.lineTo(18, 40); x.lineTo(44, 22); x.lineTo(60, 6); x.lineTo(84, 30); x.lineTo(110, 36); x.lineTo(122, 90); x.closePath(); x.fill(); x.stroke();
-    x.fillStyle = '#9cc6da'; x.beginPath(); x.moveTo(60, 8); x.lineTo(84, 32); x.lineTo(76, 88); x.lineTo(54, 88); x.closePath(); x.fill(); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
-  const cellsL = q; for (let i = 0; i < 36; i++) { const k = cellsL[(i * 7919 + 13) % cellsL.length], X = X0 + (k % W) * STEP + ((i * 37) % 60) - 30, Y = Y1 - ((k / W) | 0) * STEP + ((i * 53) % 60) - 30;
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex2, transparent: true, alphaTest: 0.3 })), sz = 12 + ((i * 29) % 30); s.scale.set(sz, sz * 0.75, 1); s.center.set(0.5, 0.12); scene.add(s);
-    bergs.push({ s, X, Y, b: zone.h(X, Y), ph: i * 1.7 }); }
+  // айсберги с физикой (icebergs.js): мелкие плавают, сталкиваются, переворачиваются; большие -- неподвижные глыбы
+  const ice = makeIcebergs(scene, { cells: q, grid: zone.grid, h: zone.h, front: { X: X0 + (out % W) * STEP, Y: Y1 - ((out / W) | 0) * STEP }, mid: { X: X0 + (deep % W) * STEP, Y: Y1 - ((deep / W) | 0) * STEP } });
   let level = top, force0 = 0, boomT = 0;
   const cX = X0 + (deep % W) * STEP, cY = Y1 - ((deep / W) | 0) * STEP;
-  return { top, bed, out: { X: oX, Y: oY }, center: { X: cX, Y: cY }, water,
+  return { iceStep(dt, boat, wind, bump) { this.iceExt = true; ice.update(dt, level, wind, boat, bump); }, ice, top, bed, out: { X: oX, Y: oY }, center: { X: cX, Y: cY }, water,
     force() { force0 = Date.now(); }, get phase() { return merzPhase(Date.now(), force0); },
     // dt -- шаг; cam -- позиция камеры (мир); audio -- для грохота
-    update(dt, camW, audio, spray) { const ph = merzPhase(Date.now(), force0); U.uT.value += dt;
+    update(dt, camW, audio, spray, boat = null, wind = null, bump = null) { const ph = merzPhase(Date.now(), force0); U.uT.value += dt;
       // уровень: прорыв -- быстрый спад в первые 20 минут, потом остатки; покой -- наполнение
       const want = this.hold ? top : ph.active ? bed + (top - bed) * Math.max(0, 1 - Math.pow(ph.k * 3, 0.8)) : bed + (top - bed) * Math.min(1, ph.k * 1.2);
       level += (want - level) * Math.min(1, dt * (this.hold ? 3 : 0.3)); U.uLevel.value = level; const boil = this.hold ? 0 : ph.active ? Math.max(0.25, 1 - ph.k * 1.5) : 0; U.uBoil.value += (boil - U.uBoil.value) * Math.min(1, dt);
-      for (const g of bergs) { const z = Math.max(level, g.b + 3) - 2 + (level > g.b + 3 ? Math.sin(U.uT.value * 0.6 + g.ph) * 0.4 : 0); g.s.position.set(g.X, z, -g.Y); }
+      if (!this.iceExt) ice.update(dt, level, wind, boat, bump); this.iceExt = false; // на озере лёд считает шаг физики (iceStep)
       // рядом с прорывом -- грохот и обвалы: чем ближе, тем громче
       const d = camW ? Math.hypot(camW.X - oX, camW.Y - oY) : 1e9, near = Math.max(0, 1 - d / 9000) * U.uBoil.value;
       if (near > 0.02) { boomT -= dt; if (boomT <= 0) { boomT = 0.6 + Math.random() * 3.5; audio && audio.thump && audio.thump(0.4 + near * 1.2); // обрушение льда

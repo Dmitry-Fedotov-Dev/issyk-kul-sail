@@ -628,7 +628,7 @@ function loop(now) {
   // метель в районе: ветрено -- позёмка, буран -- снег стеной
   if (G.snow) { const U = HM && HM.on && HM.F ? HM.F.wU || 0 : { breeze: 10, santash: 22, ulan: 40 }[G.preset] || 0, d = 265 * Math.PI / 180; G.snow.update(dt, camera.position, { x: -Math.sin(d) * U, y: -Math.cos(d) * U }, G.inKhan ? Math.max(0, (U - 10) / 16) : 0); }
   if (G.klabels) G.klabels.update(camera, G.inKhan && G.mode !== 'menu'); // подписи вершин района
-  if (G.merz && G.inKhan) G.merz.update(dt, { X: camera.position.x, Y: -camera.position.z }, audio, G.spray); // озеро Мерцбахера: прорыв по часам // камера в районе Хан-Тенгри: облака выше и реже
+  if (G.merz && G.inKhan) G.merz.update(dt, { X: camera.position.x, Y: -camera.position.z }, audio, G.spray, null, G.wind, null); // озеро Мерцбахера: прорыв по часам // камера в районе Хан-Тенгри: облака выше и реже
   lodTick(dt);   if (G.jailoo) G.jailoo.update(dt, G.t); G.clouds.update(dt, camera, { cover: Math.min(1, Math.max(0, (ENV.uCover.value + 0.62) / 1.48)) * (G.inKhan ? 0.55 : 1), storm: ENV.uStorm.value, cirrus: ENV.uCirrus.value, wind: G.wind, clock: G.clock, preset: G.preset, baseUp: G.inKhan ? 2300 : 0 }); // облачность погоды (-0.62..0.86) -> 0..1; пресет -- какой ветер (улан, санташ, бриз)
   if (G.beach) G.beachHint = G.beach.update(dt, FT && FT.on ? FT.state : null);
   if (G.finds && G.mode !== 'menu') G.finds.update(dt, FT && FT.on && !FT.state.swim && FT.state.st !== 'dis' ? FT.state : null, G.beach.dayN, FT ? FT.magnet : 1.2);
@@ -667,7 +667,8 @@ function lodTick(dt) {
     if (px < 0.8) o.layers.disable(0); else o.layers.enable(0); } // меньше 0.8 пикселя в поперечнике -- не рисуем
 }
 // один шаг мира: физика, гонка, эффекты. Без отрисовки -- им же пользуются автотесты для перемотки.
-function tick(dt) {
+const iceBump = (k) => { G.shake = Math.max(G.shake, 0.15 + k * 0.6); audio.thump && audio.thump(0.3 + k); };
+function tick(dt) { if (G.merz && G.merzLake && G.mode !== 'menu') G.merz.iceStep(dt, G.player.b, G.wind, iceBump); // лёд на озере -- в шаге физики, вместе с лодкой
   const P = G.player, b = P.b, R = G.race;
   G.t += dt; G.wind.update(dt); dayCycle(dt);
   if (FT && FT.on) { FT.tick(dt); envTick(G.player.b); return; } // Дымок пешком: снаряд стоит, где оставили
