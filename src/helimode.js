@@ -460,7 +460,7 @@ export function makeHeliMode(A) {
   function camBtn() { if (SAR && SAR.drone) { SAR.photo(); return; } if (!VF.on) VF.open(vfLook()); else VF.shoot(); }
   const vfLook = () => (G.cam === 1 ? { yaw: G.orbit, pitch: -0.16 - G.orbitP * 0.9 } : { yaw: 0, pitch: -0.3 }); // из кабины -- куда смотрели
   function cam(dt) { if (camera.view && camera.view.enabled) camera.clearViewOffset(); INK_U.uK.value = Math.max(0.75, INK_U.uRes.value.y / 720) * 0.55; /* хребты с воздуха -- тонким пером */ if (M && !M.root.visible && on && !Hc.crash && F && F.spyHid) { M.root.visible = true; F.spyHid = false; }
-    M.root.position.set(Hc.X, Hc.Z, -Hc.Y); M.root.rotation.set(0, 0, 0); M.root.rotateY(-Hc.th); M.root.rotateX(-Hc.pitch); M.root.rotateZ(-Hc.roll);
+    M.root.position.set(Hc.X, Hc.Z, -Hc.Y); M.root.rotation.set(0, 0, 0); M.root.rotateY(-Hc.th); M.root.rotateX(Hc.pitch); M.root.rotateZ(-Hc.roll); /* тангаж < 0 -- нос вниз (разгон): нос модели смотрит в -Z */
     F.rpm += ((Hc.crash ? 0 : Hc.ground && Hc.col < 0.05 && F.t < 2 ? 0.4 : Hc.rpm) - F.rpm) * Math.min(1, dt * 0.8); M.spin(dt, F.rpm); if (SAR && SAR.cam(dt)) { if (reticle) reticle.visible = false; return; }
     if (VF && VF.on) { if (Hc.crash) VF.close(); else { VF.place(dt, M, Hc); clook.set(Math.sin(Hc.th), 0, -Math.cos(Hc.th)); if (AIRFX) AIRFX.tick(dt, Hc, wind(Hc.X, Hc.Y, Hc.Z), camera); if (reticle) reticle.visible = false; return; } }
     if (Hc.crash) { if (reticle) reticle.visible = false; v3.set(Hc.X + 40, Hc.Z + 25, -Hc.Y + 40); camera.position.lerp(v3, Math.min(1, dt * 2)); camera.up.set(0, 1, 0); camera.lookAt(Hc.X, Hc.Z + 3, -Hc.Y); camera.updateProjectionMatrix(); return; }
