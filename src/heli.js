@@ -71,9 +71,10 @@ export class Heli {
     const free = Math.abs(u) < 0.05 && Math.abs(st) < 0.05;
     let dF = u * P.aMax * (u < 0 ? 1.1 : 1) * (1 - 0.5 * prec), dS = st * P.aMax * 0.55 * (1 - 0.4 * prec);
     // точное зависание (у людей): ручка задаёт путевую скорость в мире (ctl.pvx, ctl.pvy -- по экрану, до ~5 м/с), автомат её
-    // выдерживает с интегралом против ветра; автомат сильнее обычного висения (×1.8), но не всесилен -- шквал сносит
+    // выдерживает с интегралом против ветра; сам автомат сильнее обычного висения (×2), но не всесилен -- шквал сносит, а ручка добавляет
+    // полный наклон машины: лётчик парирует порыв сам (контроль у игрока, а не «автомат за меня»)
     if (ctl.pvx !== undefined && !this.ground) { const evx = ctl.pvx - this.vx, evy = ctl.pvy - this.vy; this.ipx = clamp((this.ipx || 0) + evx * dt * 0.7, -4, 4); this.ipy = clamp((this.ipy || 0) + evy * dt * 0.7, -4, 4);
-      let ax = evx * 1.5 + this.ipx * 0.9, ay = evy * 1.5 + this.ipy * 0.9; const A = Math.hypot(ax, ay), cap = P.assist * 1.8; if (A > cap) { ax *= cap / A; ay *= cap / A; }
+      let ax = evx * 1.5 + this.ipx * 0.9, ay = evy * 1.5 + this.ipy * 0.9; const A = Math.hypot(ax, ay), cap = Math.hypot(ctl.pvx, ctl.pvy) > 0.5 ? P.aMax : P.assist * 2; if (A > cap) { ax *= cap / A; ay *= cap / A; } // сам -- до ~25 м/с ветра; ручка (против ветра) -- полный наклон
       dF = ax * fx + ay * fy; dS = ax * fy - ay * fx; this.hov = 1; this.assistA = Math.min(A, cap); this.iF *= 0.9; this.iS *= 0.9; }
     else { this.ipx = (this.ipx || 0) * 0.95; this.ipy = (this.ipy || 0) * 0.95; }
     // висение: ручка отпущена на малой скорости -- гасим путевую скорость; интеграл «запоминает» наклон против ветра

@@ -77,4 +77,6 @@ test('точное зависание: держит место при 20 м/с, 
   assert.ok(Math.hypot(a.X, a.Y) < 6, 'держит: снос ' + Math.hypot(a.X, a.Y).toFixed(1));
   const b = new Heli().reset(0, 0, Z0, 0, false); run(b, 6, { pvx: 4, pvy: 0 }, fl); assert.ok(b.X > 15 && Math.abs(b.Y) < 5, 'сдвиг вправо по команде: ' + b.X.toFixed(1) + ' / ' + b.Y.toFixed(1)); assert.ok(Math.abs(b.th) < 0.01, 'нос не поворачивает');
   const c = new Heli().reset(0, 0, Z0, 0, false); run(c, 20, { pvx: 0, pvy: 0 }, fl, () => ({ x: 40, y: 0, z: 0 })); assert.ok(c.X > 40, 'шквал 40 м/с сносит: ' + c.X.toFixed(0));
+  const e = new Heli().reset(0, 0, Z0, 0, false); run(e, 20, (q) => ({ pvx: q.X > 0 ? -5 : 0, pvy: 0 }), fl, () => ({ x: 40, y: 0, z: 0 })); assert.ok(e.X < c.X * 0.3, `ручкой против шквала держит: ${e.X.toFixed(0)} против ${c.X.toFixed(0)}`);
+  const g = new Heli().reset(0, 0, Z0, 0, false); run(g, 30, { pvx: 0, pvy: 0 }, fl, () => ({ x: 24, y: 0, z: 0 })); assert.ok(Math.hypot(g.X, g.Y) < 10, '24 м/с держит сам: ' + g.X.toFixed(1));
 });

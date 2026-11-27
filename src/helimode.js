@@ -391,7 +391,7 @@ export function makeHeliMode(A) {
 
   function tick(dt) { if (!on) return; if (F.slow > 0) { F.slow -= dt; dt *= 0.3; } F.t += dt; // удар: на миг время замедляется -- удар чувствуется
     if (Hc.crash) { crashTick(dt); return; }
-    precTick(); const c0 = ctl(dt), c = SAR && SAR.drone ? { fwd: 0, side: 0, up: 0 } : c0, steps = Math.max(1, Math.ceil(dt / (1 / 120))); for (let i = 0; i < steps; i++) Hc.step(dt / steps, c, H, wind);
+    precTick(dt); const c0 = ctl(dt), c = SAR && SAR.drone ? { fwd: 0, side: 0, up: 0 } : c0, steps = Math.max(1, Math.ceil(dt / (1 / 120))); for (let i = 0; i < steps; i++) Hc.step(dt / steps, c, H, wind);
     if (F.sar) SAR.tick(dt, c0);
     Hc.fuel = Math.max(200, Hc.fuel - dt * (0.12 + 0.18 * Hc.power)); // ~800 кг/ч на висении
     if (Hc.crash) { startCrash(); return; }
@@ -432,12 +432,12 @@ export function makeHeliMode(A) {
   // машину по экрану (нос не крутится), автомат против ветра сильнее; вынесло дальше 60 м (шквал) или ушёл выше 100 м -- обычный полёт.
   // Время не останавливается: ветер и часы пострадавших продолжают давить -- меняется только «масштаб» управления.
   let zring = null;
-  function precTick() { const m = F.mis[F.mi]; let tp = null;
+  function precTick(dt = 1 / 60) { const m = F.mis[F.mi]; let tp = null;
     if (m && (m.how === 'winch' || m.how === 'land' || m.how === 'hover')) tp = F.wtp ? { X: F.wtp[0], Y: F.wtp[1] } : { X: m.to.X, Y: m.to.Y };
     const d = tp ? Math.hypot(Hc.X - tp.X, Hc.Y - tp.Y) : 1e9, block = Hc.ground || Hc.crash || (SAR && SAR.drone) || (VF && VF.on);
     if (!F.pz) { if (tp && !block && d < 35 && Hc.agl < 70 && Hc.speed < 6) { F.pz = { X: tp.X, Y: tp.Y, yaw: F.cyaw ?? Hc.th }; F.pcam = null; buzz(30); audio.chime && audio.chime();
         if (!store.get('heliPrecHint')) { store.set('heliPrecHint', 1); FEED.push('<b>Точное зависание.</b> Камера замерла над зоной, ручка двигает машину по экрану (вверх — от себя), нос не крутится. Вынесет ветром из круга 60 м — снова обычный полёт', 2); } else FEED.push('◎ Точное зависание', 5); } }
-    else { if (tp) { F.pz.X = tp.X; F.pz.Y = tp.Y; } if (!tp || block || d > 60 || Hc.agl > 100) { const blown = tp && d > 60 && !block; F.pz = null; F.pcam = null; F.cam = null; if (blown) { FEED.push('Сдуло из зоны — обычный полёт. Подойдите снова, медленно', 3); buzz([40, 30, 40]); } } }
+    else { if (tp) { F.pz.X = tp.X; F.pz.Y = tp.Y; } F.pzOut = d > 60 ? (F.pzOut || 0) + dt : 0; if (!tp || block || d > 90 || F.pzOut > 2.5 || Hc.agl > 100) { F.pzOut = 0; const blown = tp && d > 60 && !block; F.pz = null; F.pcam = null; F.cam = null; if (blown) { FEED.push('Сдуло из зоны — обычный полёт. Подойдите снова, медленно', 3); buzz([40, 30, 40]); } } }
     if (!zring) { zring = new THREE.Mesh(new THREE.RingGeometry(34, 35.5, 64), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, side: THREE.DoubleSide })); zring.rotation.x = -Math.PI / 2; scene.add(zring); }
     zring.visible = !!(tp && d < 120 && !Hc.crash); if (zring.visible) { zring.position.set(tp.X, H(tp.X, tp.Y) + 0.3, -tp.Y); zring.material.color.setHex(F.pz ? (d > 35 ? 0xff8a2a : 0x9fe0a0) : 0xffffff); zring.material.opacity = F.pz ? 0.75 : 0.45; } }
   // снимок фотоаппаратом: в поиске -- в дело (улики, люди, подписи); в школе -- найти туриста; иначе -- просто кадр в сводку
