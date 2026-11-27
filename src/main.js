@@ -424,6 +424,7 @@ if (TOUCH) document.body.classList.add('touchdev');
 // Двойной щелчок или двойное касание возвращает камеру за корму.
 const held = new Map(), ptr = new Map(); let pinch = 0, lastTap = 0;
 const syncTouch = () => { let l = false, r = false; for (const v of held.values()) { if (v === 'left') l = true; else r = true; } input.left = l; input.right = r; };
+let G_psheet = null; // ползунок шкота Pro
 const resetView = () => { G.orbit = 0; G.orbitP = 0; G.zoom = 1; };
 // кто сейчас «смотрит»: подзорная труба или фотоаппарат вертолёта -- палец двигает обзор, два пальца/колесо -- зум
 const LK = () => (SPY && SPY.on ? SPY : HM && HM.on && HM.vf && HM.vf.on ? HM.vf : null);
@@ -446,6 +447,21 @@ canvas.addEventListener('pointermove', (e) => { const q = ptr.get(e.pointerId); 
 for (const n of ['pointerup', 'pointercancel']) window.addEventListener(n, (e) => { const q = ptr.get(e.pointerId); ptr.delete(e.pointerId); if (LK() && q) LK().holdEnd(); if (ptr.size < 2) pinch = 0; if (held.delete(e.pointerId)) syncTouch();
   if (q && n === 'pointerup' && G && Math.hypot(e.clientX - q.x0, e.clientY - q.y0) < 8 && performance.now() - q.t < 300) { const now = performance.now(); if (now - lastTap < 320) { resetView(); lastTap = 0; } else lastTap = now; } });
 canvas.addEventListener('wheel', (e) => { if (!G || G.mode === 'menu') return; e.preventDefault(); if (LK()) { LK().zoomBy(Math.exp(-e.deltaY * 0.0016)); return; } G.zoom = clamp(G.zoom * Math.exp(e.deltaY * 0.0012), PG && PG.on ? 0.15 : 0.45, 3.2); }, { passive: false });
+// Pro на телефоне: ползунок шкота справа -- угол паруса напрямую (вверх -- выбрать, вниз -- потравить), отпустил -- держится
+{ const w = document.createElement('div'); w.id = 'psheet'; w.innerHTML = '<small>выбрать</small><div class="tr"><i></i><b></b></div><small>травить</small><span></span>'; document.body.appendChild(w);
+  const st = document.createElement('style'); st.textContent = `#psheet{display:none;position:fixed;right:calc(14px + env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);z-index:3;flex-direction:column;align-items:center;gap:4px;font:600 10px var(--ui);color:#fff;text-shadow:0 1px 4px #000;touch-action:none}
+#psheet .tr{position:relative;width:46px;height:min(42vh,240px);border-radius:23px;border:1px solid rgba(255,255,255,.4);background:linear-gradient(rgba(255,138,42,.35),rgba(110,190,255,.25));touch-action:none}
+#psheet .tr i{position:absolute;left:50%;top:6px;bottom:6px;width:2px;margin-left:-1px;background:rgba(255,255,255,.35)}#psheet .tr b{position:absolute;left:3px;width:38px;height:38px;margin-top:-19px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+#psheet span{font:700 12px var(--ui)}body.touchdev.pro-on #psheet{display:flex}@media (max-height:440px){#psheet{top:auto;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:none}#psheet .tr{height:calc(100vh - 230px)}}`; document.head.appendChild(st);
+  const tr = w.querySelector('.tr'), MIN = 3 * DEG, MAX = 88 * DEG; let id = null;
+  const set = (e) => { const r = tr.getBoundingClientRect(), k = clamp((e.clientY - r.top - 6) / (r.height - 12), 0, 1); input.trimSet = MIN + (MAX - MIN) * k; };
+  tr.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); id = e.pointerId; try { tr.setPointerCapture(id); } catch (err) { /* без захвата */ } set(e); });
+  tr.addEventListener('pointermove', (e) => { if (e.pointerId === id) set(e); });
+  for (const n of ['pointerup', 'pointercancel']) tr.addEventListener(n, (e) => { if (e.pointerId === id) { id = null; } });
+  // положение шарика -- по фактическому углу паруса; пока тянут -- за пальцем
+  G_psheet = (b) => { const on = !!(G && G.pro && G.mode !== 'menu' && b && !b.kind && b.trim !== undefined && !(PG && PG.on) && !(FT && FT.on)); document.body.classList.toggle('pro-on', on); if (!on) { input.trimSet = null; return; }
+    const v = input.trimSet != null ? input.trimSet : b.trim, k = (v - MIN) / (MAX - MIN), r = tr.clientHeight; w.querySelector('.tr b').style.top = (6 + k * (r - 12)) + 'px'; w.querySelector('span').textContent = Math.round(b.trim / DEG) + '°';
+  }; } // отпустил -- заданный угол держится (input.trimSet остаётся), выключили Pro -- сброс
 { const el = $('ts'); let y0 = null; const set = (v) => (e) => { e.preventDefault(); e.stopPropagation(); input.ease = v; input.bar = v; el.classList.toggle('on', v); y0 = v ? e.clientY : null; if (!v) input.sheetT = 0; };
   // Pro: провести по кнопке вверх -- выбрать шкот, вниз -- потравить; просто держать -- как раньше, обезветрить
   el.addEventListener('pointermove', (e) => { if (y0 === null || !G || !G.pro) return; const dy = e.clientY - y0; if (Math.abs(dy) > 10) { input.ease = input.bar = false; el.classList.remove('on'); input.sheetT = clamp(-dy / 50, -1, 1); } });
@@ -656,7 +672,7 @@ function tick(dt) {
   } else if (input.joy && b.spec && b.spec.cls === 'motor') { // джойстик моторных: угол от «вверх» -- руль, отклонение -- газ, назад не бывает
     const j = input.joy, m = Math.min(1, Math.hypot(j.x, j.y)), on = m > 0.15, a = Math.atan2(j.x, -j.y);
     ctl = X.filterCtl({ steer: on ? clamp(a / (Math.PI / 2), -1, 1) : 0, thr: on ? (m - 0.15) / 0.85 : 0, ease: on && b.capsized, left: false, right: false });
-  } else if (G.pro && !b.kind) ctl = X.filterCtl({ steer: (input.right ? 1 : 0) - (input.left ? 1 : 0), ease: input.bar, sheet: clamp((input.sin ? 1 : 0) - (input.flare ? 1 : 0) + (input.sheetT || 0), -1, 1), left: input.left, right: input.right }); // Pro: ↑ выбрать, ↓ потравить, пробел -- обезветрить
+  } else if (G.pro && !b.kind) ctl = X.filterCtl({ steer: (input.right ? 1 : 0) - (input.left ? 1 : 0), ease: input.bar, trimSet: input.trimSet, sheet: clamp((input.sin ? 1 : 0) - (input.flare ? 1 : 0) + (input.sheetT || 0), -1, 1), left: input.left, right: input.right }); // Pro: ↑ выбрать, ↓ потравить, пробел -- обезветрить
   else ctl = X.filterCtl({ steer: (input.right ? 1 : 0) - (input.left ? 1 : 0), ease: input.ease, left: input.left, right: input.right });
   b.pro = !!G.pro && !b.kind;
   const ctls = boats.map((e, i) => { if (i === 0) return ctl; if (G.race2) return X.aiFor(e, dt);
@@ -828,6 +844,7 @@ function tackNow(R, b) { const tg = target(R, G.player.leg, false), brg = Math.a
 function updateHud(dt, b, sp) {
   if (FT && FT.on) { if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; } FT.hud(dt); return; }
   if (AIR()) { AIR().hud(dt); return; }
+  if (G_psheet) G_psheet(b);
   if (G.frame % 10 === 0) { const ad = footAdapter(), ok = !!ad && ad.canExit().ok; setP($('bfoot'), 'hidden', !ok); if (ok) setT($('bfoot'), 'выйти'); setP($('rfoot'), 'hidden', !(ok && PG && PG.on)); }
   if (PG && PG.on) { setP($('bpro'), 'hidden', true); PG.hud(dt); return; }
   if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; }
@@ -863,8 +880,8 @@ function updateHud(dt, b, sp) {
   else if (R && R.t > 3 && G.player.leg === 0 && al(R, b) > 6) { h = 'Старт не взят — вернитесь и пройдите между красным и синим знаком'; alert = true; }
   else if (twa < 34 && sp < 1.6) h = (R && R.t >= 0 && G.player.leg !== 2 && G.player.leg < 4) ? 'Знак против ветра — прямо не дойти. Отверните к краю красного сектора и идите зигзагом' : 'Нос в ветер, парус не тянет — отверните от красного сектора';
   else if (R && R.t >= 0 && (G.player.leg === 1 || G.player.leg === 3) && tackNow(R, b)) h = 'Пора поворачивать через ветер — знак остался сбоку';
-  else if (b.pro && b.ttL > 0.6) h = TOUCH ? 'Красный колдунчик пляшет — шкот перебран: проведите по «шкоту» вниз' : 'Красный колдунчик пляшет — шкот перебран: ↓ потравить';
-  else if (b.pro && b.ttW > 0.6 && b.ease < 0.3) h = TOUCH ? 'Зелёный колдунчик полощет — шкот недобран: проведите по «шкоту» вверх' : 'Зелёный колдунчик полощет — шкот недобран: ↑ выбрать';
+  else if (b.pro && b.ttL > 0.6) h = TOUCH ? 'Красный колдунчик пляшет — шкот перебран: ползунок справа вниз (потравить)' : 'Красный колдунчик пляшет — шкот перебран: ↓ потравить';
+  else if (b.pro && b.ttW > 0.6 && b.ease < 0.3) h = TOUCH ? 'Зелёный колдунчик полощет — шкот недобран: ползунок справа вверх' : 'Зелёный колдунчик полощет — шкот недобран: ↑ выбрать';
   else if (b.pro && (G.proT ?? 99) < 9) h = TOUCH ? 'Pro: по «шкоту» вверх — выбрать, вниз — потравить · держать — обезветрить' : 'Pro: ↑ выбрать шкот · ↓ потравить · пробел — обезветрить';
   else if (b.ease > 0.6 && heel < 12 && twa < 120) h = 'Шкот потравлен — парус не тянет';
   else if (T < 9) h = TOUCH ? 'Держать слева или справа — руль · провести — обзор' : '← → руль · пробел — травить шкот · мышь — обзор';

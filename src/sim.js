@@ -165,7 +165,7 @@ export class Boat {
 
     // --- автоподбор шкота с запаздыванием + травление ---
     // Pro: шкот только руками (выбрать / потравить), автоподбора нет -- недобрал или перебрал, и лодка едет хуже
-    if (this.pro) this.trim = clamp(this.trim - (inp.sheet || 0) * 0.32 * dt, 3 * DEG, 88 * DEG);
+    if (this.pro) { if (inp.trimSet != null) this.trim += (clamp(inp.trimSet, 3 * DEG, 88 * DEG) - this.trim) * Math.min(1, dt * 5); /* ползунок: угол паруса напрямую */ else this.trim = clamp(this.trim - (inp.sheet || 0) * 0.32 * dt, 3 * DEG, 88 * DEG); }
     else { const dOpt = clamp(absA - 18 * DEG, 6 * DEG, 86 * DEG); this.trim += clamp(dOpt - this.trim, -0.6 * dt, 0.6 * dt); }
     const sheet = Math.min(88 * DEG, this.trim + this.ease * Math.max(0, absA - this.trim) * 0.97);
     const lee = awa > 0 ? -1 : 1; // гик уходит под ветер
