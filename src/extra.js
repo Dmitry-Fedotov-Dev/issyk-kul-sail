@@ -368,7 +368,7 @@ export function installExtra(A) {
   function mapZoom(f, px, py) { if (mapLoc === 'khan' && kv) { const cv = $('mapcv'), a = cv.height / cv.width, P0 = khanPick(kv, px, py, a); kv.R = clamp(kv.R / f, 400, (KHAN_BOUNDS.x1 - KHAN_BOUNDS.x0) / 2); const P1 = khanPick(kv, px, py, a); kv.cx += P0.X - P1.X; kv.cy += P0.Y - P1.Y; kFast = 1; redrawMap(); return; }
     const g = G.far.userData.grid, v = mapWin(), gx = v.sx + px * v.sw, gy = v.sy + py * v.sh; mv.z = clamp(mv.z * f, 1, 160);
     const sw = g.W / mv.z, sh = g.H / mv.z; mv.cx = gx - (px - 0.5) * sw; mv.cy = gy - (py - 0.5) * sh; redrawMap(); }
-  function pickMap(ev) { if (mapLoc === 'khan' && kv) { const cv = $('mapcv'), r = cv.getBoundingClientRect(), { X, Y } = khanPick(kv, (ev.clientX - r.left) / r.width, (ev.clientY - r.top) / r.height, cv.height / cv.width), z = G.khan.h(X, Y) + 1607;
+  function pickMap(ev) { if (mapLoc === 'khan' && !kv) return; /* карта гор ещё грузится -- не ставить точку на озеро */ if (mapLoc === 'khan' && kv) { const cv = $('mapcv'), r = cv.getBoundingClientRect(), { X, Y } = khanPick(kv, (ev.clientX - r.left) / r.width, (ev.clientY - r.top) / r.height, cv.height / cv.width), z = G.khan.h(X, Y) + 1607;
       let near = null, nd = 1e9; for (const [n, cx, cy] of KCAMPS_LIST()) { const d = Math.hypot(cx - X, cy - Y); if (d < nd) { nd = d; near = n; } }
       startAt = { zone: 'khan', X, Y, land: true, label: `Хан-Тенгри · ${Math.round(z)} м${near && nd < 2500 ? ' · у «' + near + '»' : ''}` }; refreshMenu(); mapInfo(); drawMap(); return; }
     const g = G.far.userData.grid, r = $('mapcv').getBoundingClientRect(), v = mapWin(), gx = v.sx + ((ev.clientX - r.left) / r.width) * v.sw, gy = v.sy + ((ev.clientY - r.top) / r.height) * v.sh;

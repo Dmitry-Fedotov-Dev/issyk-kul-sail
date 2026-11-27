@@ -155,7 +155,7 @@ export function makeSar(K) {
   function start() { $('sbrief').hidden = true; S.run = true; G.spyMore = spyTargets; document.body.classList.add('sarrun'); S.bats = S.res.drone ? 3 : 0; const b = K.base();
     const lc = S.c.pts[Math.max(0, S.c.legIdx)]; // отряды уже заброшены в последний лагерь группы
     for (let i = 0; i < S.res.men / 4; i++) S.teams.push({ id: i + 1, n: 4, X: lc.X + 20 + i * 12, Y: lc.Y - 25, tgt: null, carry: null, risk: 0, spr: teamSprite() });
-    const hk = S.c.hook && S.c.clues[S.c.hook.id]; if (hk) { S.found.add(hk.id); const tx = S.c.last.kind === 'ping' ? S.c.last.X : hk.X, ty = S.c.last.kind === 'ping' ? S.c.last.Y : hk.Y; hop(tx, ty, 700, 140, false, true); }
+    const hk = S.c.hook && S.c.clues[S.c.hook.id]; if (hk) { S.found.add(hk.id); const tx = S.c.last.kind === 'ping' ? S.c.last.X : hk.X, ty = S.c.last.kind === 'ping' ? S.c.last.Y : hk.Y; if (!(K.userAt && K.userAt())) hop(tx, ty, 700, 140, false, true); } // место выбрано на карте -- стартуем там
     say(`Операция «${S.c.code}» началась. ${S.teams.length ? `Отряды уже в лагере «${S.c.pts[Math.max(0, S.c.legIdx)].n}» — цель им можно дать на карте (🗺).` : 'Ищем с воздуха.'}`, false);
     if (S.c.last.kind === 'ping') { ping.visible = true; ping.position.set(S.c.last.X, H(S.c.last.X, S.c.last.Y) + 10, -S.c.last.Y); }
     K.pop('ЗАЦЕПКА', S.c.hook ? 'последняя вешка группы — прямо по курсу' : 'ищите следы'); if (S.c.hook) say(`🔎 ${S.c.hook.txt}`, false); journal(false); objective(); }
