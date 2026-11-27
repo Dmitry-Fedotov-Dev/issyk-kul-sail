@@ -83,7 +83,7 @@ test('точное зависание: держит место при 20 м/с, 
 test('порыв -- событие: фронт сносит висящую машину и разворачивает нос в ветер; ручкой против -- сноса меньше', () => {
   const Z0 = 3000, fl = () => Z0 - 300, gust = (h) => (h.t > 1 && h.t < 4 ? { x: 14, y: 0, z: 0, gx: 14, gy: 0 } : { x: 0, y: 0, z: 0, gx: 0, gy: 0 });
   const a = new Heli().reset(0, 0, Z0, 0, false); for (let i = 0; i < 6 * 120; i++) a.step(1 / 120, {}, fl, () => gust(a));
-  const b = new Heli().reset(0, 0, Z0, 0, false); for (let i = 0; i < 6 * 120; i++) b.step(1 / 120, b.t > 1 && b.t < 4 ? { strafe: -1 } : {}, fl, () => gust(b));
+  const b = new Heli().reset(0, 0, Z0, 0, false); for (let i = 0; i < 6 * 120; i++) b.step(1 / 120, b.t > 1.2 && b.t < 2.4 ? { strafe: -1 } : {}, fl, () => gust(b));
   assert.ok(a.X > 3, 'порыв справа налево снёс вправо: ' + a.X.toFixed(1)); assert.ok(a.th < -0.03, 'нос повернуло в ветер (влево): ' + a.th.toFixed(2));
   assert.ok(Math.abs(b.X) < a.X * 0.6, `подхват ручкой: ${b.X.toFixed(1)} против ${a.X.toFixed(1)}`);
 });

@@ -17,7 +17,7 @@ const CSS = `
 #sbtns{position:fixed;right:calc(108px + env(safe-area-inset-right,0px));bottom:calc(40px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
 body:not(.touchdev) #sbtns{right:16px;bottom:70px}
 #sbtns button{min-width:48px;height:48px;border-radius:12px;border:1px solid rgba(255,255,255,.32);background:rgba(10,30,60,.32);color:#fff;font:700 19px var(--ui);padding:0 6px;touch-action:none;line-height:1}
-#sbtns button.on{background:rgba(255,138,42,.8)}#sbtns button small{display:none;font-size:9px;font-weight:500;opacity:.9;margin-top:2px}body.slearn #sbtns button small,#sact small{display:block}#sact{font-size:13px!important}
+#sbtns button.on{background:rgba(255,138,42,.8)}#sbtns button.off{opacity:.55}#sbtns .qc{display:block;margin:0 auto}#sbtns button small{display:none;font-size:9px;font-weight:500;opacity:.9;margin-top:2px}body.slearn #sbtns button small,#sact small{display:block}#sact{font-size:13px!important}
 #sshoot{left:50%;bottom:calc(76px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#ffd24a;color:#2a1800;border-radius:12px;padding:6px 14px;font:800 15px var(--ui);animation:sblink .7s steps(2) infinite;white-space:nowrap}@keyframes sblink{50%{opacity:.45}}
 #sbtns button.pulse{background:#ffd24a;color:#2a1800;border-color:#fff;animation:sblink .7s steps(2) infinite}
 @media (max-width:640px){#sshoot{bottom:auto;top:196px;font-size:13px}}
@@ -54,6 +54,7 @@ const NIGHT = (hr) => hr < 6 || hr > 20.5;
 const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'], WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
 const dateOf = (day, wd = false) => { const d = new Date(START + Math.floor(day) * 86400000); return `${d.getUTCDate()} ${MON[d.getUTCMonth()]}${wd ? ', ' + WD[d.getUTCDay()] : ''}`; };
 const hhmm = (h) => { const x = ((h % 24) + 24) % 24; return `${String(Math.floor(x)).padStart(2, '0')}:${String(Math.floor(x % 1 * 60)).padStart(2, '0')}`; };
+const QC = '<svg class="qc" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M7.5 7.5l9 9M16.5 7.5l-9 9"/><circle cx="5" cy="5" r="3.2"/><circle cx="19" cy="5" r="3.2"/><circle cx="5" cy="19" r="3.2"/><circle cx="19" cy="19" r="3.2"/><rect x="9.6" y="9.6" width="4.8" height="4.8" rx="1" fill="currentColor"/></svg>'; // квадрокоптер: X-рама, четыре винта
 const CLUEICON = { wand: '🚩', note: '📝', tent: '⛺', pole: '🦯', glove: '🧤', debris: '❄', rope: '〰', pack: '🎒', axe: '⛏', track: '👣', cave: '🕳', cornice: '⚠', helmet: '⛑', rocks: '🪨', mirror: '✨', wrap: '🍫', bivy: '💤' };
 
 export function makeSar(K) {
@@ -67,7 +68,7 @@ export function makeSar(K) {
   function build() { if (built) return; built = true; const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     const w = document.createElement('div'); w.id = 'sarw'; w.hidden = true;
     w.innerHTML = `<div id="sclock" class="hud"></div><canvas id="smini" title="Касание -- крупнее/мельче; дело -- кнопка 🗺"></canvas><div id="sframe" hidden><b></b><i></i><div id="sgim"><button id="sgu">▲</button><span></span><button id="sgd">▼</button></div></div><div id="sflash"></div><div id="sshoot" class="hud" hidden>📷 В КАДРЕ ЧТО-ТО ЕСТЬ — СНИМАЙ!</div>
-      <div id="sbtns"><button id="sphoto">📷<small>снимок</small></button><button id="sdrone">🛸<small>дрон</small></button><button id="sjb">🗺<small>дело</small></button><button id="sfast" hidden>⏩<small>к цели</small></button><button id="sact" hidden></button></div>
+      <div id="sbtns"><button id="sphoto">📷<small>снимок</small></button><button id="sdrone"><svg class="qc" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M7.5 7.5l9 9M16.5 7.5l-9 9"/><circle cx="5" cy="5" r="3.2"/><circle cx="19" cy="5" r="3.2"/><circle cx="5" cy="19" r="3.2"/><circle cx="19" cy="19" r="3.2"/><rect x="9.6" y="9.6" width="4.8" height="4.8" rx="1" fill="currentColor"/></svg><small>дрон</small></button><button id="sjb">🗺<small>дело</small></button><button id="sfast" hidden>⏩<small>к цели</small></button><button id="sact" hidden></button></div>
       <div id="sbrief" class="spanel" hidden></div><div id="sjour" class="spanel" hidden></div>`;
     document.body.appendChild(w);
     const tap = (id, f) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); f(); });
@@ -118,7 +119,7 @@ export function makeSar(K) {
       <li>${at(K0.alarmAbs)} — ${c.last.kind === 'ping' ? 'тревога: принят SOS' : c.last.kind === 'radio' ? 'тревога: группа не вышла на связь' : `соседи подняли тревогу: группа не пришла в «${c.pts[Math.min(c.pts.length - 1, c.legIdx + 1)].n}»`}</li>
       <li>${at(K0.startAbs)} — вылет${c.wait ? ' (ночью Ми-8 в горах не летает — ждали рассвета)' : ''} · <b>сегодня</b>, ${dateOf(Math.floor(K0.startAbs / 24), true)}</li></ul>`;
     const chip = (k, v, t, sub) => `<button class="ch" data-k="${k}" data-v="${v}" aria-pressed="${S.res[k] === v}">${t}<small>${sub}</small></button>`;
-    el.innerHTML = `<h2>Дело № ${c.code}</h2>
+    el.innerHTML = `<h2>Дело № ${c.code}</h2><p style="margin:2px 0 8px;font-size:16px">📅 Сегодня: <b>${dateOf(Math.floor(c.cal.startAbs / 24), true)}</b> · вылет <b>${hhmm(c.cal.startAbs)}</b></p>
       <p style="background:rgba(255,138,42,.2);border-radius:10px;padding:8px 10px"><b>Задача: найти пропавших живыми и доставить на базу.</b> Время идёт — у каждого свои часы.<br>
       1) Летите туда, куда ведёт <b>курс дела</b> (надпись наверху, оранжевый столб дыма, стрелка).<br>2) Снижайтесь и снимайте 📷 — вешки, палатки, следы. Улики сужают круг поиска.<br>3) Нашли живого — эвакуируйте (посадка или лебёдка) и везите на базу.</p>
       <p><small>Совместная операция: друзья вводят код <b>${c.code}</b> — то же дело, общие находки и заметки</small></p>
@@ -239,8 +240,10 @@ export function makeSar(K) {
     else if (m.base) { for (const v of S.c.victims) if (v.onboard && !v.saved) { v.saved = true; v.onboard = false; S.saved++; share({ k: 'saved', id: v.id }); K.score(1500, `${v.name.toUpperCase()} ${gw(v, 'СПАСЁН', 'СПАСЕНА')}!`, gw(v, 'доставлен к врачам', 'доставлена к врачам')); } checkEnd(); } }
 
   // ---- дрон: запуск с земли, батарея, связь, ветер ----
-  function launch() { if (!S || !S.run) return; if (!S.res.drone) { toast('Дрона в этой операции нет'); return; } if (S.dr) return; const h = K.heli();
-    const air = !h.ground; if (air && (h.agl > 60 || h.speed > 4)) { toast('Дрон — с земли или с висения: ниже 60 м и почти на месте'); return; } // с вертолёта -- в висении, без посадки if (S.bats <= 0) { toast('Батареи дрона кончились'); return; }
+  // можно ли поднять дрон прямо сейчас: '' -- да, иначе -- короткая причина (её показывает кнопка и всплывашка)
+  function droneWhy() { if (!S || !S.run) return 'нет операции'; if (!S.res.drone) return 'нет в операции'; if (S.dr) return ''; if (S.bats <= 0) return 'батареи кончились'; const h = K.heli();
+    if (h.ground) return ''; if (h.agl > 60) return 'ниже 60 м'; if (h.speed > 4) return 'сбавь ход'; return ''; }
+  function launch() { const why = droneWhy(); if (why) { K.pop('ДРОН НЕ ВЗЛЕТИТ', why === 'ниже 60 м' ? 'дрон — с земли или с висения ниже 60 м' : why === 'сбавь ход' ? 'зависните почти на месте (меньше 15 км/ч)' : why); return; } if (S.dr) return; const h = K.heli(), air = !h.ground; // с вертолёта -- в висении, без посадки
     S.bats--; S.dr = { gim: S.gim ?? 35, X: h.X + 8, Y: h.Y, Z: air ? h.Z - 4 : h.Z + 2, th: h.th, vx: 0, vy: 0, vz: 0, bat: 1, L: { X: h.X, Y: h.Y }, kit: 1, air }; drone.g.visible = true; $('sframe').hidden = false; document.body.classList.add('sardr'); K.pop('ДРОН В ВОЗДУХЕ', `батарея ~3 мин · запасных ${S.bats}`); }
   function recall() { if (!S.dr) return; S.dr.home = true; toast(S.dr.air ? 'Дрон возвращается к вертолёту — держите висение' : 'Дрон возвращается к точке запуска'); }
   function droneTick(dt, c) { const d = S.dr; if (d.air) { const h = K.heli(); d.L = { X: h.X, Y: h.Y }; d.LZ = h.Z; } const wb = K.windAt(d.X, d.Y, d.Z), L = Math.hypot(d.X - d.L.X, d.Y - d.L.Y); // запущен с вертолёта -- «дом» летит вместе с ним
@@ -352,7 +355,7 @@ export function makeSar(K) {
     if (S.dr) { const d = S.dr, L = Math.hypot(d.X - d.L.X, d.Y - d.L.Y), tx = `ДРОН · батарея ${Math.max(0, Math.round(d.bat * 100))}% · ${Math.round(d.Z - H(d.X, d.Y))} м над землёй · ${(L / 1000).toFixed(1)} км${NIGHT(hr) ? ' · ТЕПЛОВИЗОР' : ''}`; const b = $('sframe').firstChild; if (b.textContent !== tx) b.textContent = tx;  const gs = $('sgim').querySelector('span'), gt = `камера\n${Math.round(d.gim ?? 35)}°`; if (gs.textContent !== gt) { gs.textContent = gt; gs.style.whiteSpace = 'pre'; } }
     document.body.classList.toggle('slearn', S.t < 25 || !store.get('sarDone')); // подписи кнопок -- в начале операции и в первом деле
     $('sphoto').classList.toggle('pulse', !!S.shoot); { const sh = $('sshoot'); sh.hidden = !S.shoot; }
-    const dl = $('sdrone'); dl.hidden = !S.res.drone; dl.classList.toggle('on', !!S.dr); dl.innerHTML = S.dr ? '🛸<small>домой</small>' : `🛸<small>дрон · ${S.bats}</small>`;
+    const dl = $('sdrone'); dl.hidden = !S.res.drone; dl.classList.toggle('on', !!S.dr); { const why = S.dr ? '' : droneWhy(), t = S.dr ? `${QC}<small>домой</small>` : `${QC}<small>${why || 'дрон · ' + S.bats}</small>`; dl.classList.toggle('off', !!why); if (dl.innerHTML !== t) dl.innerHTML = t; if (why) dl.querySelector('small').style.display = 'block'; } // недоступен -- видно почему
     { const q = fastTarget(), h = K.heli(), fb = $('sfast'), far = q && !S.dr && Math.hypot(q.X - h.X, q.Y - h.Y) > 1500; fb.hidden = !far; if (far) { const t = `⏩<small>к цели · ${Math.round(Math.hypot(q.X - h.X, q.Y - h.Y) / 3300 + 2)} мин</small>`; if (fb.innerHTML !== t) fb.innerHTML = t; } }
     const a = actLabel(), ab = $('sact'); ab.hidden = !a; if (a && ab.innerHTML !== a) ab.innerHTML = a; }
 
@@ -488,7 +491,8 @@ export function makeSar(K) {
     if (hurt !== undefined) u = `<span class="u${hurt < 120 ? ' bad' : ''}">🩺${fmtT(hurt)}</span>`;
     // часы операции -- всегда на виду: «время тикает» -- главное давление режима; за час до темноты -- жёлтые, ночью -- красные
     const hr = clockNow(), hh = `${String(Math.floor(hr)).padStart(2, '0')}:${String(Math.floor(hr % 1 * 60)).padStart(2, '0')}`, dk = NIGHT(hr) ? ' bad' : hr > 19.5 ? '' : null;
-    return `<span class="c">👤${nf}/${c.victims.length}</span>${u}<span class="${dk === null ? 'k' : 'u' + dk}">${NIGHT(hr) ? '🌙' : '🕘'}${hh}</span>`; }
+    const dd = new Date(START + Math.floor(G.day || 0) * 86400000), ds = `${dd.getUTCDate()}.${String(dd.getUTCMonth() + 1).padStart(2, '0')}`;
+    return `<span class="c">👤${nf}/${c.victims.length}</span>${u}<span class="${dk === null ? 'k' : 'u' + dk}">${NIGHT(hr) ? '🌙' : '🕘'}${ds} ${hh}</span>`; }
   function miniBase(cv, cx, cy, R) { if (!S || !S.run) return false; drawMap(cv, { cx, cy, R }, 'radar'); return true; }
   // кто-то найден живым и ждёт помощи -- задача «активна» (мигает в сводке)
   const urgent = () => !!(S && S.run && S.c.victims.some((v) => v.foundT !== undefined && !v.dead && !v.saved));

@@ -10,6 +10,6 @@ test('код не спрятан за // посреди строки (верто
   for (const f of FILES) fs.readFileSync(new URL(`../../src/${f}`, import.meta.url), 'utf8').split('\n').forEach((l, i) => {
     const j = l.indexOf('// '); if (j < 0) return; const pre = l.slice(0, j); if ((pre.match(/`/g) || []).length % 2 || (pre.match(/'/g) || []).length % 2 || /https?:$/.test(pre)) return;
     const tail = l.slice(j + 3); if (PROSE.some((r) => r.test(tail))) return;
-    if (/[;}]\s*(if \(|const |let |for \(|return |[A-Za-z_$][\w$]*(\.[\w$]+)*\s*(=[^=>]|\())/.test(tail)) bad.push(`${f}:${i + 1}  ${tail.slice(0, 90)}`); });
+    if (/[;}]\s*(if \(|const |let |for \(|return |[A-Za-z_$][\w$]*(\.[\w$]+)*\s*(=[^=>]|\())/.test(tail) || /\sif \(\S|\sconst [\w$]+ = /.test(tail)) bad.push(`${f}:${i + 1}  ${tail.slice(0, 90)}`); });
   assert.deepEqual(bad, [], 'код после комментария не выполняется:\n' + bad.join('\n'));
 });

@@ -343,8 +343,8 @@ export function makeHeliMode(A) {
     Object.assign(WB, { x: wx, y: wy, z: clamp(upw * 0.6, -3, 3), U, dx: wx / U, dy: wy / U, tb: Math.min(1.6, U * 0.02 * (0.3 + near) + lee * 0.5 * near + (U > 25 ? (U - 25) * 0.02 : 0) + (WB.edge || 0) * Math.min(0.8, prof(asl) * (KW[G.preset] ?? 0.8) * 0.04)) }); if (F) F.wU = U; return WB; }
   // порывы: ячейки 150-250 м, бегут по ветру чуть быстрее потока; спереди -- резкий фронт, сзади -- плавный хвост
   const gustAt = (X, Y, Z, out) => { out.x = 0; out.y = 0; out.f = 0; if (!F || !F.gusts) return out;
-    for (const c of F.gusts) { const rx = X - c.X, ry = Y - c.Y, a = (rx * c.dx + ry * c.dy) / c.R, q = (rx * c.dy - ry * c.dx) / c.R, dz = (Z - c.Z) / 160; if (a > 0.35 || a < -3 || Math.abs(q) > 2.2 || Math.abs(dz) > 2.5) continue;
-      const f = (a > 0 ? 1 - a / 0.35 : Math.exp(-(a / 1.4) * (a / 1.4))) * Math.exp(-q * q) * Math.exp(-dz * dz) * c.k; out.x += c.dx * c.S * f; out.y += c.dy * c.S * f; out.f = Math.max(out.f, f); } return out; };
+    for (const c of F.gusts) { const rx = X - c.X, ry = Y - c.Y, a = (rx * c.dx + ry * c.dy) / c.R, q = (rx * c.dy - ry * c.dx) / c.R, dz = (Z - c.Z) / 160; if (a > 0.35 || a < -2 || Math.abs(q) > 2.2 || Math.abs(dz) > 2.5) continue;
+      const f = (a > 0 ? 1 - a / 0.35 : Math.exp(-(a / 0.7) * (a / 0.7))) * Math.exp(-q * q) * Math.exp(-dz * dz) * c.k; /* хвост ~1.2 радиуса: порыв проходит за 5-8 с, а не 20-40 */ out.x += c.dx * c.S * f; out.y += c.dy * c.S * f; out.f = Math.max(out.f, f); } return out; };
   const gq = { x: 0, y: 0, f: 0 };
   function wind(X, Y, Z) { const b = windBase(X, Y, Z), q = gustAt(X, Y, Z, gq); return { x: b.x + q.x, y: b.y + q.y, z: b.z, tb: b.tb + q.f * 0.7, gx: q.x, gy: q.y }; }
   function gustTick(dt) { const b = windBase(Hc.X, Hc.Y, Hc.Z), gs = F.gusts || (F.gusts = []);
@@ -352,10 +352,12 @@ export function makeHeliMode(A) {
     for (let i = gs.length - 1; i >= 0; i--) if (gs[i].life <= 0) gs.splice(i, 1);
     // чем сильнее ветер, тем чаще порывы; в штиль -- редкие слабые
     F.gT = (F.gT ?? 3) - dt; if (F.gT <= 0 && gs.length < 6) { const U = Math.max(b.U, 5), r = Math.random(), off = (Math.random() - 0.5) * 500, d = 650 + Math.random() * 250, tw = (Math.random() - 0.5) * 0.5, dx = b.dx * Math.cos(tw) - b.dy * Math.sin(tw), dy = b.dx * Math.sin(tw) + b.dy * Math.cos(tw);
-      gs.push({ X: Hc.X - dx * d + dy * off, Y: Hc.Y - dy * d - dx * off, Z: Hc.Z + (Math.random() - 0.4) * 120, dx, dy, V: U * 1.1 + 4, S: U * (0.45 + 0.5 * r) + 5, R: 150 + Math.random() * 110, k: 0, life: (d + 900) / (U * 1.1 + 4) });
+      // на крейсере порыв рождается на ПУТИ машины (встреча через 6-10 с), иначе на скорости машина от порывов просто улетала
+      const V = U * 1.1 + 4, tm = 6 + Math.random() * 4, fast = Hc.speed > 12, ax = fast ? Hc.X + Hc.vx * tm : Hc.X, ay = fast ? Hc.Y + Hc.vy * tm : Hc.Y, dd = fast ? V * tm : d, R = 70 + Math.random() * 60;
+      gs.push({ X: ax - dx * dd + dy * off * 0.3, Y: ay - dy * dd - dx * off * 0.3, Z: Hc.Z + (Math.random() - 0.4) * 80, dx, dy, V, S: U * (0.45 + 0.5 * r) + 5, R, k: fast ? 1 : 0, life: (dd + 600) / V });
       F.gT = (9 + Math.random() * 8) * clamp(14 / U, 0.35, 1.6); }
     // предупреждение: фронт порыва в 120-450 м и идёт на нас
-    let warn = null; for (const c of gs) { const rx = Hc.X - c.X, ry = Hc.Y - c.Y, a = rx * c.dx + ry * c.dy, q = Math.abs(rx * c.dy - ry * c.dx); if (a > 60 && a < 450 && q < c.R * 1.4 && c.S > Math.max(10, b.U + 3)) { const rel = wrapPi(Math.atan2(-c.dx, -c.dy) - Hc.th); warn = { side: Math.abs(rel) < 0.8 ? 'СПЕРЕДИ' : Math.abs(rel) > 2.4 ? 'СЗАДИ' : rel > 0 ? 'СПРАВА' : 'СЛЕВА', S: c.S }; break; } }
+    let warn = null; for (const c of gs) { const rx = Hc.X - c.X, ry = Hc.Y - c.Y, a = rx * c.dx + ry * c.dy - c.R * 0.35, q = Math.abs(rx * c.dy - ry * c.dx), close = Math.max(3, c.V - (Hc.vx * c.dx + Hc.vy * c.dy)); if (a > 0 && a / close < 4 && q < c.R * 1.4 && c.S > Math.max(10, b.U + 3)) { /* за ~4 с до фронта, а не за 20 */ const rel = wrapPi(Math.atan2(-c.dx, -c.dy) - Hc.th); warn = { side: Math.abs(rel) < 0.8 ? 'СПЕРЕДИ' : Math.abs(rel) > 2.4 ? 'СЗАДИ' : rel > 0 ? 'СПРАВА' : 'СЛЕВА', S: c.S }; break; } }
     if (warn && !F.gWarn) audio.airflow && G.shake < 0.1 && (G.shake = 0.08); F.gWarn = warn; if (warn) F.gSide = warn.side;
     // позёмка: порыв у земли срывает снег со льда -- видно, как он бежит по леднику
     if (G.spray && G.inKhan) for (const c of gs) { const n = Math.round(c.k * c.S * dt * 1.6); for (let i = 0; i < n; i++) { const a = -Math.random() * 2.2 * c.R, q = (Math.random() - 0.5) * 2 * c.R, X = c.X + c.dx * a + c.dy * q, Y = c.Y + c.dy * a - c.dx * q, gz = H(X, Y);
@@ -397,7 +399,7 @@ export function makeHeliMode(A) {
     if (Hc.crash) { crashTick(dt); return; }
     precTick(dt); const c0 = ctl(dt), c = SAR && SAR.drone ? { fwd: 0, side: 0, up: 0 } : c0, steps = Math.max(1, Math.ceil(dt / (1 / 120))); for (let i = 0; i < steps; i++) Hc.step(dt / steps, c, H, wind);
     // подхват порыва: пока идёт фронт, ручка давит против сноса (или точное зависание держит) -- по окончании «ПОДХВАТ!»
-    if (Hc.gEv > 0 && Hc.gDir) { const fx = Math.sin(Hc.th), fy = Math.cos(Hc.th), ax = c.pvx !== undefined ? c.pvx : (c.fwd || 0) * fx + (c.strafe || 0) * fy + (c.side || 0) * fy * 0.6, ay = c.pvy !== undefined ? c.pvy : (c.fwd || 0) * fy - (c.strafe || 0) * fx - (c.side || 0) * fx * 0.6, L = Math.hypot(ax, ay);
+    if (Hc.gEv > 0 && Hc.gDir) { const fx = Math.sin(Hc.th), fy = Math.cos(Hc.th), ax = c.pvx !== undefined ? c.pvx : (c.fwd || 0) * fx + (c.strafe || 0) * fy, ay = c.pvy !== undefined ? c.pvy : (c.fwd || 0) * fy - (c.strafe || 0) * fx, L = Math.hypot(ax, ay);
       if (L > 0.2 && -(ax * Hc.gDir[0] + ay * Hc.gDir[1]) / L > 0.3) F.gCatch = (F.gCatch || 0) + dt; F.gOn = true; }
     else if (F.gOn) { F.gOn = false; if ((F.gCatch || 0) > 0.35 && !Hc.crash) { if (F.sar) pop('ПОДХВАТ!', 'порыв парирован'); else score(30, 'ПОДХВАТ', 'порыв парирован'); buzz(25); } F.gCatch = 0; }
     if (F.sar) SAR.tick(dt, c0);
@@ -578,7 +580,7 @@ export function makeHeliMode(A) {
     const kmh = Math.round(Hc.speed * 3.6), alt = Math.round(Hc.Z + 1607), agl = Math.round(Math.max(0, Hc.agl)), m = Hc.mass, tw = Hc.Tmax / (m * 9.81), pw = Math.min(1.15, Hc.power);
     const cls = pw > 1 ? 'red' : pw > 0.92 ? 'hot' : '';
     const hpc = Hc.hp > 60 ? '#9fe0a0' : Hc.hp > 30 ? '#ffd27a' : '#ff5a3a';
-    $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>КМ/Ч</small></div><div class="r"><b>${alt}</b> м · ${agl} м · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)}${(() => { if (Hc.speed < 8) return ''; const hw = -(WB.x * Hc.vx + WB.y * Hc.vy) / Hc.speed; return Math.abs(hw) < 4 ? '' : hw > 0 ? ` · <span style="color:#ffb07a">встречный ${Math.round(hw)}</span>` : ` · <span style="color:#9fe0a0">попутный ${Math.round(-hw)}</span>`; })()}</div>
+    $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>КМ/Ч</small></div><div class="r"><b>${alt}</b> м · ${agl} м · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)}</div><div class="r vc">${(() => { const u = (input.bar || input.hu ? 1 : 0) - (input.shift || input.hd ? 1 : 0); return Hc.ground ? (u > 0 ? '<b style="color:#9fe0a0">▲ взлёт</b>' : '<span style="opacity:.7">на земле</span>') : u > 0 ? '<b style="color:#9fe0a0">▲ набор</b>' : u < 0 ? '<b style="color:#ffb07a">▼ снижение</b>' : Hc.holdA !== null && Hc.holdA !== undefined ? `<span style="color:#cfe0ff">═ держит ${Math.round(Hc.holdA)} м над землёй</span>` : '<span style="color:#cfe0ff">═ держит высоту</span>'; })()}${(() => { if (Hc.speed < 8) return ''; const hw = -(WB.x * Hc.vx + WB.y * Hc.vy) / Hc.speed; return Math.abs(hw) < 4 ? '' : hw > 0 ? ` · <span style="color:#ffb07a">встречный ${Math.round(hw)}</span>` : ` · <span style="color:#9fe0a0">попутный ${Math.round(-hw)}</span>`; })()}</div>
       <div class="hp"><i style="width:${Math.round(Hc.hp)}%;background:${hpc}"></i></div>${Hc.hp < 99.5 ? `<div class="hpt" style="color:${hpc}">корпус ${Math.round(Hc.hp)}%</div>` : ''}
       <div class="r r2">шаг<span class="bar"><i class="${cls}" style="width:${Math.round(Math.min(1, pw) * 100)}%"></i></span>${Math.round(pw * 100)}% · обороты ${Math.round(Hc.rpm * 95)}%</div>
       <div class="r r4">масса <b>${(m / 1000).toFixed(1)}</b> т · тяга/вес <b>${tw.toFixed(2)}</b>${Hc.ige > 0.03 ? ' · подушка' : ''} · топливо ${Math.round(Hc.fuel)} кг</div>`;

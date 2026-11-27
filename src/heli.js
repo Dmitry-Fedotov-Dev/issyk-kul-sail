@@ -67,7 +67,7 @@ export class Heli {
     // (флюгер: хвост сносит по ветру). Лётчик подхватывает привычно: ручкой против сноса и обратно на курс
     const fx0 = Math.sin(this.th), fy0 = Math.cos(this.th), gS = w.gx !== undefined ? Math.hypot(w.gx, w.gy) : 0, gl = w.gx !== undefined ? w.gx * fy0 - w.gy * fx0 : 0;
     if (gS > 6 && (this.gS0 || 0) <= 6 && !this.ground) { this.gEv = 1.3; this.gDir = [w.gx / gS, w.gy / gS]; } this.gS0 = gS; this.gEv = Math.max(0, (this.gEv || 0) - dt);
-    const vane = this.ground ? 0 : -gl * 0.03 * (this.gEv > 0 ? 1 : 0.35) * (1 - 0.6 * fast);
+    const vane = this.ground || !(this.gEv > 0) ? 0 : -gl * 0.015 * (1 - 0.6 * fast); // только на фронте и мягко: ~10-15°, ориентация не теряется
     const yrT = this.ground ? 0 : s * (P.yawHover + (P.yawFast - P.yawHover) * fast) * (1 - 0.45 * prec) + vane;
     this.yr += (yrT - this.yr) * Math.min(1, dt * 3.2); this.th += this.yr * dt;
     const fx = Math.sin(this.th), fy = Math.cos(this.th); // нос; правый борт -- (fy, -fx)
