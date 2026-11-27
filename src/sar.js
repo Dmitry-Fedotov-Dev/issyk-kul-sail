@@ -169,7 +169,8 @@ export function makeCase(code, h, opt = {}) {
   const v0 = c.victims[0], days = pts.length - 1;
   if (diff === 0) { const a = r() * 6.283, d = 60 + r() * 140; c.last = { kind: 'ping', X: Math.round(v0.X + Math.cos(a) * d), Y: Math.round(v0.Y + Math.sin(a) * d), ago: Math.round(since / H), txt: `Трекер ${group[0].name}: SOS ${Math.round(since / H)} ч назад. «${sc.id === 'hape' ? 'Отёк лёгких, не можем спуститься' : sc.id === 'aval' ? 'Лавина! Двое под снегом' : sc.id === 'white' ? 'Потеряли тропу, роем пещеру' : sc.id === 'lost' ? 'Отстал от группы, не знаю где я' : 'Травма, нужен вертолёт'}». Точность трекера — до 200 м` }; }
   else if (diff === 1) { const k = Math.max(0, legIdx); c.last = { kind: 'radio', camp: k, X: pts[k].X, Y: pts[k].Y, ago: Math.round(since / H) + 6, txt: `Последний сеанс связи — ${k ? `вечером дня ${k}, из точки «${pts[k].n}»` : 'с базы, перед выходом'}: «Все в порядке, завтра по плану — ${pts[k + 1].n}». Больше на связь не выходили` }; }
-  else c.last = { kind: 'none', txt: `Связи у группы не было. План — ${days} ${days > 4 ? 'дней' : 'дня'}, контрольный срок истёк вчера в 20:00. Где они — неизвестно: ищите следы по маршруту` };
+  // без связи: хватились соседи по маршруту -- группа не пришла в следующий лагерь к вечеру того дня (согласуется с календарём дела и временем с происшествия)
+  else c.last = { kind: 'none', txt: `Связи у группы не было. Тревогу подняли соседи по маршруту: к вечеру дня ${legIdx + 1} группа не пришла в «${pts[legIdx + 1].n}». Где они — неизвестно: ищите следы по маршруту` };
   c.plan = pts.slice(1).map((p, i) => ({ day: i + 1, from: pts[i].n, to: p.n, asl: p.asl }));
   return c; }
 

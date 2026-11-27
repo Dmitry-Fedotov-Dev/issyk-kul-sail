@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { makeCase, newCode, seedOf, aliveAt, walkerPos, pod, scoreOf, ASL, gw, SCEN } from './sar.js';
 import { NETHOOK } from './net.js';
 import { playSarToon } from './sartoon.js';
+import { START } from './astro.js';
 
 const CSS = `
 #sarw{position:fixed;inset:0;pointer-events:none;z-index:3}#sarw>*{pointer-events:auto}
@@ -49,6 +50,10 @@ body:not(.touchdev) #sbtns{right:16px!important;bottom:70px!important}
 #sphotos{display:grid;grid-template-columns:1fr 1fr;gap:8px}#sphotos .ph{margin:0;background:rgba(255,255,255,.06);border-radius:8px;overflow:hidden;cursor:pointer}#sphotos .ph.big{grid-column:1/-1}#sphotos img{display:block;width:100%;aspect-ratio:8/5;object-fit:cover}#sphotos figcaption{font-size:12px;line-height:1.3;padding:4px 6px}#sphotos figcaption i{color:#ffb07a;font-style:normal}#sphotos .nop{aspect-ratio:8/5;display:grid;place-items:center;color:#8fa3c4;font-size:12px}
 `;
 const NIGHT = (hr) => hr < 6 || hr > 20.5;
+// календарь игры: день 0 -- 23 июля 2026 (astro.js), G.day -- сколько дней прошло. Дело живёт в тех же датах
+const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'], WD = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+const dateOf = (day, wd = false) => { const d = new Date(START + Math.floor(day) * 86400000); return `${d.getUTCDate()} ${MON[d.getUTCMonth()]}${wd ? ', ' + WD[d.getUTCDay()] : ''}`; };
+const hhmm = (h) => { const x = ((h % 24) + 24) % 24; return `${String(Math.floor(x)).padStart(2, '0')}:${String(Math.floor(x % 1 * 60)).padStart(2, '0')}`; };
 const CLUEICON = { wand: '🚩', note: '📝', tent: '⛺', pole: '🦯', glove: '🧤', debris: '❄', rope: '〰', pack: '🎒', axe: '⛏', track: '👣', cave: '🕳', cornice: '⚠', helmet: '⛑', rocks: '🪨', mirror: '✨', wrap: '🍫', bivy: '💤' };
 
 export function makeSar(K) {
@@ -91,6 +96,11 @@ export function makeSar(K) {
     S = { on: true, c, t: 0, run: false, res: { men: 4, drone: 1 }, teams: [], dr: null, bats: 0, droneLost: 0, rescuerLost: 0, found: new Set(), notes: [], log: [], peers: new Map(), onboard: null, kit: 0, selTeam: -1, posT: 0, saved: 0, aliveFound: 0, deadFound: 0, ended: false, sprites: [], nightOn: false };
     // тревога ночью -- Ми-8 в горах ночью не летает: вылет на рассвете, а у пострадавших тают эти часы
     const alarm = (c.clock0 + c.since / 60) % 24, wait = NIGHT(alarm) || alarm > 14 ? Math.round((((6.5 - alarm) + 24) % 24) * 60) : 0; c.alarm = alarm; c.wait = wait; // поиск начинают с утра: на светлое время -- весь день
+    // календарь дела: тревога -- сегодня (G.day); происшествие -- раньше на since; это день маршрута legIdx+1 -> дата выхода группы.
+    // Вылет утром после ночной тревоги -- календарь игры честно переходит на следующий день
+    { const D0 = G.day || 0, alarmAbs = D0 * 24 + alarm, incAbs = alarmAbs - c.since / 60, incDay = Math.floor(incAbs / 24), day1 = incDay - c.legIdx, startAbs = alarmAbs + wait / 60;
+      const L = c.last, contactAbs = L.kind === 'ping' ? incAbs : L.kind === 'radio' ? (L.camp ? (day1 + L.camp - 1) * 24 + 19.3 : day1 * 24 + 7) : null;
+      c.cal = { day1, alarmAbs, startAbs, contactAbs, incDay }; G.day = Math.floor(startAbs / 24); }
     if (wait) { c.since += wait; for (const v of c.victims) { v.left = Math.max(0, v.left - wait); v.alive0 = v.left > 0; } }
     G.clock = wait ? 6.5 : alarm;
     for (const v of c.victims) { v.foundT = undefined; v.saved = false; v.kit = 0; v.dead = false; v.inEvac = false; }
@@ -100,13 +110,19 @@ export function makeSar(K) {
   function film() { if (!S) return; S.film = true; playSarToon({ audio, TOUCH, onDone: () => { if (S) S.film = false; } }); }
   function brief() { const c = S.c, el = $('sbrief'); el.hidden = false;
     const ppl = c.group.map((p) => `<b>${p.name}</b> <small>${p.age}, ${p.city}</small>`).join(' · ');
-    const plan = c.plan.map((d) => `<li>День ${d.day}: ${d.from} → <b>${d.to}</b> <small>${d.asl} м</small></li>`).join('');
+    const K0 = c.cal, plan = c.plan.map((d) => `<li>День ${d.day} · <b>${dateOf(K0.day1 + d.day - 1)}</b>: ${d.from} → <b>${d.to}</b> <small>${d.asl} м</small></li>`).join('');
+    const at = (abs) => `<b>${dateOf(Math.floor(abs / 24))}, ${hhmm(abs)}</b>`, dn = (abs) => Math.floor(abs / 24) - K0.day1 + 1;
+    const chron = `<h3>Хронология</h3><ul class="plan" style="list-style:none;padding-left:0">
+      <li>${at(K0.day1 * 24 + 7)} — группа вышла: ${c.plan[0] ? c.plan[0].from : 'база'} (день 1)</li>
+      ${K0.contactAbs !== null ? `<li>${at(K0.contactAbs)} — ${c.last.kind === 'ping' ? 'сигнал SOS трекера' : 'последний сеанс связи'}${dn(K0.contactAbs) >= 1 ? ` (день ${dn(K0.contactAbs)} маршрута)` : ''}</li>` : ''}
+      <li>${at(K0.alarmAbs)} — ${c.last.kind === 'ping' ? 'тревога: принят SOS' : c.last.kind === 'radio' ? 'тревога: группа не вышла на связь' : `соседи подняли тревогу: группа не пришла в «${c.pts[Math.min(c.pts.length - 1, c.legIdx + 1)].n}»`}</li>
+      <li>${at(K0.startAbs)} — вылет${c.wait ? ' (ночью Ми-8 в горах не летает — ждали рассвета)' : ''} · <b>сегодня</b>, ${dateOf(Math.floor(K0.startAbs / 24), true)}</li></ul>`;
     const chip = (k, v, t, sub) => `<button class="ch" data-k="${k}" data-v="${v}" aria-pressed="${S.res[k] === v}">${t}<small>${sub}</small></button>`;
     el.innerHTML = `<h2>Дело № ${c.code}</h2>
       <p style="background:rgba(255,138,42,.2);border-radius:10px;padding:8px 10px"><b>Задача: найти пропавших живыми и доставить на базу.</b> Время идёт — у каждого свои часы.<br>
       1) Летите туда, куда ведёт <b>курс дела</b> (надпись наверху, оранжевый столб дыма, стрелка).<br>2) Снижайтесь и снимайте 📷 — вешки, палатки, следы. Улики сужают круг поиска.<br>3) Нашли живого — эвакуируйте (посадка или лебёдка) и везите на базу.</p>
       <p><small>Совместная операция: друзья вводят код <b>${c.code}</b> — то же дело, общие находки и заметки</small></p>
-      <h3>Пропали</h3><p>${ppl}</p><p>Маршрут: <b>${c.routeName}</b></p><ol class="plan">${plan}</ol>
+      <h3>Пропали</h3><p>${ppl}</p><p>Маршрут: <b>${c.routeName}</b></p><ol class="plan">${plan}</ol>${chron}
       <h3>Связь: ${c.comm.name}</h3><p>${c.last.txt}</p>${c.hook ? `<p style="background:rgba(255,210,74,.16);border-left:4px solid #ffd24a;padding:6px 10px">🔎 <b>Зацепка:</b> ${c.hook.txt}</p>` : ''}<p><small>Погода: ${{ breeze: 'ясно, ветер слабый', santash: 'ветрено — на гребнях до 20 м/с', ulan: 'буран: ветер до 40 м/с, видимость плохая' }[G.preset] || 'переменная'}. Тревога — в ${hm(c.alarm)}${c.wait ? `${NIGHT(c.alarm) ? ', ночью' : ', под вечер'}: Ми-8 в горах ночью не летает — вылет утром, в 06:30` : ''}. Темнеет в 20:30</small></p>
       <h3>Силы</h3><div class="row">${chip('men', 0, 'Без пеших', 'только с воздуха')}${chip('men', 4, '1 отряд', '4 спасателя')}${chip('men', 8, '2 отряда', '8 — быстрее, но риск')}</div>
       <div class="row" style="margin-top:6px">${chip('drone', 0, 'Без дрона', '')}${chip('drone', 1, 'Дрон', '3 батареи · тепловизор')}</div>
@@ -126,7 +142,7 @@ export function makeSar(K) {
   function hop(X, Y, D = 400, A = 120, land = false, free = false) { const h = K.heli(), a0 = Math.atan2(X - h.X, Y - h.Y), dist = Math.hypot(X - h.X, Y - h.Y), sx = X - Math.sin(a0) * D, sy = Y - Math.cos(a0) * D;
     let top = H(sx, sy); for (let k = 1; k <= 8; k++) top = Math.max(top, H(sx + (X - sx) * k / 8, sy + (Y - sy) * k / 8) - 40);
     if (land) h.reset(X + 8, Y - 6, H(X + 8, Y - 6), a0, true); else h.reset(sx, sy, top + A, a0, false); h.load = h.load || 0; K.resetCam();
-    if (S.run && !free && dist > 300) { const mins = Math.round(dist / 3300 + 2); S.t += mins; G.clock = (G.clock + mins / 60) % 24; return mins; } return 0; }
+    if (S.run && !free && dist > 300) { const mins = Math.round(dist / 3300 + 2); S.t += mins; if (G.clock + mins / 60 >= 24) G.day = (G.day || 0) + 1; G.clock = (G.clock + mins / 60) % 24; return mins; } return 0; }
   // кнопка «⏩ к цели»: цель далеко -- перелёт за пару минут операции, без полёта над пустым ледником
   function fastTarget() { const m = K.mission(), g = K.goal(); if (m) return { X: m.to.X, Y: m.to.Y, base: !!m.base, t: m.t }; if (g) return { X: g.X, Y: g.Y, t: S.goalTxt ? S.goalTxt.t : 'цель' }; return null; }
   function fast() { if (!S || !S.run || S.dr) return; const q = fastTarget(), h = K.heli(); if (!q) return; const d = Math.hypot(q.X - h.X, q.Y - h.Y); if (d < 1500) { toast('Цель рядом — долетите сами'); return; }
@@ -420,7 +436,7 @@ export function makeSar(K) {
   function bindNotes() { for (const d of document.querySelectorAll('#snotes [data-n]')) d.onclick = () => { const n = S.notes[+d.dataset.n]; if (n) { S.view.cx = n.X; S.view.cy = n.Y; S.view.R = Math.min(S.view.R, 1500); drawMap(); } }; }
   function modeHint() { return S.selTeam > 0 ? `Касание карты — <b>отряд ${S.selTeam} пойдёт туда</b>` : 'Касание карты — <b>поставить заметку</b> (видят все участники). Двумя пальцами или колесом — масштаб, перетаскиванием — сдвиг'; }
   function journal(open) { if (!S) return; const el = $('sjour'); if (!open) { el.hidden = true; return; } const c = S.c; el.hidden = false; if (!S.view) S.view = homeView(); const p = parts();
-    el.innerHTML = `<button class="x" id="sjx">✕</button><h2>Дело № ${c.code}</h2><p><small>${c.routeName} · ${c.comm.name}. ${c.last.txt}</small></p>
+    el.innerHTML = `<button class="x" id="sjx">✕</button><h2>Дело № ${c.code}</h2><p style="margin:0"><small>Сегодня ${dateOf(G.day || 0, true)} · группа вышла ${dateOf(c.cal.day1)} · тревога ${dateOf(Math.floor(c.cal.alarmAbs / 24))}, ${hhmm(c.cal.alarmAbs)}</small></p><p><small>${c.routeName} · ${c.comm.name}. ${c.last.txt}</small></p>
       <div id="scourse">${p.course}</div>
       <div class="row" id="smode" style="margin-top:8px"><button class="ch" data-t="0" aria-pressed="${S.selTeam <= 0}">📌 Заметка</button>${S.teams.map((t) => `<button class="ch" data-t="${t.id}" aria-pressed="${S.selTeam === t.id}">🧗 Отряд ${t.id}<small>${t.n} чел${t.onboard ? ' · на борту' : t.carry ? ' · несут' : t.tgt ? ' · в пути' : ' · ждёт'}</small></button>`).join('')}</div>
       <p style="margin:6px 0 0"><small id="smodeh">${modeHint()}</small></p>
