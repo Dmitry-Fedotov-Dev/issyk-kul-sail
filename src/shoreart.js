@@ -17,7 +17,7 @@ const TREE_SHAPE = [[0.3, 16, 4], [0.95, 9, 3], [0.95, 5.5, 2], [0.42, 13, 4], [
 
 function spriteMaterial() {
   return new THREE.ShaderMaterial({ defines: { FBM_OCT: 2, RIP_OCT: 2, SHN: 4, LOW: 1 }, uniforms: { ...ENV, uRes: INK_U.uRes }, extensions: { derivatives: true },
-    vertexShader: CURVE + /* glsl */`uniform vec3 uSun; uniform vec2 uRes; attribute vec4 aK; varying vec2 vU; varying vec4 vK; varying vec3 vW; varying float vSide, vFront, vE, vAsp;
+    vertexShader: CURVE + /* glsl */`uniform vec3 uSun; uniform vec2 uRes; attribute vec4 aK; attribute vec3 aD; varying vec2 vU; varying vec4 vK; varying vec3 vW; varying float vSide, vFront, vE, vAsp, vTop; varying vec2 vR, vDim, vSunL;
 void main(){ vec3 c=(instanceMatrix*vec4(0.,0.,0.,1.)).xyz; float sx=length(instanceMatrix[0].xyz), sy=length(instanceMatrix[1].xyz);
   vec3 d=cameraPosition-c; vec2 h=normalize(d.xz+1e-4); vec3 r=vec3(h.y,0.,-h.x);
   // мельче 1.6 пикселя на экране -- не рисуем: вдали деревья и дома сливаются в полосу берега, а пиксели стоят дорого
@@ -25,8 +25,15 @@ void main(){ vec3 c=(instanceMatrix*vec4(0.,0.,0.,1.)).xyz; float sx=length(inst
   vec3 p=c+r*position.x*sx+vec3(0.,position.y*sy,0.);
   vU=vec2(position.x*2., position.y); vK=aK; vW=p; vAsp=0.5*sx/sy; // полуширина в долях высоты vSide=dot(r,uSun); vFront=dot(vec3(h.x,0.,h.y),uSun);
   vE=clamp(0.5*sx*abs(d.y)/max(length(d),1.)/sy, 0.012, 0.09);          // основание конуса/кроны в перспективе
+  // дом сверху: чем круче взгляд вниз, тем сильнее «открытка» ложится в план крыши по настоящему пятну дома (OSM: ширина, глубина,
+  // поворот) на высоте карниза. Тот же прямоугольник -- лишней геометрии нет
+  vTop=0.; vR=vec2(0.); vDim=aD.xy; vSunL=vec2(0.);
+  if(aK.x>5.5 && aD.x>0.){ float el=d.y/max(length(d),1.); vTop=smoothstep(0.52,0.7,el);
+    if(vTop>0.){ float ca=cos(aD.z), sa=sin(aD.z); vec2 l=vec2(position.x*aD.x, (position.y-0.47)/1.06*aD.y), wxy=vec2(l.x*ca-l.y*sa, l.x*sa+l.y*ca);
+      vec3 pf=vec3(c.x+wxy.x, c.y+sy*(1.-aK.w*0.55), c.z-wxy.y); p=mix(p,pf,vTop); vR=vec2(position.x,(position.y-0.47)/1.06);
+      vec2 sw=vec2(uSun.x,-uSun.z); vSunL=vec2(sw.x*ca+sw.y*sa, -sw.x*sa+sw.y*ca); } }
   p.y-=curve(p); gl_Position=projectionMatrix*viewMatrix*vec4(p,1.); }`,
-    fragmentShader: GLSL_COMMON + /* glsl */`varying vec2 vU; varying vec4 vK; varying vec3 vW; varying float vSide, vFront, vE, vAsp;
+    fragmentShader: GLSL_COMMON + /* glsl */`varying vec2 vU; varying vec4 vK; varying vec3 vW; varying float vSide, vFront, vE, vAsp, vTop; varying vec2 vR, vDim, vSunL;
 float hs(float n){ return fract(sin(n*12.9898+vK.y*78.233)*43758.5453); }
 float sdBox(vec2 p, vec2 c, vec2 b){ vec2 d=abs(p-c)-b; return length(max(d,0.))+min(max(d.x,d.y),0.); }
 float sdCirc(vec2 p, vec2 c, float r){ return length(p-c)-r; }
@@ -60,6 +67,19 @@ void main(){
     sd=min(dome,pole); inner=dome; float st=step(0.5,fract(atan(q.x, max(q.y,0.05)*2.)*1.6+0.5));
     vec3 c1=pal(hs(4.), vec3(0.9,0.2,0.18), vec3(0.15,0.4,0.85), vec3(0.98,0.75,0.15), vec3(0.1,0.6,0.5));
     col= dome<0. ? mix(c1, vec3(0.97,0.95,0.9), st)*(0.75+0.4*(0.5+0.5*q.x*vSide)) : vec3(0.85,0.85,0.8); }
+  else if(vTop>0.5){ // дом сверху: план крыши. Двускатная (малые) -- конёк вдоль длинной стороны, скат к солнцу светлее, полосы черепицы;
+    // плоская (многоэтажные) -- светлая кровля с парапетом, выходами на крышу и вентиляцией
+    vec2 q=vR, M=vDim; float rf=vK.w; vec3 rc=pal(hs(6.), vec3(0.22,0.42,0.72), vec3(0.18,0.55,0.42), vec3(0.72,0.24,0.2), vec3(0.55,0.57,0.6));
+    vec2 sl=normalize(vSunL+1e-4); sd=sdBox(q,vec2(0.),vec2(0.5));
+    if(rf>0.01){ bool ax=M.x>=M.y; float acr=ax?q.y:q.x, along=ax?q.x:q.y, sAc=ax?sl.y:sl.x, Lm=ax?M.y:M.x;
+      float lit=0.62+0.42*sign(acr)*sAc, tg=abs(acr)*Lm*0.55, aa=1.-smoothstep(0.25,0.55,fwidth(tg)); col=rc*lit*(1.-0.08*aa*step(0.5,fract(tg))); /* ряды черепицы -- гаснут вдали (без ряби) */
+      inner=abs(acr)*Lm*0.08; } // конёк
+    else { float pr=sdBox(q,vec2(0.),vec2(0.5)-1.1/max(M,vec2(4.))); vec3 base=mix(vec3(0.78,0.78,0.74),rc,0.25);
+      col= pr<0. ? base : base*0.72;
+      inner=pr; vec2 hc=vec2(hs(7.)-0.5,hs(8.)-0.5)*0.5; float hatch=sdBox(q,hc,2.2/max(M,vec2(5.)));
+      if(hatch<0.){ col=vec3(0.45,0.44,0.42); } inner=min(abs(pr),abs(hatch)+0.); }
+    // тень от стен соседей не считаем; лёгкое затемнение к краю -- объём
+    col*=0.92+0.08*(1.-2.*max(abs(q.x),abs(q.y))); }
   else { // дом: стены, крыша (двускатная у малых, плоская у больших), окна по этажам; ночью часть окон тёплым светом
     float fl=vK.z, rf=vK.w, wy=1.-rf, w=vAsp; float walls=sdBox(p,vec2(0.,wy*0.5),vec2(w,wy*0.5));
     float roof=rf>0.01 ? sdTri(p, wy-0.02, 1., w*1.08) : 1e9; sd=min(walls,roof); inner=walls;
@@ -125,13 +145,13 @@ export function makeShoreArt(scene, h) {
       const [asp, hh, dv] = TREE_SHAPE[k], ht = (hh + (rnd() - 0.5) * 2 * dv) * s * (k === 3 ? 1.35 : 1); rows.push([X, y - 0.25, Y, asp * ht, ht, k, rnd(), 0, 0]); } }
   for (let i = 0; i < nH; i++) { const X = H[i * 6] / 2, Y = H[i * 6 + 1] / 2, w = H[i * 6 + 2] / 10, d = H[i * 6 + 3] / 10, fl = H[i * 6 + 4], y = h(X, Y); if (y < 0.5) continue;
     const face = Math.min(60, (w + d) * 0.55), wallH = fl * 3.1 + 0.8, roofH = fl <= 2 ? Math.min(5, Math.max(1.6, face * 0.32)) : 0, ht = wallH + roofH;
-    rows.push([X, y - 0.8, Y, face / 2 * 2, ht, 6, rnd(), fl, roofH / ht]); }
+    rows.push([X, y - 0.8, Y, face / 2 * 2, ht, 6, rnd(), fl, roofH / ht, w, d, H[i * 6 + 5] / 10000]); }
   // участки по 1.5 км -- свои наборы экземпляров: что за спиной и вне кадра, не рисуется вовсе
   const mat = spriteMaterial(), tiles = new Map(), sprites = new THREE.Group();
   for (const r of rows) { const k = Math.floor(r[0] / 1500) * 1000 + Math.floor(r[2] / 1500); if (!tiles.has(k)) tiles.set(k, []); tiles.get(k).push(r); }
-  for (const tr of tiles.values()) { const tg = geo.clone(), mesh = new THREE.InstancedMesh(tg, mat, tr.length), aK = new Float32Array(tr.length * 4);
-    tr.forEach((r, i) => { pos.set(r[0], r[1], -r[2]); scl.set(r[3], r[4], 1); m4.compose(pos, q, scl); mesh.setMatrixAt(i, m4); aK.set([r[5], r[6] * 100, r[7], r[8]], i * 4); });
-    tg.setAttribute('aK', new THREE.InstancedBufferAttribute(aK, 4)); mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 60; sprites.add(mesh); }
+  for (const tr of tiles.values()) { const tg = geo.clone(), mesh = new THREE.InstancedMesh(tg, mat, tr.length), aK = new Float32Array(tr.length * 4), aD = new Float32Array(tr.length * 3);
+    tr.forEach((r, i) => { pos.set(r[0], r[1], -r[2]); scl.set(r[3], r[4], 1); m4.compose(pos, q, scl); mesh.setMatrixAt(i, m4); aK.set([r[5], r[6] * 100, r[7], r[8]], i * 4); if (r[9]) aD.set([r[9], r[10], r[11]], i * 3); });
+    tg.setAttribute('aK', new THREE.InstancedBufferAttribute(aK, 4)); tg.setAttribute('aD', new THREE.InstancedBufferAttribute(aD, 3)); mesh.computeBoundingSphere(); mesh.boundingSphere.radius += 60; sprites.add(mesh); }
   // тени: плоский овал на склоне под каждым предметом, вытянут от солнца (в полдень короткий), гаснет ночью и в шторм.
   // Без них спрайты будто висят над землёй. Свой набор экземпляров на участок, рисуется после рельефа, глубину не пишет
   const smat = shadowMaterial(), N = new THREE.Vector3(), sgeo = new THREE.PlaneGeometry(1, 1);
