@@ -28,14 +28,19 @@ export function makeIcebergs(scene, { cells, grid, h, n = 44, big = 6, front = n
     const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny; if (rv >= 0) return 0; const im = (ma === Infinity ? 0 : 1 / ma) + (mb === Infinity ? 0 : 1 / mb), j = -1.3 * rv / im;
     if (ma !== Infinity) { a.vx -= j * nx / ma; a.vy -= j * ny / ma; } if (mb !== Infinity) { b.vx += j * nx / mb; b.vy += j * ny / mb; } return -rv; };
   const boatR = (b) => ({ yacht: 3.6, boat: 2.6, jetski: 1.6, kayak: 1.9, scull: 3.3, sup: 1.4 }[b.kind || 'yacht'] || 2), boatM = (b) => ({ yacht: 2800, boat: 1100, jetski: 420, kayak: 110, scull: 100, sup: 95 }[b.kind || 'yacht'] || 500);
-  let T = 0;
+  let T = 0, flow = null; // flow(X, Y) -> {u, v} -- течение прорыва (merzsim)
+  // новый айсберг (откол плотины всплыл): до 90 льдин на озере
+  function spawn(X, Y, r) { if (list.length >= 90) { const old = list.shift(); scene.remove(old.m); } const ht = 0.55 + Math.random() * 0.3, m = new THREE.Mesh(iceGeo(Math.floor(Math.random() * 1e6) + 1, ht), mat); m.scale.set(r, r, r); scene.add(m);
+    list.push({ X, Y, vx: 0, vy: 0, z: -r * 0.4, vz: 1.5, r, ht, mass: ICE * (4 / 3) * Math.PI * r * r * r * ht * 0.55, yaw: Math.random() * 6.3, wy: (Math.random() - 0.5) * 0.4, roll: (Math.random() - 0.5) * 0.8, pitch: (Math.random() - 0.5) * 0.8, wr: 0, wp: 0, rr: 0, rp: 0, m, cool: 0 }); }
+  // волна от обвала: радиальный толчок (сильнее у мелких), качка
+  function wave(X, Y, R, A) { for (const g of list) { const dx = g.X - X, dy = g.Y - Y, d = Math.hypot(dx, dy); if (d < 1 || Math.abs(d - R) > 25) continue; const k = A / Math.sqrt(1 + d / 60) / Math.max(1, g.r * 0.5); g.vx += dx / d * k; g.vy += dy / d * k; g.vz += k * 0.6; g.wr += (Math.random() - 0.5) * k * 0.4; } }
   // level -- уровень воды; wind -- {sx, sy} м/с; boat -- лодка игрока или null; bump(сила 0..1) -- отдача в кадр/звук
   function update(dt, level, wind, boat, bump) { T += dt; dt = Math.min(dt, 0.05);
     for (const g of bigs) { const gz = h(g.X, g.Y), sit = level - gz < g.r * 0.3; g.m.position.set(g.X, (sit ? gz + g.r * g.ht * 0.5 : level - g.r * g.ht * 0.42) + Math.sin(T * 0.25 + g.ph) * 0.25, -g.Y); g.m.rotation.set(Math.sin(T * 0.2 + g.ph) * 0.01, g.ph, Math.cos(T * 0.17 + g.ph) * 0.01); }
     const wx = wind ? wind.sx : 0, wy = wind ? wind.sy : 0;
     for (const g of list) { g.cool = Math.max(0, g.cool - dt);
       // ветер в надводную часть и вязкость воды: мелкие разгоняются и тормозятся быстрее
-      const fr = 0.06 + 0.5 / g.r; g.vx += (wx * 0.018 - g.vx * fr) * dt; g.vy += (wy * 0.018 - g.vy * fr) * dt;
+      const fr = 0.06 + 0.5 / g.r, cu = flow ? flow(g.X, g.Y) : null, cx = cu ? cu.u : 0, cy = cu ? cu.v : 0; g.vx += (wx * 0.018 + cx * fr - g.vx * fr) * dt; g.vy += (wy * 0.018 + cy * fr - g.vy * fr) * dt; // течение прорыва тянет к устью
       // берег: где мельче половины льдины -- выталкивает на глубину (по уклону дна), скорость вдоль берега остаётся
       const gz = h(g.X, g.Y), dep = level - gz, ground = dep < g.r * g.ht * 0.9;
       if (ground) { const e = 6, gx = h(g.X + e, g.Y) - h(g.X - e, g.Y), gy = h(g.X, g.Y + e) - h(g.X, g.Y - e), L = Math.hypot(gx, gy) || 1, nx = -gx / L, ny = -gy / L; const vn = g.vx * nx + g.vy * ny; if (vn < 0) { g.vx -= vn * nx * 1.4; g.vy -= vn * ny * 1.4; } g.vx += nx * 1.5 * dt; g.vy += ny * 1.5 * dt; }
@@ -53,5 +58,5 @@ export function makeIcebergs(scene, { cells, grid, h, n = 44, big = 6, front = n
       if (hard > 0.5 && bump) bump(Math.min(1, hard / 4)); }
     for (const g of list) { const gz = h(g.X, g.Y), sit = level - gz < g.r * g.ht * 0.5; g.m.position.set(g.X, (sit ? gz + g.r * g.ht * 0.45 : level - g.r * g.ht * 0.3 + g.z + Math.sin(T * 0.9 + g.yaw) * 0.06), -g.Y); g.m.rotation.set(g.pitch, g.yaw, g.roll); } }
   function setVisible(v) { for (const g of list) g.m.visible = v; for (const g of bigs) g.m.visible = v; }
-  return { update, setVisible, list, bigs };
+  return { update, setVisible, spawn, wave, setFlow(f) { flow = f; }, list, bigs };
 }

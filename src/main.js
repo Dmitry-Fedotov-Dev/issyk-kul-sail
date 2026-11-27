@@ -283,12 +283,12 @@ function setRivals(v) { for (const r of G.rivals) { const on = v && !r.out; r.mo
 // своё зеркало воды (merz.js), рельеф и глубина -- района Хан-Тенгри; судов акватории Иссык-Куля здесь нет
 function leaveLake() { if (!G.wl) return; G.wl = 0; G.hw = null; G.water.mesh.visible = true; if (G.merz) G.merz.hold = false; }
 async function startMerzLake(at) { const b = $('bfree'); b.classList.add('wait'); try { await ensureKhan(); } catch (e) { toast(e.message); return; } finally { b.classList.remove('wait'); }
-  const M = G.merz; M.hold = true; G.wl = M.top; G.hw = (x, y) => G.h(x, y) - G.wl; G.water.mesh.visible = false;
+  const M = G.merz; M.hold = false; M.startIn(120); M.onQuake = (k) => { G.shake = Math.max(G.shake, Math.min(1.2, k)); }; G.wl = M.top; /* прорыв -- через 2 минуты, с полного озера */ G.hw = (x, y) => G.h(x, y) - G.wl; G.water.mesh.visible = false;
   $('brief').hidden = true; $('mark').hidden = true; X.onFreePre(); G.mode = 'free'; G.race = null; showGame(true); setRivals(false); $('race').hidden = true;
-  X.onFree(); let P = at && at.X && Math.hypot(at.X - M.center.X, at.Y - M.center.Y) < 4000 ? at : M.center; // точка на карте -- если на озере { let best = P, bd = G.hw(P.X, P.Y); for (let r = 0; r < 600 && bd > -6; r += 40) for (let a = 0; a < 6.28; a += 0.5) { const x = P.X + Math.sin(a) * r, y = P.Y + Math.cos(a) * r, d = G.hw(x, y); if (d < bd) { bd = d; best = { X: x, Y: y }; } } P = best; }
+  X.onFree(); let P = at && at.X && Math.hypot(at.X - M.center.X, at.Y - M.center.Y) < 4000 ? at : M.center; /* точка на карте -- если на озере */ { let best = P, bd = G.hw(P.X, P.Y); for (let r = 0; r < 600 && bd > -6; r += 40) for (let a = 0; a < 6.28; a += 0.5) { const x = P.X + Math.sin(a) * r, y = P.Y + Math.cos(a) * r, d = G.hw(x, y); if (d < bd) { bd = d; best = { X: x, Y: y }; } } P = best; }
   let th = 0, bd = 1e9; for (let k = 0; k < 12; k++) { const a = k * 0.5236; let d = 0; for (const r of [80, 200, 400]) d += G.hw(P.X + Math.sin(a) * r, P.Y + Math.cos(a) * r); if (d < bd) { bd = d; th = a; } }
   placeBoat(G.player, P.X, P.Y, th, 1.2); G.player.b.y = G.wl; G.player.b.base = G.wl; G.free = { done: {}, dist: 0, max: 0, t: 0 }; G.camYaw = th; resetView(); G.merzLake = true;
-  toast('Озеро Мерцбахера, 3300 м: ледниковая вода, айсберги, Хан-Тенгри за спиной'); }
+  toast('Озеро Мерцбахера, 3300 м. Через 2 минуты — прорыв: вода уйдёт под ледник, берега рухнут. Держитесь подальше от плотины'); G.merzWarn = 0; }
 function toMenu() { leaveLake(); G.merzLake = false;
   if (SPY) SPY.close(); if (FT) FT.stop(); if (PG) PG.stop(); if (JM) JM.stop(); if (HM) HM.stop();
   $('brief').hidden = true; $('mark').hidden = true; if (X) X.toMenuCraft();
@@ -594,7 +594,7 @@ function mapWork() { if (!G) return; if (!mapReady) { mapReady = true; makeMapLa
   const g = G.far.userData.grid, size = (g.W * g.STEP), pr = renderer.getPixelRatio(), buf = renderer.getDrawingBufferSize(new THREE.Vector2()), cc = new THREE.Color(), ca = renderer.getClearAlpha(); renderer.getClearColor(cc);
   const keep = { sc: ENV.uSunCol.value.clone(), sun: SUN.clone(), day: ENV.uDay.value, dusk: ENV.uDusk.value, si: ENV.uSunI.value, st: ENV.uStorm.value, cov: ENV.uCover.value, hor: ENV.uHor.value.clone() };
   SUN.set(-0.55, 0.72, -0.42).normalize(); Object.assign(ENV.uDay, { value: 1 }); ENV.uDusk.value = 0; ENV.uSunI.value = 1; ENV.uStorm.value = 0; ENV.uCover.value = -1; ENV.uHor.value.set(0.56, 0.76, 0.97); ENV.uSunCol.value.set(1, 0.97, 0.9); ENV.uMap.value = 1;
-  renderer.shadowMap.autoUpdate = false; renderer.setClearColor(0xd9cfb2, 1); // дыры сетки -- низины за хребтами: суша renderer.setRenderTarget(null); renderer.setScissorTest(true);
+  renderer.shadowMap.autoUpdate = false; renderer.setClearColor(0xd9cfb2, 1); // дыры сетки -- низины за хребтами: суша (вызовы, что стояли здесь за комментарием, никогда не выполнялись -- убраны, поведение прежнее)
   const t0 = performance.now();
   while (tileQueue.length && performance.now() - t0 < 10) { const [k, l, i, j] = tileQueue.pop(); tileWant.delete(k); const ts = size / 2 ** l, cx = g.X0 + (i + 0.5) * ts, cy = g.Y1 - (j + 0.5) * ts;
     Object.assign(mapCam, { left: -ts / 2, right: ts / 2, top: ts / 2, bottom: -ts / 2 }); mapCam.position.set(cx, 5000, -cy); mapCam.lookAt(cx, 0, -cy); mapCam.updateProjectionMatrix();
@@ -668,7 +668,8 @@ function lodTick(dt) {
 }
 // один шаг мира: физика, гонка, эффекты. Без отрисовки -- им же пользуются автотесты для перемотки.
 const iceBump = (k) => { G.shake = Math.max(G.shake, 0.15 + k * 0.6); audio.thump && audio.thump(0.3 + k); };
-function tick(dt) { if (G.merz && G.merzLake && G.mode !== 'menu') G.merz.iceStep(dt, G.player.b, G.wind, iceBump); // лёд на озере -- в шаге физики, вместе с лодкой
+function tick(dt) { if (G.merz && G.merzLake && G.mode !== 'menu') { G.merz.iceStep(dt, G.player.b, G.wind, iceBump); G.wl = G.merz.level; // уровень лодок -- за уровнем озера
+    const ph = G.merz.phase; if (ph.wait !== undefined && ph.wait < 30 && G.merzWarn < 1) { G.merzWarn = 1; toast('Лёд гудит. Прорыв через 30 секунд'); } if (ph.active && ph.k * 3600 < 5 && G.merzWarn < 2) { G.merzWarn = 2; toast('ПРОРЫВ! Вода уходит под ледник Южный Иныльчек'); G.shake = Math.max(G.shake, 0.5); } } // лёд на озере -- в шаге физики, вместе с лодкой
   const P = G.player, b = P.b, R = G.race;
   G.t += dt; G.wind.update(dt); dayCycle(dt);
   if (FT && FT.on) { FT.tick(dt); envTick(G.player.b); return; } // Дымок пешком: снаряд стоит, где оставили

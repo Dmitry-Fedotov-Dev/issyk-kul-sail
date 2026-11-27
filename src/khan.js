@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { KHAN, KHAN_POI } from './khandata.js';
 import { gridTerrain } from './world.js';
-import { lakeBowl } from './merz.js';
+import { lakeBowl } from './lakebowl.js';
 import { KPEAKS, KCAMPS, KHELI, KLAKE } from './khanosm.js';
 export { KPEAKS, KCAMPS, KHELI, KLAKE };
 
