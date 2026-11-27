@@ -14,6 +14,7 @@ import { clamp, wrapPi } from './sim.js';
 
 const AIRPORT = { X: -4385, Y: 1809 };
 const CSS = `
+#jcomp{position:fixed;right:max(14px,env(safe-area-inset-right,0px));top:64px;width:clamp(96px,26vw,132px);height:clamp(96px,26vw,132px);border-radius:50%;pointer-events:none;z-index:4;filter:drop-shadow(0 2px 8px rgba(0,0,0,.45))}@media (max-height:440px){#jcomp{top:56px;width:96px;height:96px}}
 body.jet #speed>b,body.jet #speed>small,body.jet #pos,body.jet #wear,body.jet #dialwrap,body.jet #race,body.jet #bpro,body.jet #bfoot{display:none!important}body.jet #tools{position:fixed;right:max(16px,env(safe-area-inset-right,0px));top:12px}
 #jhud{left:max(16px,env(safe-area-inset-left,0px));top:14px;line-height:1.15}#jhud b.v{font-size:44px;font-weight:300;letter-spacing:-1px}#jhud small{font-size:13px;color:var(--dim);margin-left:4px}
 #jhud .r{font-size:14px;margin-top:3px}#jhud .r b{font-weight:600}#jhud .g{display:inline-block;min-width:54px}#jhud .thr{display:inline-block;padding:0 6px;border-radius:5px;background:rgba(255,255,255,.15);font-size:12px;font-weight:700;margin-left:6px}#jhud .thr.max{background:#ff8a2a;color:#2a1300}
@@ -73,7 +74,7 @@ export function makeJetMode(A) {
 
   function build() { if (built) return; built = true;
     const st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
-    const w = document.createElement('div'); w.id = 'jwrap'; w.hidden = true; w.innerHTML = '<canvas id="jhorizon"></canvas><div id="jhud" class="hud"></div><div id="jwarn" class="hud" hidden></div><div id="jring" class="hud" hidden></div>'; $('game').appendChild(w);
+    const w = document.createElement('div'); w.id = 'jwrap'; w.hidden = true; w.innerHTML = '<canvas id="jcomp" title="Компас"></canvas><canvas id="jhorizon"></canvas><div id="jhud" class="hud"></div><div id="jwarn" class="hud" hidden></div><div id="jring" class="hud" hidden></div>'; $('game').appendChild(w);
     hzc = $('jhorizon'); hz = hzc.getContext('2d');
     J = new Jet(); M = makeJet(); scene.add(M.root); M.root.visible = false;
     rwy = findRunway(); rwy.mesh = runwayMesh(rwy); scene.add(rwy.mesh); rwy.mesh.visible = false;
@@ -93,8 +94,8 @@ export function makeJetMode(A) {
   function startFree(at) { if (at) { startAt(at); return; } begin(); const s = -rwy.L / 2 + 80, X = rwy.X + Math.sin(rwy.th) * s, Y = rwy.Y + Math.cos(rwy.th) * s; J.reset(X, Y, Math.max(0, HG(X, Y)), rwy.th, 'ground'); J.gear = true;
     toast(TOUCH ? 'Як-130 на полосе. Потяните джойстик на себя — взлёт' : 'Як-130 на полосе. Пробел — максимал, на 210 км/ч — ↓ на себя'); F.free = true; }
   // район Хан-Тенгри: старт в воздухе над озером Мерцбахера, курс -- вверх по Южному Иныльчеку на Хан-Тенгри и пик Победы
-  function startZone(z) { begin(); F.zone = z; const m = z.poi.merz, k = z.poi.khan, th = Math.atan2(k.X - m.X, k.Y - m.Y) + 0.35, X = m.X - Math.sin(th) * 6000, Y = m.Y - Math.cos(th) * 6000;
-    J.reset(X, Y, Math.max(z.h(X, Y), m.h) + 1500, th, 'air', 200); J.gear = false; F.free = true; F.airT = 30;
+  function startZone(z, at) { begin(); F.zone = z; const m = z.poi.merz, k = z.poi.khan, th = at ? Math.atan2(k.X - at.X, k.Y - at.Y) : Math.atan2(k.X - m.X, k.Y - m.Y) + 0.35, X = at ? at.X : m.X - Math.sin(th) * 6000, Y = at ? at.Y : m.Y - Math.cos(th) * 6000; // at -- точка с карты гор: в воздухе над ней
+    J.reset(X, Y, at ? z.h(X, Y) + 900 : Math.max(z.h(X, Y), m.h) + 1500, th, 'air', 200); J.gear = false; F.free = true; F.airT = 30;
     toast('Иныльчек: впереди Хан-Тенгри и пик Победы'); }
   function startRace() { begin(); const r0 = rings[0], r1 = rings[1], th = Math.atan2(r1.X - r0.X, r1.Y - r0.Y), X = r0.X - Math.sin(th) * 4500, Y = r0.Y - Math.cos(th) * 4500;
     J.reset(X, Y, 450, th, 'air', 185); J.gear = false; F.gearK = 0; R = { next: 0, t: 0, miss: 0, best: store.get('jetBest') };
@@ -196,14 +197,14 @@ export function makeJetMode(A) {
     v3.copy(pos).addScaledVector(back, d).addScaledVector(cup, d * ((far ? 0.35 : 0.24) - 0.12 * F.lean) + G.orbitP * d);
     const gy = Math.max(0, H(v3.x, -v3.z)) + 3; if (v3.y < gy) v3.y = gy;
     G.shake = Math.max(0, G.shake - dt * 1.4); const sh = G.shake * G.shake * 1.6 + Math.max(0, J.n - 4) * 0.012 + (J.V > 240 ? 0.004 : 0) + (J.bump || 0) * 0.5 + (J.mode === 'air' ? (J.buf || 0) * 0.3 + Math.max(0, (J.q || 0) - 0.9) * 0.025 : 0), jx = (Math.random() - 0.5) * sh, jy = (Math.random() - 0.5) * sh;
-    camera.position.copy(v3); camera.position.x += jx; camera.position.y += jy; camera.up.copy(cup); const tall = window.innerHeight > window.innerWidth; camera.lookAt(cpos.copy(pos).addScaledVector(clook, 30).addScaledVector(cup, tall ? -1.2 : 3.5)); // на телефоне стоймя самолёт выше -- над джойстиком // самолёт -- в нижней трети, впереди виден горизонт
+    camera.position.copy(v3); camera.position.x += jx; camera.position.y += jy; camera.up.copy(cup); const tall = window.innerHeight > window.innerWidth; const orb = Math.max(Math.min(1, Math.max(0, (Math.abs(Math.atan2(Math.sin(G.orbit), Math.cos(G.orbit))) - 0.3) / 0.7)), Math.min(1, Math.max(0, (Math.abs(G.orbitP) - 0.3) / 0.6))); camera.lookAt(cpos.copy(pos).addScaledVector(clook, 30 * (1 - orb)).addScaledVector(cup, (tall ? -1.2 : 3.5) * (1 - orb))); /* облёт пальцем (как у яхты, по кругу): смотрим на сам самолёт, иначе -- вперёд по курсу */ // на телефоне стоймя самолёт выше -- над джойстиком // самолёт -- в нижней трети, впереди виден горизонт
     camera.fov += (60 + Math.max(0, J.V - 120) * 0.07 + (F ? F.bk * 12 : 0) - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix(); }
   function resetCam() { camInit = false; camera.up.set(0, 1, 0); }
 
   // ---- приборы ----
   let hudT = 0;
   function hud(dt) { if (!on) return; if (G.toastT > 0) { G.toastT -= dt; if (G.toastT <= 0) $('toast').style.opacity = 0; }
-    pointMark(); drawHorizon(); trailsTick(dt);
+    pointMark(); drawHorizon(); compass(); trailsTick(dt);
     hudT -= dt; if (hudT > 0) return; hudT = 0.1;
     const kmh = Math.round(J.V * 3.6), alt = Math.round(J.Z + 1601), agl = Math.round(J.agl || 0);
     $('jhud').innerHTML = `<div><b class="v">${kmh}</b><small>км/ч</small><span class="thr${J.max ? ' max' : ''}">${J.max ? 'МАКСИМАЛ' : J.brake ? 'ЩИТКИ' : F.eco ? 'ЭКОНОМ' : J.mode === 'ground' ? 'РУД ' + Math.round(J.thr * 100) + '%' : 'АВТОМАТ'}</span></div>
@@ -221,6 +222,20 @@ export function makeJetMode(A) {
     for (let a = -60; a <= 60; a += 10) { const y = (gm - a * Math.PI / 180) * k * -1 * -1; const yy = (a * Math.PI / 180 - gm) * -k; if (Math.abs(yy) > Hh) continue; const L = a === 0 ? W * 0.35 : 60; hz.setLineDash(a < 0 ? [8, 6] : []); hz.beginPath(); hz.moveTo(-L, yy); hz.lineTo(-24, yy); hz.moveTo(24, yy); hz.lineTo(L, yy); hz.stroke(); if (a) { hz.fillText(String(a), L + 6, yy + 4); } void y; }
     hz.restore(); hz.setLineDash([]); hz.strokeStyle = 'rgba(120,255,150,.95)'; hz.lineWidth = 2; hz.beginPath(); hz.arc(W / 2, Hh / 2, 8, 0, 7); hz.moveTo(W / 2 - 22, Hh / 2); hz.lineTo(W / 2 - 8, Hh / 2); hz.moveTo(W / 2 + 8, Hh / 2); hz.lineTo(W / 2 + 22, Hh / 2); hz.moveTo(W / 2, Hh / 2 - 8); hz.lineTo(W / 2, Hh / 2 - 16); hz.stroke(); }
   // маркер цели: следующее кольцо или полоса
+  // компас (как радар вертолёта): обод с С/В/Ю/З поворачивается с камерой -- вверху то, что впереди на экране; стрелка -- нос,
+  // оранжевый треугольник на ободе -- цель (кольцо или полоса), синий -- откуда ветер; сверху -- курс в градусах
+  const cdir = new THREE.Vector3();
+  function compass() { const cv = $('jcomp'); if (!cv) return; cv.hidden = J.mode === 'crash'; if (cv.hidden) return; const css = cv.clientWidth || 120, dpr = Math.min(2, window.devicePixelRatio || 1), N = Math.round(css * dpr); if (cv.width !== N) cv.width = cv.height = N;
+    const x = cv.getContext('2d'), c = N / 2, rim = Math.max(9 * dpr, N * 0.12), r = c - rim; camera.getWorldDirection(cdir); const yaw = Math.atan2(cdir.x, -cdir.z), th = Math.atan2(J.f[0], J.f[1]);
+    x.clearRect(0, 0, N, N); x.beginPath(); x.arc(c, c, c - 1, 0, 7); x.fillStyle = 'rgba(10,26,52,.5)'; x.fill(); x.beginPath(); x.arc(c, c, r, 0, 7); x.strokeStyle = 'rgba(255,255,255,.18)'; x.lineWidth = dpr; x.stroke();
+    x.strokeStyle = 'rgba(255,255,255,.5)'; for (let d = 0; d < 360; d += 30) { const a = d * Math.PI / 180 - yaw, L = d % 90 ? rim * 0.3 : rim * 0.5; x.beginPath(); x.moveTo(c + Math.sin(a) * (c - 2 * dpr), c - Math.cos(a) * (c - 2 * dpr)); x.lineTo(c + Math.sin(a) * (c - L), c - Math.cos(a) * (c - L)); x.stroke(); }
+    x.font = `800 ${Math.round(rim * 0.8)}px system-ui,sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; const rr = r + rim / 2 - dpr;
+    [['С', 0], ['В', 90], ['Ю', 180], ['З', 270]].forEach(([t, d]) => { const a = d * Math.PI / 180 - yaw; x.fillStyle = d ? '#fff' : '#ff5a3a'; x.fillText(t, c + Math.sin(a) * rr * 0.78, c - Math.cos(a) * rr * 0.78); });
+    const tri = (a, col, sz) => { x.save(); x.translate(c + Math.sin(a) * (c - rim * 0.55), c - Math.cos(a) * (c - rim * 0.55)); x.rotate(a + Math.PI); x.fillStyle = col; x.strokeStyle = '#0b1a33'; x.lineWidth = dpr; x.beginPath(); x.moveTo(0, -sz); x.lineTo(sz * 0.8, sz * 0.7); x.lineTo(-sz * 0.8, sz * 0.7); x.closePath(); x.fill(); x.stroke(); x.restore(); };
+    let tg = null; if (R && rings[R.next]) tg = rings[R.next]; else if (F && F.free && !F.zone) tg = rwy; if (tg) tri(Math.atan2(tg.X - J.X, tg.Y - J.Y) - yaw, '#ff8a2a', rim * 0.55);
+    const wd = G.wind; if (wd && Math.hypot(wd.sx, wd.sy) > 0.5) tri(Math.atan2(-wd.sx, -wd.sy) - yaw, '#6ec0ff', rim * 0.45);
+    x.save(); x.translate(c, c); x.rotate(th - yaw); x.fillStyle = '#ff6a1a'; x.strokeStyle = '#fff'; x.lineWidth = 1.5 * dpr; const s2 = r * 0.42; x.beginPath(); x.moveTo(0, -s2); x.lineTo(s2 * 0.55, s2 * 0.6); x.lineTo(0, s2 * 0.3); x.lineTo(-s2 * 0.55, s2 * 0.6); x.closePath(); x.fill(); x.stroke(); x.restore();
+    x.font = `700 ${Math.round(rim * 0.75)}px system-ui,sans-serif`; x.fillStyle = '#fff'; x.fillText(String(Math.round(((th * 180 / Math.PI) % 360 + 360) % 360)).padStart(3, '0') + '°', c, c + r * 0.62); }
   function pointMark() { const mk = $('mark'); let tg = null, lab = '';
     if (R && rings[R.next]) { const r = rings[R.next]; tg = [r.X, r.Y, r.Z]; lab = `кольцо ${R.next + 1}`; } else if (F.free && J.mode === 'air' && F.t > 20) { tg = [rwy.X, rwy.Y, Math.max(0, H(rwy.X, rwy.Y)) + 10]; lab = 'полоса'; }
     if (!tg || J.mode === 'crash') { mk.hidden = true; return; } const w = window.innerWidth, hh = window.innerHeight; v3.set(tg[0], tg[2], -tg[1]).project(camera); const behind = v3.z > 1;

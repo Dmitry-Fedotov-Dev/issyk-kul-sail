@@ -102,9 +102,11 @@ function roadSurface(str, h, color, lift) { const pos = [], idx = []; let n = 0;
   for (const s of str.split(';')) { const [w2, rest] = s.split(':'), v = rest.split(',').map(Number), w = +w2 / 4, P = [];
     for (let i = 0; i + 1 < v.length; i += 2) P.push([v[i] * 2, v[i + 1] * 2]); if (P.length < 2) continue;
     const Q = [P[0]]; for (let i = 1; i < P.length; i++) { const [a, b] = Q[Q.length - 1], [c, d] = P[i], L = Math.hypot(c - a, d - b), k = Math.ceil(L / 8); for (let j = 1; j <= k; j++) Q.push([a + (c - a) * j / k, b + (d - b) * j / k]); }
+    let prev = false; // над водой (пирсы, ошибки привязки у уреза) полотно не кладём -- иначе «тени» под водой у берега
     for (let i = 0; i < Q.length; i++) { const a = Q[Math.max(0, i - 1)], b = Q[Math.min(Q.length - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L * w, ny = dx / L * w, [X, Y] = Q[i];
-      for (const sg of [1, -1]) { const x = X + nx * sg, y = Y + ny * sg; pos.push(x, Math.max(0.2, h(x, y)) + lift, -y); }
-      if (i) idx.push(n - 2, n, n - 1, n - 1, n, n + 1); n += 2; } }
+      const dry = h(X + nx, Y + ny) > 0.3 && h(X - nx, Y - ny) > 0.3; if (!dry) { prev = false; continue; }
+      for (const sg of [1, -1]) { const x = X + nx * sg, y = Y + ny * sg; pos.push(x, h(x, y) + lift, -y); }
+      if (prev) idx.push(n - 2, n, n - 1, n - 1, n, n + 1); n += 2; prev = true; } }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(n > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1)); g.computeVertexNormals(); g.computeBoundingSphere();
   const m = new THREE.MeshLambertMaterial({ color, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6, side: THREE.DoubleSide });
   m.onBeforeCompile = (sh) => { sh.vertexShader = CURVE + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  transformed.y -= curve(transformed);'); };
@@ -150,7 +152,7 @@ export function makeShoreArt(scene, h) {
   g.add(makeInk(coast.map((pts) => ({ pts, h: () => 0.25 })), inkMaterial({ w: 0.95, a: 1 })));
   g.add(makeInk(surf.map((pts) => ({ pts, h: () => 0.1 })), inkMaterial({ col: [0.85, 0.95, 1.0], w: 0.8, a: 0.55, lift: 1.5 })));
   const RA = [2 ** 7.6, 2 ** 6.8, 2 ** 6.1]; // главные дороги видно дальше, улицы -- вблизи
-  const rl = [[], [], []]; for (const s of ROADS.split(';')) { const [c, rest] = s.split(':'), n = rest.split(',').map(Number), pts = []; for (let i = 0; i + 1 < n.length; i += 2) pts.push([n[i] * 2, n[i + 1] * 2, RA[+c]]); if (pts.length > 1) rl[+c].push({ pts, h: (X, Y) => Math.max(0.3, h(X, Y)) + 0.3 }); }
+  const rl = [[], [], []]; for (const s of ROADS.split(';')) { const [c, rest] = s.split(':'), n = rest.split(',').map(Number), pts = []; for (let i = 0; i + 1 < n.length; i += 2) { const X = n[i] * 2, Y = n[i + 1] * 2; if (h(X, Y) > 0.3) pts.push([X, Y, RA[+c]]); else if (pts.length) { if (pts.length > 1) rl[+c].push({ pts: pts.splice(0), h: (X2, Y2) => Math.max(0.3, h(X2, Y2)) + 0.3 }); else pts.length = 0; } } /* над водой линию рвём */ if (pts.length > 1) rl[+c].push({ pts, h: (X, Y) => Math.max(0.3, h(X, Y)) + 0.3 }); }
   rl.forEach((l, c) => g.add(makeInk(l, inkMaterial({ col: [0.32, 0.22, 0.12], w: c === 0 ? 1 : 0.8, a: c === 2 ? 0.45 : 0.6, lift: 1 }))));
   g.userData.count = rows.length; scene.add(g); return g;
 }

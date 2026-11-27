@@ -87,7 +87,7 @@ body.touchdev #ts{display:block}
 #joy i{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 2px 10px rgba(0,18,50,.4)}
 #joy.on i{background:rgba(255,138,42,.85)}
 body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168px + env(safe-area-inset-bottom,0px))}body.touchdev.motor #ts{display:none}body.touchdev #hint{bottom:calc(122px + env(safe-area-inset-bottom,0px))}
-#menu{position:fixed;inset:0;display:flex;align-items:center;justify-content:flex-start;padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));box-sizing:border-box;background:none;overflow-y:auto}
+#menu{scrollbar-gutter:stable;position:fixed;inset:0;display:flex;align-items:center;justify-content:flex-start;padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));box-sizing:border-box;background:none;overflow-y:auto}
 /* Панель меню -- это «озеро»: её кромка повторяет настоящую береговую линию у Чолпон-Аты (мыс и бухта), снятую с карты высот.
    На широком экране берег идёт по правому краю (север справа), на телефоне -- по верхнему краю нижнего листа (север сверху). */
 /* Панель меню -- это СУША: её кромка повторяет настоящий берег у Чолпон-Аты, а внутри тонкими линиями идёт топография

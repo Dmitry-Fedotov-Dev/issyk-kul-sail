@@ -92,7 +92,7 @@ body.touchdev #ts{display:block}
 #joy i{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 2px 10px rgba(0,18,50,.4)}
 #joy.on i{background:rgba(255,138,42,.85)}
 body.touchdev.motor #joy{display:block}body.touchdev.motor #hint{bottom:calc(168px + env(safe-area-inset-bottom,0px))}body.touchdev.motor #ts{display:none}body.touchdev #hint{bottom:calc(122px + env(safe-area-inset-bottom,0px))}
-#menu{position:fixed;inset:0;display:flex;align-items:center;justify-content:flex-start;padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));box-sizing:border-box;background:none;overflow-y:auto}
+#menu{scrollbar-gutter:stable;position:fixed;inset:0;display:flex;align-items:center;justify-content:flex-start;padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));box-sizing:border-box;background:none;overflow-y:auto}
 /* Панель меню -- это «озеро»: её кромка повторяет настоящую береговую линию у Чолпон-Аты (мыс и бухта), снятую с карты высот.
    На широком экране берег идёт по правому краю (север справа), на телефоне -- по верхнему краю нижнего листа (север сверху). */
 /* Панель меню -- это СУША: её кромка повторяет настоящий берег у Чолпон-Аты, а внутри тонкими линиями идёт топография
@@ -304,7 +304,7 @@ window.addEventListener('error',function(e){fail(e&&e.message)});window.addEvent
 var lastMsg='',still=0,wd=setInterval(function(){var g=document.getElementById('loadmsg');if(!L||L.classList.contains('done')||L.onclick){clearInterval(wd);return}
 if(g.textContent!==lastMsg){lastMsg=g.textContent;still=0;return}still+=5;if(still>=45){clearInterval(wd);g.textContent+=' Загрузка затянулась: нажмите, чтобы начать заново';L.style.cursor='pointer';L.onclick=function(){location.reload()};}},5000);})();</script>
 
-<script>(function(){var src="game.62a680e347.js",size=7030009,m=document.getElementById('loadmsg'),f=document.getElementById('loadfill'),mb=function(b){return (b/1048576).toFixed(1)};
+<script>(function(){var src="game.4918851bcb.js",size=7044039,m=document.getElementById('loadmsg'),f=document.getElementById('loadfill'),mb=function(b){return (b/1048576).toFixed(1)};
 function tag(){var s=document.createElement('script');s.src=src;s.onerror=function(){m.textContent='Не удалось скачать игру. Проверьте интернет и нажмите, чтобы попробовать ещё раз';var L=document.getElementById('load');L.style.cursor='pointer';L.onclick=function(){location.reload()}};document.body.appendChild(s)}
 if(location.protocol==='file:'||!window.fetch||!window.ReadableStream||!window.TextDecoder){tag();return}
 m.textContent='Загружаем игру…';

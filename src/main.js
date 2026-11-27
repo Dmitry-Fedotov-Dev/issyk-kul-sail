@@ -124,7 +124,7 @@ async function init() {
   G = { stars, shoreArt, corridor: null, lake, mapObjs: [nearT, demT, far, ...shoreObjs], ensureRivals, ridges, h: (x, y) => (G.khan && khanInside(x, y) ? G.khan.h(x, y) : hA(x, y)), /* в районе Хан-Тенгри -- его рельеф */ hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
     cam: 0, camYaw: 0, orbit: 0, orbitP: 0, zoom: 1, orbitV: 0, shake: 0, hintT: 0, free: null, toastT: 0, frame: 0, slow: 0 };
   if (!PRESETS[G.preset]) G.preset = 'santash';
-  X = installExtra({ mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
+  X = installExtra({ ensureKhan: () => ensureKhan(false), mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
     setPreset: (id) => { if (PRESETS[id]) { G.preset = id; applyPreset(); } }, para: () => PG, jet: () => JM, heli: () => HM, heliGo: () => heliGo() });
   G.pro = !!store.get('pro'); $('bpro').classList.toggle('on', G.pro);
   G.hMesh = (x, y) => { const v = demT.userData.meshH(x, y); return v === null ? hA(x, y) : v; }; // высота видимой земли -- для персонажей
@@ -221,7 +221,7 @@ function coastMask() { const W = window.innerWidth, H = window.innerHeight, ph =
   if (!ph) { // колонка управления: её левый край -- граница, правее которой только суша
     const cr = $('card').getBoundingClientRect(), cardL = cr.width ? cr.left : W - Math.min(W * 0.04, 48) - 440, mn0 = $('menu');
     HH = Math.max(H, cr.height ? Math.ceil(cr.bottom + (mn0 ? mn0.scrollTop : 0) + 48) : H); svg.style.height = HH + 'px';
-    s = clamp((W - cardL + 90) / 11000, 0.03, 0.09); fit(HH / s); s = HH / (X1 - X0); sample(Math.ceil(HH / 2.5));
+    s = clamp((W - cardL + 90) / 11000, 0.03, 0.09); fit(H / s); s = H / (X1 - X0); X1 = Math.min(XMAX, X0 + HH / s); sample(Math.ceil(HH / 2.5)); // масштаб -- от экрана (не дёргается, когда меню меняет высоту), длина -- до низа меню
     let ym = -1e9; for (const v of pts) ym = Math.max(ym, v[1]); const ox = cardL - 40 - ym * s;
     P = (X, Y) => [ox + Y * s, (X - X0) * s]; Ymax = (W - ox) / s + 300; close = `L${W + 4},${HH + 4} L${W + 4},-4 Z`;
     let mn = 1e9; for (const v of pts) mn = Math.min(mn, P(v[0], v[1])[0]); MENU.lakeW = mn - 60;
@@ -263,7 +263,7 @@ function buildMenu() {
     if (G.mode === 'menu') { G.clock = TOD[G.tod][1]; dayCycle(0); updateEnv(G.sky); } }; // меню сразу показывает выбранное время суток -- как выбор погоды
   for (const id in TOD) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${TOD[id][0]}</b>`; b.onclick = () => setTod(id); $('tod').appendChild(b); }
   setTod(store.get('tod') || 'day'); G.todHour = () => TOD[G.tod][1];
-  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if ((X.sel === 'para' && !PG) || (X.sel === 'jet' && !JM)) { toast('Этот снаряд не загрузился — выберите другой'); return; } if (X.sel === 'para') PG.startFree(X.startAt); else if (X.sel === 'heli') heliGo(); else if (X.sel === 'jet' && store.get('jetSite') === 'khan' && !X.startAt) startKhan('jet'); else if (X.sel === 'jet') JM.startFree(X.startAt); else startFree(); };
+  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if ((X.sel === 'para' && !PG) || (X.sel === 'jet' && !JM)) { toast('Этот снаряд не загрузился — выберите другой'); return; } const KA = X.startAt && X.startAt.zone === 'khan' ? X.startAt : null; /* точка на карте гор */ if (KA && ['heli', 'jet', 'para'].includes(X.sel)) { startKhan(X.sel, X.sel === 'heli' ? (['merz', 'sar', 'school'].includes(store.get('heliSite')) ? store.get('heliSite') : '') : '', KA); return; } if (X.sel === 'para') PG.startFree(X.startAt); else if (X.sel === 'heli') heliGo(); else if (X.sel === 'jet' && store.get('jetSite') === 'khan' && !X.startAt) startKhan('jet'); else if (X.sel === 'jet') JM.startFree(X.startAt); else startFree(); };
   $('brace').onclick = () => { audio.start(); X.compete(); };
   $('ragain').onclick = () => { if (AIR()) AIR().again(); else if (PG && PG.on) PG.again(); else if (G.mode === 'river') { $('result').hidden = true; $('briver').click(); } else X.compete(); }; $('rmenu').onclick = () => toMenu();
 }
@@ -532,9 +532,11 @@ function sunTint(sinEl, eve, storm) { const hD = Math.max(-0.6, Math.asin(clamp(
   if (!eve) { cb += 0.06 * (1 - cg); } // утренний свет розовее
   const w = storm * 0.8; ENV.uSunCol.value.set(cr + (0.9 - cr) * w, cg + (0.9 - cg) * w, cb + (0.92 - cb) * w); ENV.uSunX.value = clamp(r * 1.06, 0, 1); ENV.uEve.value = eve ? 1 : 0; }
 // район Хан-Тенгри: рельеф грузится при первом входе (отдельный файл), дальше -- сразу
-async function startKhan(craft, mode = '') { const merzNow = mode === 'merz'; const b = $('bfree'); b.classList.add('wait');
-  try { if (!G.khan) { toast('Летим на Хан-Тенгри… грузим рельеф Иныльчека'); G.khan = await loadKhan(scene); G.merz = makeMerz(scene, G.khan); G.snow = makeSnow(scene); G.klabels = makePeakLabels($('game'), G.khan.h); } } catch (e) { toast(e.message); return; } finally { b.classList.remove('wait'); }
-  if (craft === 'jet') JM.startZone(G.khan); else if (craft === 'heli') { if (merzNow) G.merz.force(); HM.startFree(mode); } }
+// рельеф района Хан-Тенгри -- по требованию (старт в горах или карта гор в меню)
+async function ensureKhan(msg = true) { if (!G.khan) { if (msg) toast('Летим на Хан-Тенгри… грузим рельеф Иныльчека'); G.khan = await loadKhan(scene); G.merz = makeMerz(scene, G.khan); G.snow = makeSnow(scene); G.klabels = makePeakLabels($('game'), G.khan.h); } return G.khan; }
+async function startKhan(craft, mode = '', at = null) { const merzNow = mode === 'merz'; const b = $('bfree'); b.classList.add('wait');
+  try { await ensureKhan(); } catch (e) { toast(e.message); return; } finally { b.classList.remove('wait'); }
+  if (craft === 'jet') JM.startZone(G.khan, at); else if (craft === 'heli') { if (merzNow) G.merz.force(); HM.startFree(mode); if (at) HM.placeAt(at); } else if (craft === 'para') PG.startFree(at); }
 function heliGo() { if (!HM) { toast('Вертолёт не загрузился — выберите другой снаряд'); return; } audio.start(); G.clock = G.todHour(); if (store.get('heliSite') === 'rwy') HM.startFree(); else startKhan('heli', ['merz', 'sar', 'school'].includes(store.get('heliSite')) ? store.get('heliSite') : ''); }
 function dayCycle(dt) { if (G.clock === undefined) G.clock = 10; { const c = G.clock + (G.mode === 'menu' ? 0 : dt / 60 * (G.clockK || 1)); if (c >= 24) G.day = (G.day || 0) + 1; G.clock = c % 24; } const k = G.wx; if (!k) return; // G.day -- игровые сутки от 23 июля: идут сезоны; в меню время стоит на выбранном
   astroSun(G.day || 0, G.clock, SUN); const sinEl = SUN.y; // Солнце -- по эфемериде на игровую дату (astro.js): долгота дня и заря меняются с сезоном
