@@ -211,19 +211,21 @@ function shoreline(X0, X1, Ya, Yb, nx, ny) { const gx = (i) => X0 + (X1 - X0) * 
   const out = best.map((id) => pos.get(id)); if (out.length && out[0][0] > out[out.length - 1][0]) out.reverse(); return out; }
 function coastMask() { const W = window.innerWidth, H = window.innerHeight, ph = W <= 640, svg = $('coast'), q = (c) => svg.querySelector('.' + c);
   if (!MLINES) MLINES = { tr: parseLines(TRAILS), rv: parseLines(RIVERS) };
-  const f = (v) => `${v[0].toFixed(1)},${v[1].toFixed(1)}`, XMIN = -16000, XMAX = 11500;
+  const f = (v) => `${v[0].toFixed(1)},${v[1].toFixed(1)}`, XMIN = -34000, XMAX = 30000; // северный берег -- далеко в обе стороны: меню бывает выше экрана
   let s, X0, X1, P, close, Ymin = 1e9, Ymax; const pts = [];
   // грубо -- где берег по Y, затем точная изолиния уреза в полосе вокруг него (с запасом на глубину залива)
   const sample = (n) => { let lo = 1e9, hi = -1e9; for (let i = 0; i <= 40; i++) { const y = coastY(X0 + (X1 - X0) * i / 40); lo = Math.min(lo, y); hi = Math.max(hi, y); }
     const Ya = lo - 300, Yb = hi + 2500, line = shoreline(X0 - 60, X1 + 60, Ya, Yb, n, Math.ceil(n * (Yb - Ya) / (X1 - X0 + 120))); for (const v of line) { pts.push(v); Ymin = Math.min(Ymin, v[1]); } };
   const fit = (span) => { span = Math.min(span, XMAX - XMIN); X0 = Math.max(XMIN, Math.min(XMAX - span, -span / 2)); X1 = X0 + span; };
+  let HH = H; // высота карты: меню длиннее экрана -- карта (и берег) продолжается вниз на всю прокрутку
   if (!ph) { // колонка управления: её левый край -- граница, правее которой только суша
-    const cr = $('card').getBoundingClientRect(), cardL = cr.width ? cr.left : W - Math.min(W * 0.04, 48) - 440;
-    s = clamp((W - cardL + 90) / 11000, 0.03, 0.09); fit(H / s); s = H / (X1 - X0); sample(Math.ceil(H / 2.5));
+    const cr = $('card').getBoundingClientRect(), cardL = cr.width ? cr.left : W - Math.min(W * 0.04, 48) - 440, mn0 = $('menu');
+    HH = Math.max(H, cr.height ? Math.ceil(cr.bottom + (mn0 ? mn0.scrollTop : 0) + 48) : H); svg.style.height = HH + 'px';
+    s = clamp((W - cardL + 90) / 11000, 0.03, 0.09); fit(HH / s); s = HH / (X1 - X0); sample(Math.ceil(HH / 2.5));
     let ym = -1e9; for (const v of pts) ym = Math.max(ym, v[1]); const ox = cardL - 40 - ym * s;
-    P = (X, Y) => [ox + Y * s, (X - X0) * s]; Ymax = (W - ox) / s + 300; close = `L${W + 4},${H + 4} L${W + 4},-4 Z`;
+    P = (X, Y) => [ox + Y * s, (X - X0) * s]; Ymax = (W - ox) / s + 300; close = `L${W + 4},${HH + 4} L${W + 4},-4 Z`;
     let mn = 1e9; for (const v of pts) mn = Math.min(mn, P(v[0], v[1])[0]); MENU.lakeW = mn - 60;
-  } else { // телефон: яхта -- в полосе между заголовком и «Ваше имя», берег ниже середины экрана (верх листа -- над водой)
+  } else { svg.style.height = ''; // телефон: яхта -- в полосе между заголовком и «Ваше имя», берег ниже середины экрана (верх листа -- над водой)
     const mt = $('mtop').getBoundingClientRect(), mb = $('mbot').getBoundingClientRect(), top = mb.height ? mb.top : H * 0.4;
     MENU.boatT = mt.height ? mt.bottom + 6 : H * 0.1; MENU.boatB = Math.max(MENU.boatT + 120, top - 4);
     const shore = Math.max(H * 0.6, top + 120); // самая северная точка уреза (дно залива)
@@ -243,10 +245,11 @@ function coastMask() { const W = window.innerWidth, H = window.innerHeight, ph =
       for (let k = 0; k + 1 < e.length; k += 2) { const sgm = `M${f(e[k])} L${f(e[k + 1])} `; if (lv % 500 === 0) major += sgm; else minor += sgm; } } }
   q('c1').setAttribute('d', minor); q('c2').setAttribute('d', major);
   // реки и тропы: только то, что попадает в кадр
-  const lines = (L) => { let out = ''; for (const w of L) { const p = w.map((v) => P(v[0], v[1])); if (!p.some((v) => v[0] > -20 && v[0] < W + 20 && v[1] > -20 && v[1] < H + 20)) continue; out += 'M' + p.map(f).join(' L') + ' '; } return out; };
+  const lines = (L) => { let out = ''; for (const w of L) { const p = w.map((v) => P(v[0], v[1])); if (!p.some((v) => v[0] > -20 && v[0] < W + 20 && v[1] > -20 && v[1] < HH + 20)) continue; out += 'M' + p.map(f).join(' L') + ' '; } return out; };
   q('w').setAttribute('d', lines(MLINES.rv)); q('tr').setAttribute('d', lines(MLINES.tr)); }
 function buildMenu() {
   coastMask(); let rz = 0; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(coastMask, 150); });
+  if (window.ResizeObserver) { let lastH = 0; new ResizeObserver(() => { const h = $('card').offsetHeight; if (Math.abs(h - lastH) > 4) { lastH = h; clearTimeout(rz); rz = setTimeout(coastMask, 150); } }).observe($('card')); } // меню выросло (ряд «Старт» и т. п.) -- карта вниз
   for (const id in PRESETS) { const p = PRESETS[id], b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'w_' + id;
     b.innerHTML = `<b>${p.name}</b><small class="full">${p.sub}</small><small class="short">${p.sub.split(' · ')[1]}</small>`; b.onclick = () => { G.preset = id; applyPreset(); }; $('winds').appendChild(b); }
   $('how').innerHTML = TOUCH ? 'Касание слева и справа — руль. Кнопка «шкот» сбрасывает ветер из паруса, когда кренит. Против ветра лодка не идёт.' : $('how').innerHTML;
