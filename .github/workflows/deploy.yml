@@ -63,7 +63,9 @@ jobs:
 
   deploy:
     needs: test
-    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    # бета деплоится, только когда на сервере заведён проект issyk-sail-beta и в репозитории выставлена переменная BETA_DEPLOY=true
+    # (иначе каждый пуш в beta падал на деплое и слал письмо)
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped') && (github.ref_name != 'beta' || vars.BETA_DEPLOY == 'true')
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 30
