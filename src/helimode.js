@@ -452,7 +452,7 @@ export function makeHeliMode(A) {
     M.root.position.set(Hc.X, Hc.Z, -Hc.Y); M.root.rotation.set(0, 0, 0); M.root.rotateY(-Hc.th); M.root.rotateX(-Hc.pitch); M.root.rotateZ(-Hc.roll);
     F.rpm += ((Hc.crash ? 0 : Hc.ground && Hc.col < 0.05 && F.t < 2 ? 0.4 : Hc.rpm) - F.rpm) * Math.min(1, dt * 0.8); M.spin(dt, F.rpm); if (SAR && SAR.cam(dt)) { if (reticle) reticle.visible = false; return; }
     if (VF && VF.on) { if (Hc.crash) VF.close(); else { VF.place(dt, M, Hc); clook.set(Math.sin(Hc.th), 0, -Math.cos(Hc.th)); if (AIRFX) AIRFX.tick(dt, Hc, wind(Hc.X, Hc.Y, Hc.Z), camera); if (reticle) reticle.visible = false; return; } }
-    if (Hc.crash) { v3.set(Hc.X + 40, Hc.Z + 25, -Hc.Y + 40); camera.position.lerp(v3, Math.min(1, dt * 2)); camera.up.set(0, 1, 0); camera.lookAt(Hc.X, Hc.Z + 3, -Hc.Y); camera.updateProjectionMatrix(); return; }
+    if (Hc.crash) { if (reticle) reticle.visible = false; v3.set(Hc.X + 40, Hc.Z + 25, -Hc.Y + 40); camera.position.lerp(v3, Math.min(1, dt * 2)); camera.up.set(0, 1, 0); camera.lookAt(Hc.X, Hc.Z + 3, -Hc.Y); camera.updateProjectionMatrix(); return; }
     // камера полёта: сфера вокруг машины, как у яхты (орбита пальцем/мышью, колесо -- дальше-ближе), но живая:
     //  * на скорости смотрит туда, куда машина ЛЕТИТ (между носом и вектором скорости) -- занос виден, нос «гуляет» в кадре;
     //  * точка взгляда -- впереди по движению (look-ahead), камера на пружине с запаздыванием ~0.15 с: разгон оттягивает её назад;
@@ -470,7 +470,7 @@ export function makeHeliMode(A) {
       v3.set(mx - Math.sin(yaw) * D * ce, mz + D * Math.sin(el), -(my - Math.cos(yaw) * D * ce)); const gy = Math.max(0, H(v3.x, -v3.z)) + 8; if (v3.y < gy) v3.y = gy;
       if (!F.pcam || F.pcam.distanceTo(v3) > 300) F.pcam = camera.position.distanceTo(v3) > 300 ? v3.clone() : camera.position.clone(); F.pcam.lerp(v3, Math.min(1, dt * 2.2)); camera.position.copy(F.pcam); camera.up.set(0, 1, 0); camera.lookAt(mx, mz, -my);
       camera.fov += (55 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); clook.set(Math.sin(yaw), 0, -Math.cos(yaw));
-      if (AIRFX) AIRFX.tick(dt, Hc, wind(Hc.X, Hc.Y, Hc.Z), camera); return; }
+      if (AIRFX) AIRFX.tick(dt, Hc, wind(Hc.X, Hc.Y, Hc.Z), camera); reticleTick(); return; }
     const Vg = Hc.speed, vdir = Math.atan2(Hc.vx, Hc.vy), fl = sm2(12, 35, Vg);
     if (!camInit) { F.cyaw = Hc.th; camInit = true; F.cam = null; }
     const narrow = window.innerHeight > window.innerWidth * 1.2, want = Hc.th + wrapA(vdir - Hc.th) * (narrow ? 0.3 : 0.6) * fl; /* узкий экран: меньше смотрим вбок -- машина не уходит за край */ F.cyaw += wrapA(want - F.cyaw) * Math.min(1, dt * (1.6 + 1.4 * fl)); clook.set(Math.sin(F.cyaw), 0, -Math.cos(F.cyaw));
@@ -495,7 +495,9 @@ export function makeHeliMode(A) {
     const acc = Math.hypot(Hc.ax || 0, Hc.ay || 0); F.kick = Math.max((F.kick || 0) - dt * 1.5, Math.min(1, Math.max(0, acc - 3) / 4) * (Hc.pitch < -0.1 ? 1 : 0));
     camera.fov += (55 + 15 * sm2(15, 75, Vg) + F.kick * 3 + F.near * 4 + Hc.cr * 3 - camera.fov) * Math.min(1, dt * 2); camera.updateProjectionMatrix();
     if (AIRFX) AIRFX.tick(dt, Hc, wind(Hc.X, Hc.Y, Hc.Z), camera);
-    // прицел посадки на земле
+    reticleTick(); }
+  // прицел посадки на земле: под машиной, ниже 120 м; цвет -- насколько близко к цели. Обновляется в любом виде камеры, где виден
+  function reticleTick() {
     if (reticle) { const show = !Hc.crash && Hc.agl < 120 && Hc.agl > 0.8; reticle.visible = show; if (show) { const gz = H(Hc.X, Hc.Y), mi = F.mis[F.mi], d = mi ? Math.hypot(Hc.X - mi.to.X, Hc.Y - mi.to.Y) : 99, sc = 14 + Hc.agl * 0.12;
       reticle.position.set(Hc.X, gz + 0.4, -Hc.Y); reticle.scale.set(sc, sc, 1); reticle.material.color.setHex(d < 5 ? 0x6cff7a : d < 15 ? 0xffe14a : 0xffffff); reticle.material.opacity = 0.35 + 0.5 * (1 - Hc.agl / 120); } } }
   function resetCam() { camInit = false; camera.up.set(0, 1, 0); }
