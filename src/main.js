@@ -7,7 +7,7 @@ import { makeJetMode } from './jetmode.js';
 import { makeBeach } from './beach.js';
 import { Boat, Wind, Waves, PRESETS, DEG, KN, clamp, wrapPi, smooth, pointOfSail, aiControl } from './sim.js';
 import { DEM } from './demdata.js';
-import { applyQuality, loadHeight, loadDem, makeDemTerrain, makeSky, makeTerrain, makeFarTerrain, makeWater, makeShore, makeMark, SUN, HAZE, ENV, MAP } from './world.js';
+import { applyQuality, applyQualityAsync, loadHeight, loadDem, makeDemTerrain, makeSky, makeTerrain, makeFarTerrain, makeWater, makeShore, makeMark, SUN, HAZE, ENV, MAP } from './world.js';
 import { makeBoat } from './boatmodel.js';
 import { makeSpray, makeWake, WAKE_LIGHT } from './fx.js';
 import { makeAudio } from './audio.js';
@@ -53,7 +53,7 @@ const TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 // и на телефоне всё разом становилось мыльным и квадратным -- тени, брызги, пена.
 const PR_MAX = Math.min(window.devicePixelRatio || 1, 2), PR_MIN = Math.min(PR_MAX, TOUCH ? 1 : 0.85);
 let pixelRatio = PR_MAX, quality = TOUCH ? 1 : 2, qHold = 0, qMode = 'auto'; // qMode: авто подстраивается само, остальные держат выбранное
-function setQuality(q) { quality = q; applyQuality(q);
+function setQuality(q, auto = false) { quality = q; if (auto) { applyQualityAsync(q, renderer, camera, scene); return; } /* автоснижение: шейдеры в фоне, тень не трогаем -- её выключение пересобрало бы все освещённые материалы */ applyQuality(q);
   sunL.castShadow = q >= 1; const ms = qMode === 'high' ? 2048 : 1024; if (sunL.shadow.mapSize.x !== ms) { sunL.shadow.mapSize.set(ms, ms); if (sunL.shadow.map) { sunL.shadow.map.dispose(); sunL.shadow.map = null; } } }
 const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(HAZE, 0.000052);
 const camera = new THREE.PerspectiveCamera(56, 1, 0.5, 300000);
@@ -640,7 +640,7 @@ function loop(now) {
   fpsT += dt; fpsN++; if (fpsT > 2) { const fps = fpsN / fpsT; fpsT = 0; fpsN = 0; qHold--;
     if (qMode !== 'auto') { /* человек выбрал сам -- не трогаем ни ступень, ни разрешение */ }
     else if (fps < 34 && qHold <= 0) { qHold = 2; // после смены ступени даём кадрам устояться
-      if (quality > 0) setQuality(quality - 1); else if (pixelRatio > PR_MIN) { pixelRatio = Math.max(PR_MIN, pixelRatio * 0.86); resize(); } }
+      if (quality > 0) setQuality(quality - 1, true); else if (pixelRatio > PR_MIN) { pixelRatio = Math.max(PR_MIN, pixelRatio * 0.86); resize(); } }
     else if (fps > 57 && pixelRatio < PR_MAX && ++G.slow > 4) { G.slow = 0; pixelRatio = Math.min(PR_MAX, pixelRatio * 1.1); resize(); } }
   if (post) { // где солнце на экране и насколько оно «в кадре»
     // матрицы камеры -- этого кадра (иначе солнце на экране «отстаёт» на кадр и уезжает при поворотах)

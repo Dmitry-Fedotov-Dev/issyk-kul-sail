@@ -106,6 +106,20 @@ vec3 applyFog(vec3 c, float dist, float y){ float f=min((1.-exp(-dist/mix(42000.
 const QUALITY_DEFS = [{ FBM_OCT: 3, RIP_OCT: 3, SHN: 6, LOW: 1 }, { FBM_OCT: 3, RIP_OCT: 4, SHN: 8, LOW: 1 }, { FBM_OCT: 4, RIP_OCT: 5, SHN: 14 }];
 const QMATS = [];
 export function applyQuality(q) { for (const m of QMATS) { m.defines = { ...QUALITY_DEFS[q], ...m.userData.defs }; m.needsUpdate = true; } }
+// Та же смена ступени, но без фриза: новые шейдеры рельефа и воды собираются в фоне (параллельная компиляция WebGL) на
+// копиях материалов, а подменяются, когда готовы, -- тогда видеокарта берёт уже собранную программу из кэша. Раньше
+// автоподстройка на лету синхронно пересобирала ~7 тяжёлых шейдеров: на телефоне это секунды стоп-кадра (самолёт над городом)
+let qJob = 0, qRT = null;
+export async function applyQualityAsync(q, renderer, camera, scene) { const job = ++qJob, tmp = new THREE.Scene(), geo = new THREE.BufferGeometry(), pairs = [];
+  for (const m of QMATS) { const c = m.clone(); c.uniforms = m.uniforms; c.defines = { ...QUALITY_DEFS[q], ...m.userData.defs }; const o = new THREE.Mesh(geo, c); o.frustumCulled = false; tmp.add(o); pairs.push([m, c]); }
+  // собираем в тех же условиях, что и кадр сцены (в буфер постобработки: линейный цвет, без тональной обработки), иначе
+  // ключ программы не совпадёт и сборка пойдёт заново
+  const rt = renderer.getRenderTarget(); let wait = null; qRT = qRT || new THREE.WebGLRenderTarget(4, 4); renderer.setRenderTarget(qRT);
+  try { wait = renderer.compileAsync(tmp, camera, scene); } catch (e) { /* не вышло -- подменим как раньше, синхронно */ } renderer.setRenderTarget(rt);
+  try { await wait; } catch (e) { /* то же */ }
+  if (job === qJob) for (const [m, c] of pairs) { m.defines = c.defines; m.needsUpdate = true; }
+  // копии отпускаем через пару секунд: к этому времени материалы уже взяли программы из кэша (иначе он бы их удалил)
+  setTimeout(() => { for (const [, c] of pairs) c.dispose(); geo.dispose(); }, 2500); }
 export const END = '\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n';
 
 export function makeSky() {
@@ -477,7 +491,7 @@ void main(){ vec3 N=normalize(vN); float h=vH;
   // дно под водой не должно давать контуров сквозь воду: пишем ему глубину «бесконечность». Заодно кромка берега
   // получает чистую линию ровно по урезу воды
   #ifdef FDEPTH
-  gl_FragDepth = h < -0.25 ? 1.0 : gl_FragCoord.z;
+  gl_FragDepth = min(h, vP.y) < -0.25 ? 1.0 : gl_FragCoord.z; // дальняя сетка нарисована на 12 м ниже карты: низкий берег (0-12 м) тоже под водой
   #endif
   if(uMap>0.) col=mix(col, uMapDeep, smoothstep(1.5,8.5,-h)*uMap);
   gl_FragColor=vec4(col,1.); ${END} }`,
@@ -508,10 +522,10 @@ export async function makeFarTerrain(holes = []) {
   const holeC = new Uint8Array(W * H); for (const o of holes) { const i0 = Math.max(0, Math.floor((o.X - o.r - X0) / STEP) - 1), i1 = Math.min(W - 2, Math.ceil((o.X + o.r - X0) / STEP)), j0 = Math.max(0, Math.floor((Y1 - o.Y - o.r) / STEP) - 1), j1 = Math.min(H - 2, Math.ceil((Y1 - o.Y + o.r) / STEP));
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (Math.hypot(X0 + (i + 0.5) * STEP - o.X, Y1 - (j + 0.5) * STEP - o.Y) < o.r) holeC[j * W + i] = 1; }
   for (let j = 0; j < H - 1; j++) for (let i = 0; i < W - 1; i++) { const a = j * W + i, b = a + 1, e = a + W, f = e + 1;
-    if (Math.max(hs[a], hs[b], hs[e], hs[f]) < -1) continue;
+    if (Math.max(hs[a], hs[b], hs[e], hs[f]) < 12) continue; // сетка на 12 м ниже карты: такая клетка целиком под водой -- не рисуем
     if (inside(i, j) && inside(i + 1, j) && inside(i, j + 1) && inside(i + 1, j + 1)) continue;
     if (holeC[a]) continue; // здесь стоит подробный рельеф ущелья
-    chunkList(lists, ((j / CHh) | 0) * 64 + ((i / CW) | 0) + (Math.min(hs[a], hs[b], hs[e], hs[f]) < 0 ? SHORE : 0)).push(a, e, b, b, e, f); }
+    chunkList(lists, ((j / CHh) | 0) * 64 + ((i / CW) | 0) + (Math.min(hs[a], hs[b], hs[e], hs[f]) < 12.5 ? SHORE : 0)).push(a, e, b, b, e, f); } // сетка на 12 м ниже: и низкий берег уходит под воду
   const mat = terrainMaterial(false), matS = terrainMaterial(); mat.side = matS.side = THREE.DoubleSide;
   const m = chunked({ position: new THREE.BufferAttribute(pos, 3), normal: new THREE.BufferAttribute(nor, 3), aH: new THREE.BufferAttribute(hs, 1) }, lists, mat, matS);
   // высота по грубой карте всей котловины (шаг 600 м): для мест за пределами подробной карты у Чолпон-Аты
