@@ -53,7 +53,7 @@ void main(){ vec2 w=vec2(vP.x,-vP.z), uv=vec2((w.x-uB.x)*uB.z, (uB.y-w.y)*uB.w);
   float l=max(uSun.y,0.)*uSunI; c*=0.55+0.6*l; c=mix(c, uHor, 0.18);
   c=applyFog(c, length(vP-cameraPosition), vP.y);
   gl_FragColor=vec4(c, smoothstep(0.3,2.,dep)*0.95); ${END} }` });
-  const water = new THREE.Mesh(geo, mat); water.position.copy(org); water.renderOrder = 1; scene.add(water);
+  const water = new THREE.Mesh(geo, mat); water.position.copy(org); water.renderOrder = 1; water.frustumCulled = false; scene.add(water); // вершины поднимаются на уровень в шейдере -- границы по плоскости на нуле врали: у воды озеро «выпадало из кадра»
   // айсберги: глыбы с тушью, плавают; при спуске садятся на дно
   const bergs = [], tex2 = (() => { const c = document.createElement('canvas'); c.width = 128; c.height = 96; const x = c.getContext('2d');
     x.fillStyle = '#e9f4f8'; x.strokeStyle = '#1b2430'; x.lineWidth = 4; x.beginPath(); x.moveTo(6, 90); x.lineTo(18, 40); x.lineTo(44, 22); x.lineTo(60, 6); x.lineTo(84, 30); x.lineTo(110, 36); x.lineTo(122, 90); x.closePath(); x.fill(); x.stroke();
@@ -68,8 +68,8 @@ void main(){ vec2 w=vec2(vP.x,-vP.z), uv=vec2((w.x-uB.x)*uB.z, (uB.y-w.y)*uB.w);
     // dt -- шаг; cam -- позиция камеры (мир); audio -- для грохота
     update(dt, camW, audio, spray) { const ph = merzPhase(Date.now(), force0); U.uT.value += dt;
       // уровень: прорыв -- быстрый спад в первые 20 минут, потом остатки; покой -- наполнение
-      const want = ph.active ? bed + (top - bed) * Math.max(0, 1 - Math.pow(ph.k * 3, 0.8)) : bed + (top - bed) * Math.min(1, ph.k * 1.2);
-      level += (want - level) * Math.min(1, dt * 0.3); U.uLevel.value = level; const boil = ph.active ? Math.max(0.25, 1 - ph.k * 1.5) : 0; U.uBoil.value += (boil - U.uBoil.value) * Math.min(1, dt);
+      const want = this.hold ? top : ph.active ? bed + (top - bed) * Math.max(0, 1 - Math.pow(ph.k * 3, 0.8)) : bed + (top - bed) * Math.min(1, ph.k * 1.2);
+      level += (want - level) * Math.min(1, dt * (this.hold ? 3 : 0.3)); U.uLevel.value = level; const boil = this.hold ? 0 : ph.active ? Math.max(0.25, 1 - ph.k * 1.5) : 0; U.uBoil.value += (boil - U.uBoil.value) * Math.min(1, dt);
       for (const g of bergs) { const z = Math.max(level, g.b + 3) - 2 + (level > g.b + 3 ? Math.sin(U.uT.value * 0.6 + g.ph) * 0.4 : 0); g.s.position.set(g.X, z, -g.Y); }
       // рядом с прорывом -- грохот и обвалы: чем ближе, тем громче
       const d = camW ? Math.hypot(camW.X - oX, camW.Y - oY) : 1e9, near = Math.max(0, 1 - d / 9000) * U.uBoil.value;

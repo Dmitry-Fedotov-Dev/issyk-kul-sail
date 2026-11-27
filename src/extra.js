@@ -219,7 +219,7 @@ export function installExtra(A) {
 
   // ---------- старт в произвольном месте, в том числе на горе ----------
   function nearestWater(X, Y) { for (let r = 300; r < 90000; r += 300) for (let a = 0; a < 6.283; a += 0.2) { const x = X + Math.sin(a) * r, y = Y + Math.cos(a) * r; if (G.h(x, y) < -4) return { X: x, Y: y }; } return { X: 0, Y: -600 }; }
-  function stepGag(dt, b) { const ht = G.h(b.X, b.Y); if (!G.gag) { if (ht < 8) return; G.gag = { t: 0, stuck: 0, top: ht }; toast(`Судно на высоте ${Math.round(ht + 1601)} м над морем. Спускаем на воду…`); }
+  function stepGag(dt, b) { if (G.wl) { G.gag = null; return; } /* горное озеро: «на суше» считается от Иссык-Куля -- здесь не нужно */ const ht = G.h(b.X, b.Y); if (!G.gag) { if (ht < 8) return; G.gag = { t: 0, stuck: 0, top: ht }; toast(`Судно на высоте ${Math.round(ht + 1601)} м над морем. Спускаем на воду…`); }
     const g = G.gag; g.t += dt; if (ht < -1.2) { G.gag = null; b.aground = false; b.base = 0; b.phi = 0; ach('m_peak'); toast('На воде!'); audio.splash(1); return; }
     const e = 40, gx = G.h(b.X + e, b.Y) - G.h(b.X - e, b.Y), gy = G.h(b.X, b.Y + e) - G.h(b.X, b.Y - e), n = Math.hypot(gx, gy), sl = n / (2 * e);
     if (sl < 0.004) g.stuck += dt; else g.stuck = 0;
@@ -251,7 +251,7 @@ export function installExtra(A) {
       for (const [id, n, sub] of S[2]) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${n}</b><small>${typeof sub === 'function' ? sub() : sub}</small>`; if (typeof sub === 'function') b.dataset.live = 1; b.onclick = () => { store.set(S[0], id); startAt = null; refreshMenu(); }; box.appendChild(b); } } // явный выбор старта отменяет точку на карте
     for (const c of box.children) { c.setAttribute('aria-pressed', c.dataset.id === (store.get(S[0]) || S[1])); if (c.dataset.live) { const f = S[2].find((q) => q[0] === c.dataset.id)[2]; c.querySelector('small').textContent = f(); } } }
   function buildMenu() { yachtHow = $('how').innerHTML; if (BADGE) { const h = document.querySelector('h1'); if (h && !h.querySelector('.beta')) h.insertAdjacentHTML('beforeend', ' <sup class="beta" style="font:700 .38em var(--ui);color:#ff8a2a;letter-spacing:.1em;vertical-align:super">БЕТА</sup>'); }
-    for (const id of [...CRAFT_ORDER, 'para', 'jet', 'heli'].filter(shown)) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); if (startAt && startAt.zone === 'khan' && WATER()) startAt = null; /* в горах лодкам воды нет */ refreshMenu(); }; $('crafts').appendChild(b); }
+    for (const id of [...CRAFT_ORDER, 'para', 'jet', 'heli'].filter(shown)) { const i = info(id), b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.id = 'c_' + id; b.innerHTML = `<b>${SHORT[id]}</b><small>${i.sub}</small>`; b.title = i.name; b.onclick = () => { sel = id; store.set('craft', id); if (startAt && ((startAt.zone === 'khan' && WATER()) || (startAt.zone === 'merz' && !WATER()))) startAt = null; /* лодки в горах -- только на озере */ refreshMenu(); }; $('crafts').appendChild(b); }
     $('briver').onclick = () => { audio.start(); startRiver(); }; $('bjournal').onclick = () => { journal(); $('journal').hidden = false; }; $('jclose').onclick = () => { $('journal').hidden = true; };
     $('bmap').onclick = openMap; $('mclose').onclick = () => { $('mapdlg').hidden = true; }; $('mreset').onclick = () => { startAt = null; $('mapdlg').hidden = true; refreshMenu(); };
     const nm = $('pname'), setName = (v) => { name = v; store.set('name', v); };
@@ -314,14 +314,14 @@ export function installExtra(A) {
   function locUI() { let box = $('mloc'); if (!box) { box = document.createElement('div'); box.id = 'mloc'; box.className = 'chips'; box.style.margin = '6px 0';
       box.innerHTML = '<button class="chip" data-loc="issyk"><b>Чолпон-Ата</b><small>Иссык-Куль</small></button><button class="chip" data-loc="khan"><b>Хан-Тенгри</b><small>Иныльчек</small></button>';
       $('mapinfo').before(box); for (const b of box.children) b.onclick = () => setLoc(b.dataset.loc); }
-    for (const b of box.children) { b.setAttribute('aria-pressed', b.dataset.loc === mapLoc); b.disabled = b.dataset.loc === 'khan' && WATER(); b.title = b.disabled ? 'В горах нет воды для лодок — только вертолёт, самолёт, параплан' : ''; } }
-  async function setLoc(l) { if (l === 'khan' && WATER()) return; mapLoc = l; locUI();
+    for (const b of box.children) { b.setAttribute('aria-pressed', b.dataset.loc === mapLoc); b.disabled = false; b.title = ''; } let mz = $('mmerz'); if (!mz) { mz = document.createElement('button'); mz.id = 'mmerz'; mz.className = 'chip'; mz.innerHTML = '<b>⛵ Озеро Мерцбахера</b><small>3300 м · сразу на воду</small>'; mz.style.margin = '0 0 6px'; box.after(mz); mz.onclick = () => { startAt = { zone: 'merz', X: null, Y: null, land: false, label: 'озеро Мерцбахера' }; refreshMenu(); $('mapdlg').hidden = true; }; } mz.hidden = !WATER(); }
+  async function setLoc(l) { mapLoc = l; locUI();
     if (l === 'khan') { if (!G.khan) { $('mapinfo').textContent = 'Грузим рельеф Иныльчека…'; try { await A.ensureKhan(); } catch (e) { $('mapinfo').textContent = e.message; return; } } if (!kv) kv = khanHome(); }
     mapInfo(); drawMap(); }
   function drawKhan(fast) { mapRaf = 0; const cv = $('mapcv'), r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.max(1, Math.round((r.width || 600) * dpr)), h = Math.round(w * 0.62);
     if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
     const B = KHAN_BOUNDS; kv.R = clamp(kv.R, 400, (B.x1 - B.x0) / 2); kv.cx = clamp(kv.cx, B.x0 + kv.R * 0.3, B.x1 - kv.R * 0.3); kv.cy = clamp(kv.cy, B.y0 + kv.R * 0.3, B.y1 - kv.R * 0.3);
-    drawKhanMap(cv, kv, G.khan.grid, { q: fast ? 3 : 1, dpr, start: startAt && startAt.zone === 'khan' ? startAt : null }); $('mzoom').hidden = kv.R >= (B.x1 - B.x0) / 2 - 1;
+    drawKhanMap(cv, kv, G.khan.grid, { q: fast ? 3 : 1, dpr, start: startAt && (startAt.zone === 'khan' || (startAt.zone === 'merz' && startAt.X)) ? startAt : null }); $('mzoom').hidden = kv.R >= (B.x1 - B.x0) / 2 - 1;
     clearTimeout(kTimer); if (fast) kTimer = setTimeout(() => { if (!$('mapdlg').hidden && mapLoc === 'khan') drawKhan(false); }, 220); } // жест -- грубо и быстро, после -- резко
   function drawMap() { if (mapLoc === 'khan' && G.khan && kv) { drawKhan(kFast > 0); kFast = 0; return; } mapRaf = 0; const g = G.far.userData.grid, cv = $('mapcv'), r = cv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1), w = Math.max(1, Math.round((r.width || g.W) * dpr)), h = Math.round(w * g.H / g.W);
     if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
@@ -370,13 +370,14 @@ export function installExtra(A) {
     const sw = g.W / mv.z, sh = g.H / mv.z; mv.cx = gx - (px - 0.5) * sw; mv.cy = gy - (py - 0.5) * sh; redrawMap(); }
   function pickMap(ev) { if (mapLoc === 'khan' && !kv) return; /* карта гор ещё грузится -- не ставить точку на озеро */ if (mapLoc === 'khan' && kv) { const cv = $('mapcv'), r = cv.getBoundingClientRect(), { X, Y } = khanPick(kv, (ev.clientX - r.left) / r.width, (ev.clientY - r.top) / r.height, cv.height / cv.width), z = G.khan.h(X, Y) + 1607;
       let near = null, nd = 1e9; for (const [n, cx, cy] of KCAMPS_LIST()) { const d = Math.hypot(cx - X, cy - Y); if (d < nd) { nd = d; near = n; } }
+      if (WATER()) { const M = G.merz, dl = M ? Math.hypot(X - M.center.X, Y - M.center.Y) : 1e9; if (!M || dl > 4000) { $('mapinfo').textContent = 'Здесь воды нет. Для лодок в горах — озеро Мерцбахера: нажмите на него или на кнопку выше'; return; } startAt = { zone: 'merz', X, Y, land: false, label: 'озеро Мерцбахера' }; refreshMenu(); mapInfo(); drawMap(); return; } /* лодки -- только на озеро */
       startAt = { zone: 'khan', X, Y, land: true, label: `Хан-Тенгри · ${Math.round(z)} м${near && nd < 2500 ? ' · у «' + near + '»' : ''}` }; refreshMenu(); mapInfo(); drawMap(); return; }
     const g = G.far.userData.grid, r = $('mapcv').getBoundingClientRect(), v = mapWin(), gx = v.sx + ((ev.clientX - r.left) / r.width) * v.sw, gy = v.sy + ((ev.clientY - r.top) / r.height) * v.sh;
     const X = g.X0 + gx * g.STEP, Y = g.Y1 - gy * g.STEP, h = G.h(X, Y), d = Math.hypot(X, Y) / 1000;
     const az = (Math.atan2(X, Y) / DEG + 360) % 360, dirs = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'][Math.round(az / 45) % 8];
     startAt = { X, Y, land: h > -2, label: `${d.toFixed(0)} км к ${dirs} · ${h > -2 ? `суша, ${Math.round(h + 1601)} м` : 'озеро'}` }; refreshMenu(); mapInfo(); drawMap(); }
-  const mapInfo = () => { $('mshare').hidden = !startAt || startAt.zone === 'khan'; $('mapinfo').textContent = startAt && (startAt.zone === 'khan') === (mapLoc === 'khan') ? `Выбрано: ${startAt.label}` : mapLoc === 'khan' ? 'Нажмите на карту гор — там начнёте (на склоне вертолёт — в висении, самолёт — в воздухе). Два пальца или колесо — приблизить, вблизи горизонтали гуще.' : 'Нажмите на карту. Оранжевая точка — Чолпон-Ата. Два пальца или колесо — приблизить.'; };
-  function openMap() { const g = G.far.userData.grid; $('mapdlg').hidden = false; if (!mv.cx) { mv.cx = g.W / 2; mv.cy = g.H / 2; } if (WATER()) mapLoc = 'issyk'; else if (startAt && startAt.zone === 'khan') mapLoc = 'khan'; locUI(); if (mapLoc === 'khan') { setLoc('khan'); } else { mapInfo(); drawMap(); }
+  const mapInfo = () => { $('mshare').hidden = !startAt || startAt.zone === 'khan' || startAt.zone === 'merz'; $('mapinfo').textContent = startAt && (startAt.zone === 'khan' || startAt.zone === 'merz') === (mapLoc === 'khan') ? `Выбрано: ${startAt.label}` : mapLoc === 'khan' ? 'Нажмите на карту гор — там начнёте (на склоне вертолёт — в висении, самолёт — в воздухе). Два пальца или колесо — приблизить, вблизи горизонтали гуще.' : 'Нажмите на карту. Оранжевая точка — Чолпон-Ата. Два пальца или колесо — приблизить.'; };
+  function openMap() { const g = G.far.userData.grid; $('mapdlg').hidden = false; if (!mv.cx) { mv.cx = g.W / 2; mv.cy = g.H / 2; } if (startAt && (startAt.zone === 'khan' || startAt.zone === 'merz')) mapLoc = 'khan'; locUI(); if (mapLoc === 'khan') { setLoc('khan'); } else { mapInfo(); drawMap(); }
     const cv = $('mapcv'); if (cv.dataset.wired) return; cv.dataset.wired = '1';
     const pt = (e) => { const r = cv.getBoundingClientRect(); return { x: e.clientX, y: e.clientY, px: (e.clientX - r.left) / r.width, py: (e.clientY - r.top) / r.height }; };
     cv.addEventListener('pointerdown', (e) => { e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (err) { /* без захвата -- жест закончится, когда палец уйдёт */ }
@@ -501,7 +502,7 @@ export function installExtra(A) {
     net, lobbyStart, lobbyUI, peerList, npcPeers, knock, onlineRows, racePeers, get name() { return name; }, get npcFollow() { return npcFollow; },
     wearEvent, pit: () => pit, ach, openLink, raceRepair, hookPress: () => hook.press(G.player), get hook() { return hook; }, get traffic() { return traffic; }, get sel() { return sel; },
     boats: (P) => (npcFollow && (G.race || G.race2) ? [P] : G.mode === 'race' ? [P, ...G.rivals.filter((r) => !r.out)] : G.race2 ? [P, ...G.race2.rivals] : [P]),
-    th: () => (G.mode === 'river' && river ? river.h : G.hb), poseTh: () => (G.mode === 'river' && river ? river.h : G.h),
+    th: () => (G.mode === 'river' && river ? river.h : G.hw || G.hb), poseTh: () => (G.mode === 'river' && river ? river.h : G.hw || G.h), // G.hw -- глубина под уровнем горного озера
     filterCtl: (c) => ((G.race2 && G.race2.t < 0) ? { steer: 0, ease: false, left: false, right: false } : c),
     aiFor(e, dt) { const R = G.race2; if (R.t < 0 || e.time) return { steer: 0, ease: false, left: false, right: false, thr: 0 }; const c = e.course[e.leg];
       return R.motor ? aiMotor(e.b, c.X, c.Y, 0.72 + 0.28 * e.skill) : aiPaddle(e.b, c.X, c.Y, e.ai, dt, e.skill); },
@@ -510,9 +511,9 @@ export function installExtra(A) {
     compete() { if (sel === 'heli') { A.heliGo(); return; } if ((sel === 'jet' && !A.jet()) || (sel === 'para' && !A.para())) { toast('Этот снаряд не загрузился — выберите другой'); return; } if (sel === 'jet') A.jet().startRace(); else if (sel === 'para') A.para().startRace(); else if (sel === 'yacht') A.startRace(); else startRace2(); }, get startAt() { return startAt; },
     onFreePre() { leaveModes(); setPlayer(sel); },
     onFree() { G.modeT = 0; const P = G.player; let cx = 0, cy = -600;
-      if (startAt && startAt.zone !== 'khan') { A.placeBoat(P, startAt.X, startAt.Y, A.openWaterHeading(startAt.X, startAt.Y), startAt.land ? 0 : 1); G.camYaw = P.b.th; if (!startAt.land) { cx = startAt.X; cy = startAt.Y; } }
+      if (startAt && startAt.zone !== 'khan' && startAt.zone !== 'merz') { A.placeBoat(P, startAt.X, startAt.Y, A.openWaterHeading(startAt.X, startAt.Y), startAt.land ? 0 : 1); G.camYaw = P.b.th; if (!startAt.land) { cx = startAt.X; cy = startAt.Y; } }
       else if (P.b.kind) { P.b.vx *= 0.3; P.b.vy *= 0.3; }
-      mkTraffic().relocate(cx, cy, 0, G.shore.pierY - 50); traffic.setActive(true); setPit({ X: 0, Y: G.shore.pierY - 25 }, 45, false); },
+      if (G.wl) { mkTraffic().setActive(false); return; } /* горное озеро -- без судов Иссык-Куля */ mkTraffic().relocate(cx, cy, 0, G.shore.pierY - 50); traffic.setActive(true); setPit({ X: 0, Y: G.shore.pierY - 25 }, 45, false); },
     markTarget() { const R = G.race2; if (!R || G.player.time) return null; return G.player.course[G.player.leg]; },
     hud() { const R = G.race2, P = G.player;
       if (R) { const c = P.course[Math.min(P.leg, P.course.length - 1)], fw = (e) => (e.b ? (e.b.X - R.S.X) * R.dir.x + (e.b.Y - R.S.Y) * R.dir.y : -5e3), all = [...R.all, ...onlineRows(R, false)].sort((a, b) => (b.leg - a.leg) || (fw(b) - fw(a)));

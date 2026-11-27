@@ -114,6 +114,7 @@ async function init() {
   const shoreArt = makeShoreArt(scene, hA);
   const hb = (x, y) => Math.max(hA(x, y), shore.pierH(x, y)); // дно + причал: то, обо что можно удариться
   const wind = new Wind(PRESETS.santash, hA), waves = new Waves();
+  { const s0 = waves.sample.bind(waves); waves.sample = (x, z, t, att, out) => { const o = s0(x, z, t, att, out); if (G && G.wl) o.h += G.wl; return o; }; } // уровень акватории: Иссык-Куль -- 0, озеро Мерцбахера -- выше на ~1700 м
   const spray = makeSpray(); scene.add(spray.mesh);
   const mk = (opts, name, skill) => { const b = new Boat(); b.skill = skill; const model = makeBoat(opts), wake = makeWake(); scene.add(model.root, wake.mesh); return { b, model, wake, name, ai: {}, leg: 0, time: 0, prevA: 0 }; };
   const player = mk({ text: 'KGZ 7', hull: 0x143a6e, accent: '#ff7a1a' }, 'Вы', 1); // тёмно-синий лакированный борт, оранжевая ватерлиния
@@ -124,7 +125,7 @@ async function init() {
   G = { stars, shoreArt, corridor: null, lake, mapObjs: [nearT, demT, far, ...shoreObjs], ensureRivals, ridges, h: (x, y) => (G.khan && khanInside(x, y) ? G.khan.h(x, y) : hA(x, y)), /* в районе Хан-Тенгри -- его рельеф */ hb, far, sky, water, shore, wind, waves, spray, player, rivals, marks, mode: 'menu', preset: store.get('preset') || 'santash', t: 0, race: null,
     cam: 0, camYaw: 0, orbit: 0, orbitP: 0, zoom: 1, orbitV: 0, shake: 0, hintT: 0, free: null, toastT: 0, frame: 0, slow: 0 };
   if (!PRESETS[G.preset]) G.preset = 'santash';
-  X = installExtra({ ensureKhan: () => ensureKhan(false), mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
+  X = installExtra({ merzLake: () => G.merzLake, ensureKhan: () => ensureKhan(false), mapTile, mapTiles: () => { tileQueue.length = 0; tileWant.clear(); }, G, scene, $, store, toast, audio, TOUCH, lens, fmt, placeBoat, showGame, setRivals, resetView, openWaterHeading, startRace: () => startRace(), startFree: () => startFree(),
     setPreset: (id) => { if (PRESETS[id]) { G.preset = id; applyPreset(); } }, para: () => PG, jet: () => JM, heli: () => HM, heliGo: () => heliGo() });
   G.pro = !!store.get('pro'); $('bpro').classList.toggle('on', G.pro);
   G.hMesh = (x, y) => { const v = demT.userData.meshH(x, y); return v === null ? hA(x, y) : v; }; // высота видимой земли -- для персонажей
@@ -263,7 +264,7 @@ function buildMenu() {
     if (G.mode === 'menu') { G.clock = TOD[G.tod][1]; dayCycle(0); updateEnv(G.sky); } }; // меню сразу показывает выбранное время суток -- как выбор погоды
   for (const id in TOD) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.id = id; b.innerHTML = `<b>${TOD[id][0]}</b>`; b.onclick = () => setTod(id); $('tod').appendChild(b); }
   setTod(store.get('tod') || 'day'); G.todHour = () => TOD[G.tod][1];
-  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if ((X.sel === 'para' && !PG) || (X.sel === 'jet' && !JM)) { toast('Этот снаряд не загрузился — выберите другой'); return; } const KA = X.startAt && X.startAt.zone === 'khan' ? X.startAt : null; /* точка на карте гор */ if (X.sel === 'heli' && X.startAt && !KA && HM) { audio.start(); HM.startFree(); HM.placeAt(X.startAt); return; } /* точка на карте озера -- свободный полёт оттуда */ if (KA && ['heli', 'jet', 'para'].includes(X.sel)) { startKhan(X.sel, X.sel === 'heli' ? (['merz', 'sar', 'school'].includes(store.get('heliSite')) ? store.get('heliSite') : '') : '', KA); return; } if (X.sel === 'para') PG.startFree(X.startAt); else if (X.sel === 'heli') heliGo(); else if (X.sel === 'jet' && store.get('jetSite') === 'khan' && !X.startAt) startKhan('jet'); else if (X.sel === 'jet') JM.startFree(X.startAt); else startFree(); };
+  $('bfree').onclick = () => { audio.start(); G.clock = G.todHour(); if ((X.sel === 'para' && !PG) || (X.sel === 'jet' && !JM)) { toast('Этот снаряд не загрузился — выберите другой'); return; } if (X.startAt && X.startAt.zone === 'merz') { audio.start(); startMerzLake(X.startAt); return; } const KA = X.startAt && X.startAt.zone === 'khan' ? X.startAt : null; /* точка на карте гор */ if (X.sel === 'heli' && X.startAt && !KA && HM) { audio.start(); HM.startFree(); HM.placeAt(X.startAt); return; } /* точка на карте озера -- свободный полёт оттуда */ if (KA && ['heli', 'jet', 'para'].includes(X.sel)) { startKhan(X.sel, X.sel === 'heli' ? (['merz', 'sar', 'school'].includes(store.get('heliSite')) ? store.get('heliSite') : '') : '', KA); return; } if (X.sel === 'para') PG.startFree(X.startAt); else if (X.sel === 'heli') heliGo(); else if (X.sel === 'jet' && store.get('jetSite') === 'khan' && !X.startAt) startKhan('jet'); else if (X.sel === 'jet') JM.startFree(X.startAt); else startFree(); };
   $('brace').onclick = () => { audio.start(); X.compete(); };
   $('ragain').onclick = () => { if (AIR()) AIR().again(); else if (PG && PG.on) PG.again(); else if (G.mode === 'river') { $('result').hidden = true; $('briver').click(); } else X.compete(); }; $('rmenu').onclick = () => toMenu();
 }
@@ -278,7 +279,17 @@ function placeBoat(e, X, Y, th, v = 1.6) { if (e.model.dispose) e.model.dispose(
 function showGame(on) { if (on && G && G.buildCorridor) G.buildCorridor(); $('game').hidden = !on; $('menu').hidden = on; $('result').hidden = true; if (!on) requestAnimationFrame(coastMask); }
 function setRivals(v) { for (const r of G.rivals) { const on = v && !r.out; r.model.root.visible = on; r.wake.mesh.visible = on; } for (const k in G.marks) G.marks[k].visible = v; }
 
-function toMenu() {
+// озеро Мерцбахера для водных снарядов: та же физика лодок, уровень воды -- полное озеро (прорыв на это время стоит),
+// своё зеркало воды (merz.js), рельеф и глубина -- района Хан-Тенгри; судов акватории Иссык-Куля здесь нет
+function leaveLake() { if (!G.wl) return; G.wl = 0; G.hw = null; G.water.mesh.visible = true; if (G.merz) G.merz.hold = false; }
+async function startMerzLake(at) { const b = $('bfree'); b.classList.add('wait'); try { await ensureKhan(); } catch (e) { toast(e.message); return; } finally { b.classList.remove('wait'); }
+  const M = G.merz; M.hold = true; G.wl = M.top; G.hw = (x, y) => G.h(x, y) - G.wl; G.water.mesh.visible = false;
+  $('brief').hidden = true; $('mark').hidden = true; X.onFreePre(); G.mode = 'free'; G.race = null; showGame(true); setRivals(false); $('race').hidden = true;
+  X.onFree(); let P = at && at.X && Math.hypot(at.X - M.center.X, at.Y - M.center.Y) < 4000 ? at : M.center; // точка на карте -- если на озере { let best = P, bd = G.hw(P.X, P.Y); for (let r = 0; r < 600 && bd > -6; r += 40) for (let a = 0; a < 6.28; a += 0.5) { const x = P.X + Math.sin(a) * r, y = P.Y + Math.cos(a) * r, d = G.hw(x, y); if (d < bd) { bd = d; best = { X: x, Y: y }; } } P = best; }
+  let th = 0, bd = 1e9; for (let k = 0; k < 12; k++) { const a = k * 0.5236; let d = 0; for (const r of [80, 200, 400]) d += G.hw(P.X + Math.sin(a) * r, P.Y + Math.cos(a) * r); if (d < bd) { bd = d; th = a; } }
+  placeBoat(G.player, P.X, P.Y, th, 1.2); G.player.b.y = G.wl; G.player.b.base = G.wl; G.free = { done: {}, dist: 0, max: 0, t: 0 }; G.camYaw = th; resetView(); G.merzLake = true;
+  toast('Озеро Мерцбахера, 3300 м: ледниковая вода, айсберги, Хан-Тенгри за спиной'); }
+function toMenu() { leaveLake(); G.merzLake = false;
   if (SPY) SPY.close(); if (FT) FT.stop(); if (PG) PG.stop(); if (JM) JM.stop(); if (HM) HM.stop();
   $('brief').hidden = true; $('mark').hidden = true; if (X) X.toMenuCraft();
   G.mode = 'menu'; G.race = null; showGame(false); setRivals(false); if (G.todHour) { G.clock = G.todHour(); dayCycle(0); }
@@ -687,6 +698,7 @@ function tick(dt) {
     return c; });
   const TH = X.th(), PH = X.poseTh();
   for (const e of boats) e.b.updatePose(G.waves, G.t, PH);
+  if (G.wl) for (const e of boats) e.b.base = G.wl; // камера и свет -- от уровня этой воды
   acc += dt; let n = 0;
   while (acc >= 1 / 120 && n++ < 8) { acc -= 1 / 120; boats.forEach((e, i) => e.b.step(1 / 120, ctls[i], G.wind, TH)); }
   if (n >= 8) acc = 0;
