@@ -126,7 +126,7 @@ export function makeSar(K) {
       <h3>Связь: ${c.comm.name}</h3><p>${c.last.txt}</p>${c.hook ? `<p style="background:rgba(255,210,74,.16);border-left:4px solid #ffd24a;padding:6px 10px">🔎 <b>Зацепка:</b> ${c.hook.txt}</p>` : ''}<p><small>Погода: ${{ breeze: 'ясно, ветер слабый', santash: 'ветрено — на гребнях до 20 м/с', ulan: 'буран: ветер до 40 м/с, видимость плохая' }[G.preset] || 'переменная'}. Тревога — в ${hm(c.alarm)}${c.wait ? `${NIGHT(c.alarm) ? ', ночью' : ', под вечер'}: Ми-8 в горах ночью не летает — вылет утром, в 06:30` : ''}. Темнеет в 20:30</small></p>
       <h3>Силы</h3><div class="row">${chip('men', 0, 'Без пеших', 'только с воздуха')}${chip('men', 4, '1 отряд', '4 спасателя')}${chip('men', 8, '2 отряда', '8 — быстрее, но риск')}</div>
       <div class="row" style="margin-top:6px">${chip('drone', 0, 'Без дрона', '')}${chip('drone', 1, 'Дрон', '3 батареи · тепловизор')}</div>
-      <p><small>Ми-8 не висит выше ~5900 м. Дрон запускается с земли — с базы или из лагеря, куда его закинет вертолёт. Пешие отряды проходят везде, но медленно и рискуют: каждый потерянный спасатель — минус к итогу.</small></p>
+      <p><small>Ми-8 не висит выше ~5900 м. Дрон запускается с земли или прямо с вертолёта — в висении ниже 60 м — и возвращается на борт. Пешие отряды проходят везде, но медленно и рискуют: каждый потерянный спасатель — минус к итогу.</small></p>
       <button class="go" id="sgo">Начать операцию</button><button class="ch" id="stoon" style="width:100%;margin-top:8px">🎬 Как это работает — ролик с Дымком</button>
       <p style="margin-top:10px"><small>Присоединиться к чужой операции:</small> <input id="sjoin" maxlength="5" placeholder="КОД"> <button class="ch" id="sjoinb" style="flex:none;display:inline-block;min-width:0">Войти</button></p>`;
     for (const b of el.querySelectorAll('.ch[data-k]')) b.onclick = () => { S.res[b.dataset.k] = +b.dataset.v; brief(); };
@@ -240,18 +240,18 @@ export function makeSar(K) {
 
   // ---- дрон: запуск с земли, батарея, связь, ветер ----
   function launch() { if (!S || !S.run) return; if (!S.res.drone) { toast('Дрона в этой операции нет'); return; } if (S.dr) return; const h = K.heli();
-    if (!h.ground) { toast('Дрон запускает расчёт с земли — сядьте (на базе или в лагере)'); return; } if (S.bats <= 0) { toast('Батареи дрона кончились'); return; }
-    S.bats--; S.dr = { gim: S.gim ?? 35, X: h.X + 8, Y: h.Y, Z: h.Z + 2, th: h.th, vx: 0, vy: 0, vz: 0, bat: 1, L: { X: h.X, Y: h.Y }, kit: 1 }; drone.g.visible = true; $('sframe').hidden = false; document.body.classList.add('sardr'); K.pop('ДРОН В ВОЗДУХЕ', `батарея ~3 мин · запасных ${S.bats}`); }
-  function recall() { if (!S.dr) return; S.dr.home = true; toast('Дрон возвращается к точке запуска'); }
-  function droneTick(dt, c) { const d = S.dr, wb = K.windAt(d.X, d.Y, d.Z), L = Math.hypot(d.X - d.L.X, d.Y - d.L.Y);
+    const air = !h.ground; if (air && (h.agl > 60 || h.speed > 4)) { toast('Дрон — с земли или с висения: ниже 60 м и почти на месте'); return; } // с вертолёта -- в висении, без посадки if (S.bats <= 0) { toast('Батареи дрона кончились'); return; }
+    S.bats--; S.dr = { gim: S.gim ?? 35, X: h.X + 8, Y: h.Y, Z: air ? h.Z - 4 : h.Z + 2, th: h.th, vx: 0, vy: 0, vz: 0, bat: 1, L: { X: h.X, Y: h.Y }, kit: 1, air }; drone.g.visible = true; $('sframe').hidden = false; document.body.classList.add('sardr'); K.pop('ДРОН В ВОЗДУХЕ', `батарея ~3 мин · запасных ${S.bats}`); }
+  function recall() { if (!S.dr) return; S.dr.home = true; toast(S.dr.air ? 'Дрон возвращается к вертолёту — держите висение' : 'Дрон возвращается к точке запуска'); }
+  function droneTick(dt, c) { const d = S.dr; if (d.air) { const h = K.heli(); d.L = { X: h.X, Y: h.Y }; d.LZ = h.Z; } const wb = K.windAt(d.X, d.Y, d.Z), L = Math.hypot(d.X - d.L.X, d.Y - d.L.Y); // запущен с вертолёта -- «дом» летит вместе с ним
     d.bat -= dt / 190 * (1 + Math.hypot(wb.x, wb.y) / 30); let fwd = c.fwd, side = c.side, up = c.up;
-    if (d.home || L > 6000) { const a = Math.atan2(d.L.X - d.X, d.L.Y - d.Y), e = Math.atan2(Math.sin(a - d.th), Math.cos(a - d.th)); side = Math.max(-1, Math.min(1, e * 2)); fwd = Math.abs(e) < 0.6 ? Math.min(1, L / 60) : 0; up = d.Z - H(d.X, d.Y) < 60 ? 1 : L < 50 ? -1 : 0; }
+    if (d.home || L > 6000) { const a = Math.atan2(d.L.X - d.X, d.L.Y - d.Y), e = Math.atan2(Math.sin(a - d.th), Math.cos(a - d.th)); side = Math.max(-1, Math.min(1, e * 2)); fwd = Math.abs(e) < 0.6 ? Math.min(1, L / 60) : 0; up = d.air ? Math.max(-1, Math.min(1, ((d.LZ - 4) - d.Z) / 15)) : d.Z - H(d.X, d.Y) < 60 ? 1 : L < 50 ? -1 : 0; }
     d.th += side * 1.6 * dt; const sp = 17, tx = Math.sin(d.th) * fwd * sp + wb.x * 0.45, ty = Math.cos(d.th) * fwd * sp + wb.y * 0.45, k = Math.min(1, dt * 2.5);
     d.vx += (tx - d.vx) * k; d.vy += (ty - d.vy) * k; d.vz += (up * 6 - d.vz) * Math.min(1, dt * 3); d.X += d.vx * dt; d.Y += d.vy * dt; d.Z += d.vz * dt;
     const gz = H(d.X, d.Y); if (d.Z < gz + 1.5) { if (d.vz < -3 || Math.hypot(d.vx, d.vy) > 8) { lostDrone('Дрон разбит о склон'); return; } d.Z = gz + 1.5; d.vz = 0; }
     if (d.Z - (H(d.L.X, d.L.Y)) > 7600 - ASL - H(d.L.X, d.L.Y)) d.Z = 7600 - ASL; // потолок дрона ~7600 м
     if (d.bat <= 0) { if (L < 60) { landDrone(); return; } lostDrone('Батарея села — дрон упал'); return; }
-    if (L < 30 && d.Z - gz < 4 && (d.home || d.bat < 0.97)) { landDrone(); return; }
+    if (d.air ? (d.home || d.bat < 0.97) && L < 15 && Math.abs(d.Z - (d.LZ - 4)) < 8 : L < 30 && d.Z - gz < 4 && (d.home || d.bat < 0.97)) { landDrone(); return; } // с вертолёта -- подхват на борт
     drone.g.position.set(d.X, d.Z, -d.Y); drone.g.rotation.set(0, -d.th, 0); drone.g.rotateX(-fwd * 0.25); drone.g.rotateZ(-side * 0.15); drone.led.visible = (S.t * 3) % 1 < 0.5;
     if (d.bat < 0.18 && !d.warned) { d.warned = 1; toast('Дрон: батарея 18% — пора домой'); }
     if (L > 5000 && !d.far) { d.far = 1; toast('Дрон: слабый сигнал — дальше 6 км вернётся сам'); } else if (L < 4500) d.far = 0; }

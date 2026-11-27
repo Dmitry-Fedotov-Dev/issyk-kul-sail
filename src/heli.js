@@ -63,7 +63,12 @@ export class Heli {
     // точный режим: у земли на малой скорости ручка мягче -- можно подкрасться к склону и встать над людьми по метру
     const prec = (1 - sm(40, 100, this.agl)) * (1 - sm(8, 22, Vg)); this.prec = prec;
     // ---- курс: разворот на месте быстрый, на скорости -- плавный вираж; рысканье с инерцией ----
-    const yrT = this.ground ? 0 : s * (P.yawHover + (P.yawFast - P.yawHover) * fast) * (1 - 0.45 * prec);
+    // порыв -- событие: фронт порыва (боковая составляющая > 6 м/с) на ~1.3 с ослабляет автомат висения и разворачивает нос в ветер
+    // (флюгер: хвост сносит по ветру). Лётчик подхватывает привычно: ручкой против сноса и обратно на курс
+    const fx0 = Math.sin(this.th), fy0 = Math.cos(this.th), gS = w.gx !== undefined ? Math.hypot(w.gx, w.gy) : 0, gl = w.gx !== undefined ? w.gx * fy0 - w.gy * fx0 : 0;
+    if (gS > 6 && (this.gS0 || 0) <= 6 && !this.ground) { this.gEv = 1.3; this.gDir = [w.gx / gS, w.gy / gS]; } this.gS0 = gS; this.gEv = Math.max(0, (this.gEv || 0) - dt);
+    const vane = this.ground ? 0 : -gl * 0.03 * (this.gEv > 0 ? 1 : 0.35) * (1 - 0.6 * fast);
+    const yrT = this.ground ? 0 : s * (P.yawHover + (P.yawFast - P.yawHover) * fast) * (1 - 0.45 * prec) + vane;
     this.yr += (yrT - this.yr) * Math.min(1, dt * 3.2); this.th += this.yr * dt;
     const fx = Math.sin(this.th), fy = Math.cos(this.th); // нос; правый борт -- (fy, -fx)
     const vf = this.vx * fx + this.vy * fy, vs = this.vx * fy - this.vy * fx;
@@ -79,8 +84,9 @@ export class Heli {
     else { this.ipx = (this.ipx || 0) * 0.95; this.ipy = (this.ipy || 0) * 0.95; }
     // висение: ручка отпущена на малой скорости -- гасим путевую скорость; интеграл «запоминает» наклон против ветра
     const hov = ctl.pvx === undefined && free && !this.ground ? 1 - sm(9, 15, Vg) : 0; if (ctl.pvx === undefined) this.hov = hov;
-    if (hov > 0) { this.iF = clamp(this.iF + vf * dt * 0.5 * hov, -4, 4); this.iS = clamp(this.iS + vs * dt * 0.5 * hov, -4, 4);
-      let aF = -(vf * 0.9 + this.iF * 0.8) * hov, aS = -(vs * 0.9 + this.iS * 0.8) * hov; const A = Math.hypot(aF, aS), k = A > P.assist ? P.assist / A : 1; dF += aF * k; dS += aS * k; this.assistA = A * k; }
+    const gRel = this.gEv > 0 ? 0.3 : 1; // фронт порыва: автомат висения на миг отпускает -- подхватывает лётчик
+    if (hov > 0) { this.iF = clamp(this.iF + vf * dt * 0.5 * hov * gRel, -4, 4); this.iS = clamp(this.iS + vs * dt * 0.5 * hov * gRel, -4, 4);
+      let aF = -(vf * 0.9 + this.iF * 0.8) * hov, aS = -(vs * 0.9 + this.iS * 0.8) * hov; const A = Math.hypot(aF, aS), capH = P.assist * gRel, k = A > capH ? capH / A : 1; dF += aF * k; dS += aS * k; this.assistA = A * k; }
     else { const k = Math.max(0, 1 - dt * 1.2); this.iF *= k; this.iS *= k; this.assistA = 0; }
     // отпустил ручку на скорости -- лёгкое подтормаживание задиранием носа (иначе катится вечно)
     if (free && !hov && ctl.pvx === undefined) dF -= clamp(vf * 0.006, -0.3, 0.35);

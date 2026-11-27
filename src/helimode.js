@@ -59,7 +59,7 @@ body.touchdev #hhud .r2,body.touchdev #hhud .r4{display:none}@media (max-width:6
 #hmis{left:50%;top:44px;transform:translateX(-50%);text-align:center;font-size:clamp(12px,3.4vw,14px);line-height:1.3;width:max-content;max-width:min(520px,calc(100vw - 24px));background:rgba(6,18,40,.58);border-radius:10px;padding:5px 12px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 #hmis b{font-size:inherit;color:#ffb07a}body.hdet #hmis{-webkit-line-clamp:6}
 #hwarn{left:50%;top:44px;transform:translateX(-50%);font:800 clamp(11px,3.2vw,14px) var(--ui)!important;letter-spacing:.05em;color:#ffb07a;background:rgba(40,10,0,.5);border-radius:8px;padding:2px 9px;animation:none;white-space:nowrap;text-shadow:none}
-#hwarn.crit{color:#ff5a3a;animation:jblink .5s steps(2) infinite}
+#hwarn.crit{color:#ff5a3a;animation:jblink .5s steps(2) 6}@media (max-width:640px){#hwarn{white-space:normal;max-width:calc(100vw - 80px)}} /* тревога -- короткая вспышка, не бесконечное мигание; на узком экране переносится */
 #harr{display:none!important}
 #hland{top:63%!important;background:none;padding:0;font:800 clamp(13px,3.9vw,20px) var(--ui);letter-spacing:.04em;white-space:nowrap}
 #hpop{top:35%;font-size:clamp(20px,5.4vmin,34px)}
@@ -328,15 +328,19 @@ export function makeHeliMode(A) {
   function windBase(X, Y, Z) { const now = G.t || 0; if (Math.abs(now - WB.t) < 0.15 && Math.abs(X - WB.X) + Math.abs(Y - WB.Y) < 60 && Math.abs(Z - WB.Z) < 30) return WB;
     Object.assign(WB, { t: now, X, Y, Z }); const asl = Z + 1607, zone = G.khan && G.inKhan, gz = H(X, Y), agl = Z - gz; let wx, wy;
     if (zone) { const K = KW[G.preset] ?? 0.8, swell = 0.85 + 0.15 * Math.sin(now * 0.05), d = (260 + 12 * Math.sin(now * 0.03)) * Math.PI / 180;
-      let crest = gz; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; crest = Math.max(crest, H(X + Math.cos(a) * 1500, Y + Math.sin(a) * 1500)); }
-      const open = 0.5 + 0.5 * sm(-700, 150, Z - crest), U = prof(asl) * K * swell * open; wx = -Math.sin(d) * U; wy = -Math.cos(d) * U; // «с запада» -- дует на восток
+      // укрытие -- только рельефом С НАВЕТРЕННОЙ стороны (раньше брался самый высокий рельеф вокруг -- и наветренный склон
+      // «прикрывал» гребень за спиной). Тень ветра -- линия с гребня вниз под ~7°: ниже неё тихо, на кромке -- резкий переход
+      // (60-100 м по высоте) и роторная болтанка: вышел из-за гребня -- машину бросает
+      let crest = -1e9; for (const r of [250, 600, 1100, 1800]) crest = Math.max(crest, H(X + Math.sin(d) * r, Y + Math.cos(d) * r) - r * 0.12);
+      const lee = crest - Z, open = 0.3 + 0.7 * sm(60, -40, lee), U = prof(asl) * K * swell * open; wx = -Math.sin(d) * U; wy = -Math.cos(d) * U; // «с запада» -- дует на восток
+      WB.edge = crest > gz + 30 ? Math.exp(-(((lee - 10) / 70) ** 2)) : 0; WB.lee = lee;
       // ледниковый сток вниз по склону долины
       const e = 400, sx = (H(X + e, Y) - H(X - e, Y)) / (2 * e), sy = (H(X, Y + e) - H(X, Y - e)) / (2 * e), sl = Math.hypot(sx, sy) || 1e-4, hr = G.clock ?? 12, day = hr > 10 && hr < 17 ? 0.5 : 1;
       const kat = 7 * day * sm(0.004, 0.05, sl) * Math.min(1, Math.max(0, agl) / 20 + 0.3) * Math.exp(-Math.max(0, agl - 60) / 250); wx -= sx / sl * kat; wy -= sy / sl * kat; WB.kat = kat; }
-    else { const W = G.wind || { sx: 0, sy: 0 }, k = 1 + Math.min(2.2, Math.max(0, asl - 2500) / 1800); wx = W.sx * k; wy = W.sy * k; WB.kat = 0; }
+    else { const W = G.wind || { sx: 0, sy: 0 }, k = 1 + Math.min(2.2, Math.max(0, asl - 2500) / 1800); wx = W.sx * k; wy = W.sy * k; WB.kat = 0; WB.edge = 0; }
     const U = Math.hypot(wx, wy) || 1e-3, e = 250, gx = (H(X + e, Y) - H(X - e, Y)) / (2 * e), gy = (H(X, Y + e) - H(X, Y - e)) / (2 * e), near = Math.exp(-Math.max(0, agl) / 400);
     const upw = (wx * gx + wy * gy) * near, lee = Math.max(0, -(wx * gx + wy * gy) / U);
-    Object.assign(WB, { x: wx, y: wy, z: clamp(upw * 0.6, -3, 3), U, dx: wx / U, dy: wy / U, tb: Math.min(1.6, U * 0.02 * (0.3 + near) + lee * 0.5 * near + (U > 25 ? (U - 25) * 0.02 : 0)) }); if (F) F.wU = U; return WB; }
+    Object.assign(WB, { x: wx, y: wy, z: clamp(upw * 0.6, -3, 3), U, dx: wx / U, dy: wy / U, tb: Math.min(1.6, U * 0.02 * (0.3 + near) + lee * 0.5 * near + (U > 25 ? (U - 25) * 0.02 : 0) + (WB.edge || 0) * Math.min(0.8, prof(asl) * (KW[G.preset] ?? 0.8) * 0.04)) }); if (F) F.wU = U; return WB; }
   // порывы: ячейки 150-250 м, бегут по ветру чуть быстрее потока; спереди -- резкий фронт, сзади -- плавный хвост
   const gustAt = (X, Y, Z, out) => { out.x = 0; out.y = 0; out.f = 0; if (!F || !F.gusts) return out;
     for (const c of F.gusts) { const rx = X - c.X, ry = Y - c.Y, a = (rx * c.dx + ry * c.dy) / c.R, q = (rx * c.dy - ry * c.dx) / c.R, dz = (Z - c.Z) / 160; if (a > 0.35 || a < -3 || Math.abs(q) > 2.2 || Math.abs(dz) > 2.5) continue;
@@ -352,7 +356,7 @@ export function makeHeliMode(A) {
       F.gT = (9 + Math.random() * 8) * clamp(14 / U, 0.35, 1.6); }
     // предупреждение: фронт порыва в 120-450 м и идёт на нас
     let warn = null; for (const c of gs) { const rx = Hc.X - c.X, ry = Hc.Y - c.Y, a = rx * c.dx + ry * c.dy, q = Math.abs(rx * c.dy - ry * c.dx); if (a > 60 && a < 450 && q < c.R * 1.4 && c.S > Math.max(10, b.U + 3)) { const rel = wrapPi(Math.atan2(-c.dx, -c.dy) - Hc.th); warn = { side: Math.abs(rel) < 0.8 ? 'СПЕРЕДИ' : Math.abs(rel) > 2.4 ? 'СЗАДИ' : rel > 0 ? 'СПРАВА' : 'СЛЕВА', S: c.S }; break; } }
-    if (warn && !F.gWarn) audio.airflow && G.shake < 0.1 && (G.shake = 0.08); F.gWarn = warn;
+    if (warn && !F.gWarn) audio.airflow && G.shake < 0.1 && (G.shake = 0.08); F.gWarn = warn; if (warn) F.gSide = warn.side;
     // позёмка: порыв у земли срывает снег со льда -- видно, как он бежит по леднику
     if (G.spray && G.inKhan) for (const c of gs) { const n = Math.round(c.k * c.S * dt * 1.6); for (let i = 0; i < n; i++) { const a = -Math.random() * 2.2 * c.R, q = (Math.random() - 0.5) * 2 * c.R, X = c.X + c.dx * a + c.dy * q, Y = c.Y + c.dy * a - c.dx * q, gz = H(X, Y);
       if (gz < 0 || c.Z - gz > 220 || Math.hypot(X - Hc.X, Y - Hc.Y) > 700) continue; const v = c.S * 0.8; G.spray.emit(X, gz + 0.6, -Y, c.dx * v, 1 + Math.random() * 2.5, -c.dy * v, 5 + Math.random() * 4, 1, 1); } } }
@@ -392,6 +396,10 @@ export function makeHeliMode(A) {
   function tick(dt) { if (!on) return; if (F.slow > 0) { F.slow -= dt; dt *= 0.3; } F.t += dt; // удар: на миг время замедляется -- удар чувствуется
     if (Hc.crash) { crashTick(dt); return; }
     precTick(dt); const c0 = ctl(dt), c = SAR && SAR.drone ? { fwd: 0, side: 0, up: 0 } : c0, steps = Math.max(1, Math.ceil(dt / (1 / 120))); for (let i = 0; i < steps; i++) Hc.step(dt / steps, c, H, wind);
+    // подхват порыва: пока идёт фронт, ручка давит против сноса (или точное зависание держит) -- по окончании «ПОДХВАТ!»
+    if (Hc.gEv > 0 && Hc.gDir) { const fx = Math.sin(Hc.th), fy = Math.cos(Hc.th), ax = c.pvx !== undefined ? c.pvx : (c.fwd || 0) * fx + (c.strafe || 0) * fy + (c.side || 0) * fy * 0.6, ay = c.pvy !== undefined ? c.pvy : (c.fwd || 0) * fy - (c.strafe || 0) * fx - (c.side || 0) * fx * 0.6, L = Math.hypot(ax, ay);
+      if (L > 0.2 && -(ax * Hc.gDir[0] + ay * Hc.gDir[1]) / L > 0.3) F.gCatch = (F.gCatch || 0) + dt; F.gOn = true; }
+    else if (F.gOn) { F.gOn = false; if ((F.gCatch || 0) > 0.35 && !Hc.crash) { if (F.sar) pop('ПОДХВАТ!', 'порыв парирован'); else score(30, 'ПОДХВАТ', 'порыв парирован'); buzz(25); } F.gCatch = 0; }
     if (F.sar) SAR.tick(dt, c0);
     Hc.fuel = Math.max(200, Hc.fuel - dt * (0.12 + 0.18 * Hc.power)); // ~800 кг/ч на висении
     if (Hc.crash) { startCrash(); return; }
@@ -570,14 +578,14 @@ export function makeHeliMode(A) {
     const kmh = Math.round(Hc.speed * 3.6), alt = Math.round(Hc.Z + 1607), agl = Math.round(Math.max(0, Hc.agl)), m = Hc.mass, tw = Hc.Tmax / (m * 9.81), pw = Math.min(1.15, Hc.power);
     const cls = pw > 1 ? 'red' : pw > 0.92 ? 'hot' : '';
     const hpc = Hc.hp > 60 ? '#9fe0a0' : Hc.hp > 30 ? '#ffd27a' : '#ff5a3a';
-    $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>КМ/Ч</small></div><div class="r"><b>${alt}</b> м · ${agl} м · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)}</div>
+    $('hhud').innerHTML = `<div><b class="v">${kmh}</b><small>КМ/Ч</small></div><div class="r"><b>${alt}</b> м · ${agl} м · ${Hc.vz >= 0 ? '↑' : '↓'}${Math.abs(Hc.vz).toFixed(1)}${(() => { if (Hc.speed < 8) return ''; const hw = -(WB.x * Hc.vx + WB.y * Hc.vy) / Hc.speed; return Math.abs(hw) < 4 ? '' : hw > 0 ? ` · <span style="color:#ffb07a">встречный ${Math.round(hw)}</span>` : ` · <span style="color:#9fe0a0">попутный ${Math.round(-hw)}</span>`; })()}</div>
       <div class="hp"><i style="width:${Math.round(Hc.hp)}%;background:${hpc}"></i></div>${Hc.hp < 99.5 ? `<div class="hpt" style="color:${hpc}">корпус ${Math.round(Hc.hp)}%</div>` : ''}
       <div class="r r2">шаг<span class="bar"><i class="${cls}" style="width:${Math.round(Math.min(1, pw) * 100)}%"></i></span>${Math.round(pw * 100)}% · обороты ${Math.round(Hc.rpm * 95)}%</div>
       <div class="r r4">масса <b>${(m / 1000).toFixed(1)}</b> т · тяга/вес <b>${tw.toFixed(2)}</b>${Hc.ige > 0.03 ? ' · подушка' : ''} · топливо ${Math.round(Hc.fuel)} кг</div>`;
     $('hscore').innerHTML = `<b>${F.score}</b>${F.combo > 1 ? `<i>×${F.combo.toFixed(2).replace(/\.?0+$/, '')}</i>` : ''}<br><small>рекорд ${store.get('heliScore') || 0}</small>`;
     { const cr = $('hcr'), show = Hc.cr > 0.05 || Hc.heat > 0.02 || Hc.hot > 0; cr.hidden = !show; if (show) cr.innerHTML = `${Hc.hot > 0 ? `ПЕРЕГРЕВ · ${Math.ceil(Hc.hot)} с` : Hc.crOn ? '<b style="color:#ff8a2a">ЧР</b> · +12% тяги' : 'двигатели остывают'}<span class="bar"><i class="${Hc.heat > 0.75 ? 'red' : Hc.heat > 0.45 ? 'hot' : ''}" style="width:${Math.round(Hc.heat * 100)}%"></i></span>`; }
-    const w = Hc.crash ? '' : Hc.gpws ? 'ЗЕМЛЯ! ВВЕРХ ▲' : F.gWarn ? `ПОРЫВ ${F.gWarn.side}! ${Math.round(F.gWarn.S)} М/С` : (F.wU || 0) > 30 && G.frame % 120 < 60 ? `ВЕТЕР ${Math.round(F.wU)} М/С` : Hc.warn === 'hot' ? '' : Hc.warn === 'rpm' ? 'ОБОРОТЫ! СБРОСЬ ШАГ' : Hc.warn === 'vrs' ? 'ВИХРЕВОЕ КОЛЬЦО — СКОРОСТЬ ВПЕРЁД' : Hc.warn === 'power' ? '⚠ мощность на пределе' : '';
-    const wl = $('hwarn'), crit = Hc.gpws || Hc.warn === 'rpm' || Hc.warn === 'vrs'; if (wl.textContent !== w) wl.textContent = w; wl.hidden = !w; wl.classList.toggle('crit', !!crit); if (w && crit && audio.beep && G.frame % 18 === 0) audio.beep(true); // мощность -- спокойный чип, земля/обороты/кольцо -- мигает и пищит
+    const HOLD = { 'СЛЕВА': 'ДЕРЖИ ВЛЕВО', 'СПРАВА': 'ДЕРЖИ ВПРАВО', 'СПЕРЕДИ': 'ДЕРЖИ ВПЕРЁД', 'СЗАДИ': 'ПРИТОРМОЗИ' }, w = Hc.crash ? '' : Hc.gpws ? 'ЗЕМЛЯ! ВВЕРХ ▲' : Hc.gEv > 0 && F.gSide ? `⟲ ПОДХВАТИ: ${HOLD[F.gSide]}` : F.gWarn ? `ПОРЫВ ${F.gWarn.side} ${Math.round(F.gWarn.S)} м/с — ${HOLD[F.gWarn.side]}` : (WB.edge || 0) > 0.5 && !Hc.ground ? '≋ КРОМКА ГРЕБНЯ — БОЛТАНКА' : (F.wU || 0) > 30 && G.frame % 120 < 60 ? `ВЕТЕР ${Math.round(F.wU)} М/С` : Hc.warn === 'hot' ? '' : Hc.warn === 'rpm' ? 'ОБОРОТЫ! СБРОСЬ ШАГ' : Hc.warn === 'vrs' ? 'ВИХРЕВОЕ КОЛЬЦО — ВПЕРЁД, НЕ СНИЖАЙСЯ НА МЕСТЕ' : Hc.warn === 'power' ? '⚠ мощность на пределе — разгонись, потом вверх' : '';
+    const wl = $('hwarn'), crit = Hc.gpws || Hc.warn === 'rpm' || Hc.warn === 'vrs' || Hc.gEv > 0; if (wl.textContent !== w) wl.textContent = w; wl.hidden = !w; wl.classList.toggle('crit', !!crit); if (w && crit && audio.beep && G.frame % 18 === 0) audio.beep(true); // мощность -- спокойный чип, земля/обороты/кольцо -- мигает и пищит
     // задание: уведомлением на 7 с при смене (повтор того же -- не показываем), касание полосы -- снова; постоянно -- только полоса
     const mi = F.mis[F.mi] || F.goal, me = $('hmis'); guide(mi); const key = mi ? mi.t + '|' + F.mi : ''; if (key !== F.nKey) { F.nKey = key; F.nT = mi ? 7 : 0; }
     F.nT = Math.max(0, (F.nT || 0) - 0.1); F.detT = Math.max(0, (F.detT || 0) - 0.1); document.body.classList.toggle('hdet', F.detT > 0);
@@ -617,6 +625,6 @@ export function makeHeliMode(A) {
     if (audio.rotor) audio.rotor(F.rpm, Hc.crash ? 0 : Hc.col, Hc.speed, slap, !Hc.crash); else audio.jet && audio.jet(Hc.crash ? 0 : 0.45 + 0.4 * Math.min(1, Hc.power), 40 + Hc.speed * 0.6 * F.rpm, !Hc.crash);
     audio.airflow(Math.min(60, 6 + Hc.speed * 0.55), Math.min(1, Hc.shake + (Hc.tb || 0) * 0.5), 0, !Hc.crash); }
 
-  return { feedPush: (t, p) => FEED && FEED.push(t, p), get vf() { return VF; }, vfToggle() { if (VF.on) VF.close(); else VF.open(vfLook()); }, camBtn, spyEye() { if (M.root.visible) { M.root.visible = false; F.spyHid = true; } return { eyeW: [Hc.X, Hc.Z + 0.5, -Hc.Y], phi: Hc.roll * 0.4, p: Hc.shake * 0.3 + (Hc.tb || 0) * 0.4 }; }, get on() { return on; }, get heli() { return Hc; }, get F() { return F; }, get sar() { return SAR; }, startFree, stop, tick, camera: cam, hud, sound, resetCam,
+  return { windDbg: (X, Y, Z) => { const w = wind(X, Y, Z); return { U: Math.round(WB.U), edge: +(WB.edge || 0).toFixed(2), lee: Math.round(WB.lee || 0), tb: +w.tb.toFixed(2) }; }, feedPush: (t, p) => FEED && FEED.push(t, p), get vf() { return VF; }, vfToggle() { if (VF.on) VF.close(); else VF.open(vfLook()); }, camBtn, spyEye() { if (M.root.visible) { M.root.visible = false; F.spyHid = true; } return { eyeW: [Hc.X, Hc.Z + 0.5, -Hc.Y], phi: Hc.roll * 0.4, p: Hc.shake * 0.3 + (Hc.tb || 0) * 0.4 }; }, get on() { return on; }, get heli() { return Hc; }, get F() { return F; }, get sar() { return SAR; }, startFree, stop, tick, camera: cam, hud, sound, resetCam,
     restart() { startFree(lastMode); }, again() { $('result').hidden = true; if (SAR) SAR.stop(); startFree(lastMode); } };
 }
